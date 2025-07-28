@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   CLIENT = 'Client',
   COURIER = 'Courier',
@@ -30,6 +31,12 @@ export enum Zone {
   CAIRO_ZONE_B = 'Cairo - Zone B',
   GIZA_ZONE_A = 'Giza - Zone A',
   GIZA_ZONE_B = 'Giza - Zone B',
+}
+
+export enum ShipmentPriority {
+    STANDARD = 'Standard',
+    URGENT = 'Urgent',
+    EXPRESS = 'Express',
 }
 
 export interface GeoLocation {
@@ -74,6 +81,8 @@ export interface Shipment {
   creationDate: string;
   deliveryDate?: string;
   signature?: string; // base64 encoded image
+  priority: ShipmentPriority;
+  packageValue: number;
 }
 
 export interface Toast {
@@ -87,7 +96,7 @@ export enum TransactionType {
     PAYMENT = 'Payment',
 }
 
-export interface Transaction {
+export interface ClientTransaction {
     id: string;
     userId: number;
     type: TransactionType;
@@ -110,4 +119,63 @@ export interface Notification {
   date: string;
   status: ShipmentStatus;
   sent: boolean; // Track if the notification has been actioned
+}
+
+// --- New Courier Financial System Types ---
+
+export interface FinancialSettings {
+  baseCommissionRate: number;
+  penaltyAmount: number;
+  consecutiveFailureLimit: number;
+  performanceThreshold: number;
+  bonusThreshold: number;
+  urgentDeliveryBonus: number;
+  expressDeliveryBonus: number;
+}
+
+export enum CommissionType {
+    FLAT = 'flat',
+    PERCENTAGE = 'percentage'
+}
+
+export interface CourierStats {
+  courierId: number;
+  deliveriesCompleted: number;
+  deliveriesFailed: number;
+  totalEarnings: number;
+  pendingEarnings: number; // For payouts
+  currentBalance: number; // totalEarnings - withdrawals
+  commissionType: CommissionType;
+  commissionValue: number;
+  penaltyAmount: number;
+  consecutiveFailures: number;
+  lastDeliveryDate?: string;
+  isRestricted: boolean;
+  restrictionReason?: string;
+  performanceRating: number;
+}
+
+export enum CourierTransactionType {
+    COMMISSION = 'Commission',
+    PENALTY = 'Penalty',
+    BONUS = 'Bonus',
+    WITHDRAWAL_REQUEST = 'Withdrawal Request',
+    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
+}
+
+export enum CourierTransactionStatus {
+    PENDING = 'Pending',
+    PROCESSED = 'Processed',
+    FAILED = 'Failed',
+}
+
+export interface CourierTransaction {
+  id: string;
+  courierId: number;
+  type: CourierTransactionType;
+  amount: number;
+  description: string;
+  shipmentId?: string;
+  timestamp: string;
+  status: CourierTransactionStatus;
 }

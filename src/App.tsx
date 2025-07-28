@@ -1,4 +1,6 @@
 
+
+import { useState } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { useGoogleMaps } from './hooks/useGoogleMaps';
 import { CourierLocationTracker } from './components/specific/CourierLocationTracker';
@@ -6,14 +8,20 @@ import { ToastContainer } from './components/common/Toast';
 import LoginScreen from './views/Login';
 import MainLayout from './layouts/MainLayout';
 import { UserRole } from './types';
+import RecipientTracking from './views/RecipientTracking';
 
 // This component is now responsible for loading global scripts and deciding which view to show.
 const AppContent = () => {
     const { currentUser, addToast } = useAppContext();
+    const [isTrackingView, setIsTrackingView] = useState(false);
 
     // Use the custom hook to load the Google Maps script
     useGoogleMaps((globalThis as any).process?.env?.API_KEY, addToast);
     
+    if (isTrackingView) {
+        return <RecipientTracking onBackToApp={() => setIsTrackingView(false)} />;
+    }
+
     return (
          <>
             {/* The location tracker is a non-visual component that runs for couriers */}
@@ -21,7 +29,7 @@ const AppContent = () => {
 
             {/* Render either the login screen or the main app layout */}
             <div className={`transition-opacity duration-500 ${currentUser ? 'opacity-100' : 'opacity-100'}`}>
-                {!currentUser ? <LoginScreen /> : <MainLayout />}
+                {!currentUser ? <LoginScreen onTrackPackageClick={() => setIsTrackingView(true)} /> : <MainLayout />}
             </div>
             
             {/* The toast container sits on top of everything */}

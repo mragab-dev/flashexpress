@@ -1,4 +1,5 @@
 
+
 import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { TransactionType } from '../types';
@@ -7,13 +8,13 @@ import { Modal } from '../components/common/Modal';
 import { WalletIcon, ArrowUpCircleIcon } from '../components/Icons';
 
 const Wallet = () => {
-    const { currentUser, transactions, topUpWallet } = useAppContext();
+    const { currentUser, clientTransactions, topUpWallet } = useAppContext();
     const [isTopUpModalOpen, setTopUpModalOpen] = useState(false);
     const [topUpAmount, setTopUpAmount] = useState(100);
 
     if (!currentUser) return null;
 
-    const myTransactions = transactions.filter(t => t.userId === currentUser.id);
+    const myTransactions = clientTransactions.filter(t => t.userId === currentUser.id);
 
     const handleTopUp = () => {
         topUpWallet(currentUser.id, topUpAmount);

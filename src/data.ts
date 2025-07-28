@@ -1,5 +1,6 @@
 
-import { User, Shipment, UserRole, Zone, ShipmentStatus, PaymentMethod, Transaction, TransactionType, Notification } from './types';
+
+import { User, Shipment, UserRole, Zone, ShipmentStatus, PaymentMethod, ClientTransaction, TransactionType, Notification, FinancialSettings, CourierStats, CommissionType, CourierTransaction, ShipmentPriority } from './types';
 
 // In a real app, passwords would be hashed. For this demo, we use plaintext.
 export const mockUsers: User[] = [
@@ -46,6 +47,8 @@ export const mockShipments: Shipment[] = [
     paymentMethod: PaymentMethod.COD,
     status: ShipmentStatus.PENDING_ASSIGNMENT,
     creationDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    priority: ShipmentPriority.STANDARD,
+    packageValue: 800,
   },
   {
     id: 'FLS' + Math.floor(Math.random() * 900000 + 100000),
@@ -62,6 +65,8 @@ export const mockShipments: Shipment[] = [
     status: ShipmentStatus.ASSIGNED_TO_COURIER,
     courierId: 6,
     creationDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    priority: ShipmentPriority.STANDARD,
+    packageValue: 3000,
   },
   {
     id: 'FLS' + Math.floor(Math.random() * 900000 + 100000),
@@ -78,6 +83,8 @@ export const mockShipments: Shipment[] = [
     status: ShipmentStatus.OUT_FOR_DELIVERY,
     courierId: 5,
     creationDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    priority: ShipmentPriority.URGENT,
+    packageValue: 100,
   },
     {
     id: 'FLS' + Math.floor(Math.random() * 900000 + 100000),
@@ -95,10 +102,12 @@ export const mockShipments: Shipment[] = [
     courierId: 8,
     creationDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     deliveryDate: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    priority: ShipmentPriority.EXPRESS,
+    packageValue: 1200,
   },
 ];
 
-export const mockTransactions: Transaction[] = [
+export const mockClientTransactions: ClientTransaction[] = [
     {
         id: 'TXN' + Math.floor(Math.random() * 900000 + 100000),
         userId: 3,
@@ -126,3 +135,24 @@ export const mockTransactions: Transaction[] = [
 ];
 
 export const mockNotifications: Notification[] = [];
+
+// --- New Financial System Data ---
+
+export const mockFinancialSettings: FinancialSettings = {
+    baseCommissionRate: 15,
+    penaltyAmount: 10,
+    consecutiveFailureLimit: 3,
+    performanceThreshold: 2.0,
+    bonusThreshold: 50,
+    urgentDeliveryBonus: 5,
+    expressDeliveryBonus: 10,
+};
+
+export const mockCourierStats: CourierStats[] = [
+    { courierId: 5, deliveriesCompleted: 45, deliveriesFailed: 2, totalEarnings: 685.00, pendingEarnings: 45.00, currentBalance: 640.00, commissionType: CommissionType.FLAT, commissionValue: 15, penaltyAmount: 10, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.7 },
+    { courierId: 6, deliveriesCompleted: 80, deliveriesFailed: 10, totalEarnings: 1200.00, pendingEarnings: 200.00, currentBalance: 1000.00, commissionType: CommissionType.FLAT, commissionValue: 15, penaltyAmount: 10, consecutiveFailures: 1, isRestricted: false, performanceRating: 4.2 },
+    { courierId: 7, deliveriesCompleted: 20, deliveriesFailed: 5, totalEarnings: 250.00, pendingEarnings: 0, currentBalance: 250.00, commissionType: CommissionType.PERCENTAGE, commissionValue: 10, penaltyAmount: 15, consecutiveFailures: 2, isRestricted: true, restrictionReason: 'Performance rating too low', performanceRating: 1.8 },
+    { courierId: 8, deliveriesCompleted: 150, deliveriesFailed: 3, totalEarnings: 2500.00, pendingEarnings: 500.00, currentBalance: 2000.00, commissionType: CommissionType.FLAT, commissionValue: 18, penaltyAmount: 10, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.9 },
+];
+
+export const mockCourierTransactions: CourierTransaction[] = [];

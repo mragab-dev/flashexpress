@@ -5,7 +5,7 @@ import { UserRole } from '../types';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon
+    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon, CurrencyDollarIcon
 } from '../components/Icons';
 
 interface SidebarProps {
@@ -26,6 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
         [UserRole.COURIER]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
             { name: 'My Tasks', icon: <ClipboardListIcon />, view: 'tasks' },
+            { name: 'My Earnings', icon: <CurrencyDollarIcon />, view: 'courier-financials' },
         ],
         [UserRole.ASSIGNING_USER]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
@@ -40,6 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
             { name: 'User Management', icon: <UsersIcon />, view: 'users' },
             { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
+            { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
             { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
             { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
         ],

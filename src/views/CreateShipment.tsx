@@ -1,7 +1,8 @@
 
+
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Address, ShipmentStatus, PaymentMethod, Zone } from '../types';
+import { Address, PaymentMethod, Zone, ShipmentPriority } from '../types';
 import { AddressAutocompleteInput } from '../components/common/AddressAutocompleteInput';
 import { PlusCircleIcon } from '../components/Icons';
 
@@ -13,6 +14,9 @@ const CreateShipment = () => {
     const [packageDescription, setPackageDescription] = useState('');
     const [isLargeOrder, setIsLargeOrder] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.COD);
+    const [priority, setPriority] = useState<ShipmentPriority>(ShipmentPriority.STANDARD);
+    const [packageValue, setPackageValue] = useState(0);
+
     const price = isLargeOrder ? 300 : 75;
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -28,11 +32,13 @@ const CreateShipment = () => {
             return;
         }
         
-        addShipment({ recipientName, recipientPhone, fromAddress: currentUser.address, toAddress, packageDescription, isLargeOrder, price, paymentMethod, status: ShipmentStatus.PENDING_ASSIGNMENT });
+        addShipment({ recipientName, recipientPhone, fromAddress: currentUser.address, toAddress, packageDescription, isLargeOrder, price, paymentMethod, priority, packageValue });
+        
         // Reset form
         setRecipientName(''); setRecipientPhone('');
         setToAddress({ street: '', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: '' });
         setPackageDescription(''); setIsLargeOrder(false); setPaymentMethod(PaymentMethod.COD);
+        setPriority(ShipmentPriority.STANDARD); setPackageValue(0);
     };
     
     const availableZones = Object.values(Zone).filter(z => z.toLowerCase().startsWith(toAddress.city.toLowerCase()));
@@ -73,6 +79,18 @@ const CreateShipment = () => {
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Package Description</label>
                     <textarea value={packageDescription} onChange={e => setPackageDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" rows={3}></textarea>
+                </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Package Priority</label>
+                        <select value={priority} onChange={e => setPriority(e.target.value as ShipmentPriority)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                           {Object.values(ShipmentPriority).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Package Value (EGP)</label>
+                        <input type="number" value={packageValue} onChange={e => setPackageValue(Number(e.target.value))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required />
+                    </div>
                 </div>
                 <div className="flex items-center gap-6">
                     <div className="flex items-center">

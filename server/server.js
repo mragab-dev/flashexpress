@@ -21,7 +21,9 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS, // Your GoDaddy email password
   },
 });
-
+//set EMAIL_USER=you@yourdomain.com
+//set EMAIL_PASS=your_password
+//node server.js
 // 4. Create an API endpoint to receive requests and send email
 app.post('/api/send-email', async (req, res) => {
   const { recipient, subject, message } = req.body;

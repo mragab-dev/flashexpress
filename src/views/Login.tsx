@@ -1,9 +1,10 @@
 
+
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { LogoIcon, MailIcon, KeyIcon } from '../components/Icons';
 
-const LoginScreen = () => {
+const LoginScreen = ({ onTrackPackageClick }: { onTrackPackageClick: () => void; }) => {
     const { login } = useAppContext();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -66,6 +67,12 @@ const LoginScreen = () => {
                     <p className="text-center text-sm text-slate-500 mt-8">
                         Test with: <code className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md">admin@flash.com</code> / <code className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md">password123</code>
                     </p>
+                     <div className="text-center mt-6 text-sm">
+                        <span className="text-slate-600">Looking for your package? </span>
+                        <button onClick={onTrackPackageClick} className="font-semibold text-primary-600 hover:text-primary-700 focus:outline-none focus:ring-0">
+                            Track your shipment here.
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

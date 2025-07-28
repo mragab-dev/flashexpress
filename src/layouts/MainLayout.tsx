@@ -18,6 +18,8 @@ import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
 import CourierMapView from '../views/CourierMapView';
 import ClientAnalytics from '../views/ClientAnalytics';
+import CourierFinancials from '../views/CourierFinancials';
+import CourierPerformance from '../views/CourierPerformance';
 import { Modal } from '../components/common/Modal';
 import { ShipmentLabel } from '../components/common/ShipmentLabel';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
@@ -83,6 +85,8 @@ const MainLayout: React.FC = () => {
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
             case 'map': return <CourierMapView />;
+            case 'courier-financials': return <CourierFinancials />;
+            case 'courier-performance': return <CourierPerformance />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }

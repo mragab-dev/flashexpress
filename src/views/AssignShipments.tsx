@@ -4,13 +4,13 @@ import { useAppContext } from '../context/AppContext';
 import { ShipmentStatus, UserRole } from '../types';
 
 const AssignShipments = () => {
-    const { shipments, users, assignCourier } = useAppContext();
+    const { shipments, users, assignShipmentToCourier, canCourierReceiveAssignment } = useAppContext();
     const pendingShipments = shipments.filter(s => s.status === ShipmentStatus.PENDING_ASSIGNMENT);
     const couriers = users.filter(u => u.role === UserRole.COURIER);
 
     const handleAssign = (shipmentId: string, courierId: string) => {
         if (!courierId) return;
-        assignCourier(shipmentId, parseInt(courierId));
+        assignShipmentToCourier(shipmentId, parseInt(courierId));
     };
 
     return (
@@ -41,9 +41,9 @@ const AssignShipments = () => {
                                         defaultValue=""
                                         className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                                     >
-                                        <option value="" disabled>Select a courier...</option>
+                                        <option value="" disabled>Select an available courier...</option>
                                         {couriers
-                                            .filter(c => c.zone === s.toAddress.zone)
+                                            .filter(c => c.zone === s.toAddress.zone && canCourierReceiveAssignment(c.id))
                                             .map(c => <option key={c.id} value={c.id}>{c.name} ({c.zone})</option>)}
                                     </select>
                                 </td>

@@ -4,7 +4,7 @@ import { useAppContext } from '../context/AppContext';
 import { ShipmentStatus, UserRole } from '../types';
 
 const ManageReturns = () => {
-    const { shipments, users, assignReturn } = useAppContext();
+    const { shipments, users, assignReturn, canCourierReceiveAssignment } = useAppContext();
     const returnRequests = shipments.filter(s => s.status === ShipmentStatus.RETURN_REQUESTED);
     const couriers = users.filter(u => u.role === UserRole.COURIER);
 
@@ -43,9 +43,9 @@ const ManageReturns = () => {
                                         defaultValue=""
                                         className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                                     >
-                                        <option value="" disabled>Select a courier...</option>
+                                        <option value="" disabled>Select an available courier...</option>
                                         {couriers
-                                            .filter(c => c.zone === s.toAddress.zone) // Return pickup is from original recipient
+                                            .filter(c => c.zone === s.toAddress.zone && canCourierReceiveAssignment(c.id))
                                             .map(c => <option key={c.id} value={c.id}>{c.name} ({c.zone})</option>)}
                                     </select>
                                 </td>
