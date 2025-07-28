@@ -1,13 +1,12 @@
 
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, Address, Zone, UserRole, ShipmentStatus, PaymentMethod } from '../types';
+import { User, Address, Zone } from '../types';
 import { AddressAutocompleteInput } from '../components/common/AddressAutocompleteInput';
-import { StatCard } from '../components/common/StatCard';
-import { PencilIcon, TruckIcon, WalletIcon, PackageIcon, ClipboardListIcon } from '../components/Icons';
+import { PencilIcon } from '../components/Icons';
 
 const Profile = () => {
-    const { currentUser, updateUser, shipments } = useAppContext();
+    const { currentUser, updateUser } = useAppContext();
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<User>>({});
 
@@ -127,43 +126,6 @@ const Profile = () => {
                         )
                      )}
                 </div>
-                
-                {/* Courier-specific statistics */}
-                {currentUser.role === UserRole.COURIER && (
-                    <div>
-                        <h2 className="text-lg font-bold text-slate-800 mb-4">My Statistics</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <StatCard 
-                                title="Total Deliveries" 
-                                value={shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.DELIVERED).length}
-                                icon={<PackageIcon className="w-6 h-6"/>} 
-                                color="#3b82f6" 
-                            />
-                            <StatCard 
-                                title="Active Tasks" 
-                                value={shipments.filter(s => s.courierId === currentUser.id && 
-                                    [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)).length}
-                                icon={<TruckIcon className="w-6 h-6"/>} 
-                                color="#06b6d4" 
-                            />
-                            <StatCard 
-                                title="COD Collected" 
-                                value={`${shipments.filter(s => s.courierId === currentUser.id && 
-                                    s.status === ShipmentStatus.DELIVERED && 
-                                    s.paymentMethod === PaymentMethod.COD)
-                                    .reduce((sum, s) => sum + s.price, 0).toFixed(2)} EGP`}
-                                icon={<WalletIcon className="w-6 h-6"/>} 
-                                color="#16a34a" 
-                            />
-                            <StatCard 
-                                title="My Zone" 
-                                value={currentUser.zone || 'Not assigned'}
-                                icon={<ClipboardListIcon className="w-6 h-6"/>} 
-                                color="#8b5cf6" 
-                            />
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );

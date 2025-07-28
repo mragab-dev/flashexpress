@@ -1,13 +1,12 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Shipment, ShipmentStatus, PaymentMethod } from '../types';
+import { Shipment, ShipmentStatus } from '../types';
 import { BarcodeScanner } from '../components/common/BarcodeScanner';
 import { SignaturePad } from '../components/common/SignaturePad';
 import { Modal } from '../components/common/Modal';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
-import { StatCard } from '../components/common/StatCard';
-import { QrcodeIcon, ReplyIcon, WalletIcon, PackageIcon, ClipboardListIcon } from '../components/Icons';
+import { QrcodeIcon, ReplyIcon } from '../components/Icons';
 
 const CourierTasks = () => {
     const { currentUser, shipments, updateShipmentStatus, addToast } = useAppContext();
@@ -108,36 +107,6 @@ const CourierTasks = () => {
     
     return (
         <div className="space-y-8">
-            {/* Financial Summary for Today */}
-            <div className="bg-white rounded-xl shadow-sm p-6">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Today's Financial Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <StatCard 
-                        title="COD to Collect Today" 
-                        value={`${myDeliveryTasks.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0).toFixed(2)} EGP`}
-                        icon={<WalletIcon className="w-6 h-6"/>} 
-                        color="#f97316" 
-                    />
-                    <StatCard 
-                        title="COD Collected Today" 
-                        value={`${shipments.filter(s => s.courierId === currentUser.id && 
-                            s.status === ShipmentStatus.DELIVERED && 
-                            s.paymentMethod === PaymentMethod.COD && 
-                            s.deliveryDate &&
-                            new Date(s.deliveryDate).toDateString() === new Date().toDateString())
-                            .reduce((sum, s) => sum + s.price, 0).toFixed(2)} EGP`}
-                        icon={<WalletIcon className="w-6 h-6"/>} 
-                        color="#16a34a" 
-                    />
-                    <StatCard 
-                        title="Pending Tasks" 
-                        value={myDeliveryTasks.length + myReturnTasks.length}
-                        icon={<ClipboardListIcon className="w-6 h-6"/>} 
-                        color="#06b6d4" 
-                    />
-                </div>
-            </div>
-            
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-slate-800">My Delivery Tasks</h2>
                 <button 

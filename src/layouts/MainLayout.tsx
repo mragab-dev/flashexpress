@@ -17,6 +17,7 @@ import Financials from '../views/Financials';
 import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
 import CourierMapView from '../views/CourierMapView';
+import ClientAnalytics from '../views/ClientAnalytics';
 import { Modal } from '../components/common/Modal';
 import { ShipmentLabel } from '../components/common/ShipmentLabel';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
@@ -78,6 +79,7 @@ const MainLayout: React.FC = () => {
             case 'returns': return <ManageReturns />;
             case 'wallet': return <Wallet />;
             case 'financials': return <Financials />;
+            case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
             case 'map': return <CourierMapView />;

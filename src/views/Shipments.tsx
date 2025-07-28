@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, Shipment, ShipmentStatus } from '../types';
@@ -13,12 +12,13 @@ interface ShipmentsViewProps {
 
 const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     const { currentUser, shipments, users } = useAppContext();
-    const [shipmentFilter, setShipmentFilter] = useState<'all' | 'day' | 'week' | 'month'>('all');
     
-    // Admin-specific filters
+    // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<'all' | number>('all');
     const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
+    const [selectedDate, setSelectedDate] = useState<string>('');
+    
     const clients = users.filter(u => u.role === UserRole.CLIENT);
 
     if (!currentUser) return null;
@@ -33,25 +33,9 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         // Apply all filters sequentially
         let filtered = baseShipments;
 
-        // 1. Time filter (for both client and admin)
-        if (shipmentFilter !== 'all') {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            filtered = filtered.filter(s => {
-                const creationDate = new Date(s.creationDate);
-                if (shipmentFilter === 'day') return creationDate >= today;
-                if (shipmentFilter === 'week') {
-                    const oneWeekAgo = new Date(today);
-                    oneWeekAgo.setDate(today.getDate() - 7);
-                    return creationDate >= oneWeekAgo;
-                }
-                if (shipmentFilter === 'month') {
-                    const oneMonthAgo = new Date(today);
-                    oneMonthAgo.setMonth(today.getMonth() - 1);
-                    return creationDate >= oneMonthAgo;
-                }
-                return false;
-            });
+        // 1. Date filter (for both client and admin)
+        if (selectedDate) {
+            filtered = filtered.filter(s => s.creationDate.startsWith(selectedDate));
         }
         
         // 2. Admin-specific filters
@@ -70,8 +54,8 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
             }
         }
         
-        return filtered;
-    }, [currentUser, shipments, shipmentFilter, searchTerm, selectedClientId, selectedStatus]);
+        return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
+    }, [currentUser, shipments, selectedDate, searchTerm, selectedClientId, selectedStatus]);
 
     const handleExport = () => {
         if (!currentUser) return;
@@ -116,7 +100,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
             </div>
             
             {(currentUser.role === UserRole.CLIENT || currentUser.role === UserRole.ADMIN) && (
-                 <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 items-center">
+                 <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 items-center flex-wrap">
                     {currentUser.role === UserRole.ADMIN && (
                         <>
                              <div className="flex-grow w-full md:w-auto">
@@ -155,17 +139,25 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                         </>
                     )}
                     
-                    <div className="flex items-center border border-slate-300 rounded-lg p-1 bg-slate-50">
-                       {(['all', 'day', 'week', 'month'] as const).map(filter => (
-                            <button 
-                               key={filter} 
-                               onClick={() => setShipmentFilter(filter)}
-                               className={`capitalize px-3 py-1 rounded-md text-sm font-semibold transition ${shipmentFilter === filter ? 'bg-white text-primary-600 shadow-sm' : 'text-slate-600 hover:bg-slate-200'}`}
-                           >
-                               {filter === 'all' ? 'All Time' : `This ${filter}`}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                            aria-label="Filter by creation date"
+                        />
+                        {selectedDate && (
+                            <button
+                                onClick={() => setSelectedDate('')}
+                                className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
+                                aria-label="Clear date filter"
+                            >
+                                Clear
                             </button>
-                       ))}
+                        )}
                     </div>
+                    
                     <div className="md:ml-auto">
                          <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
                            <DocumentDownloadIcon className="w-5 h-5"/>
@@ -174,8 +166,9 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                     </div>
                 </div>
             )}
-
-           <ShipmentList shipments={visibleShipments} onSelect={onSelectShipment} />
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <ShipmentList shipments={visibleShipments} onSelect={onSelectShipment} />
+            </div>
         </>
     );
 };

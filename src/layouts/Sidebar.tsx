@@ -1,10 +1,11 @@
 
+
 import React from 'react';
 import { UserRole } from '../types';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, MapIcon
+    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon
 } from '../components/Icons';
 
 interface SidebarProps {
@@ -38,6 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
             { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
             { name: 'User Management', icon: <UsersIcon />, view: 'users' },
+            { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
             { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
             { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
         ],
