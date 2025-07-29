@@ -27,19 +27,40 @@ const UserManagement = () => {
     }
 
     // Filter roles based on current user permissions
-    const getAvailableRoles = () => {
+    const getAvailableRoles = (editingUser?: User) => {
         if (currentUser.role === UserRole.ADMIN) {
             return Object.values(UserRole);
         } else if (currentUser.role === UserRole.SUPER_USER) {
             // Super users can create everyone except admins
-            return Object.values(UserRole).filter(role => role !== UserRole.ADMIN);
+            const roles = Object.values(UserRole).filter(role => role !== UserRole.ADMIN);
+            
+            // If editing an existing admin user, super user cannot change their role
+            if (editingUser && editingUser.role === UserRole.ADMIN) {
+                return [UserRole.ADMIN]; // Only show admin role, effectively making it read-only
+            }
+            
+            return roles;
         }
         return [];
     };
 
-    const availableRoles = getAvailableRoles();
+    const availableRoles = getAvailableRoles(mode === 'edit' ? selectedUser || undefined : undefined);
     
     const openModal = (modalMode: 'add' | 'edit' | 'reset' | 'delete' | 'taxCard', user?: User) => {
+        // Prevent SUPER_USERs from accessing tax card functionality
+        if (modalMode === 'taxCard' && currentUser?.role !== UserRole.ADMIN) {
+            addToast('Only administrators can manage tax card numbers', 'error');
+            return;
+        }
+        
+        // Prevent SUPER_USERs from editing or deleting ADMIN users
+        if ((modalMode === 'edit' || modalMode === 'delete') && 
+            user?.role === UserRole.ADMIN && 
+            currentUser?.role === UserRole.SUPER_USER) {
+            addToast('Super users cannot modify administrator accounts', 'error');
+            return;
+        }
+        
         setMode(modalMode);
         setSelectedUser(user || null);
         setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_ZONE_A });
@@ -77,6 +98,13 @@ const UserManagement = () => {
 
     const handleTaxCardUpdate = () => {
         if (!selectedUser) return;
+        
+        // Double-check: Only admins can update tax cards
+        if (currentUser?.role !== UserRole.ADMIN) {
+            addToast('Only administrators can manage tax card numbers', 'error');
+            closeModal();
+            return;
+        }
         
         // Validate XXX-XXX-XXX format
         const taxCardRegex = /^\d{3}-\d{3}-\d{3}$/;
@@ -187,9 +215,20 @@ const UserManagement = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                            <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                           <select name="role" value={formData.role || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                           <select 
+                               name="role" 
+                               value={formData.role || ''} 
+                               onChange={handleFormChange} 
+                               className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                               disabled={mode === 'edit' && selectedUser?.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER}
+                           >
                                {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
                            </select>
+                           {mode === 'edit' && selectedUser?.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER && (
+                               <p className="text-sm text-slate-500 mt-1">
+                                   Super users cannot change admin roles.
+                               </p>
+                           )}
                        </div>
                         {formData.role === UserRole.COURIER && (
                              <div>
@@ -257,8 +296,13 @@ const UserManagement = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                         {users.map(user => (
-                            <tr key={user.id}>
-                                <td className="px-6 py-4 font-semibold text-slate-800">{user.name}</td>
+                            <tr key={user.id} className={user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER ? 'bg-slate-50' : ''}>
+                                <td className="px-6 py-4 font-semibold text-slate-800">
+                                    {user.name}
+                                    {user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER && (
+                                        <span className="ml-2 text-xs text-slate-500">(Protected)</span>
+                                    )}
+                                </td>
                                 <td className="px-6 py-4 text-slate-600">{user.email}</td>
                                 <td className="px-6 py-4 text-slate-600">{user.role}</td>
                                 <td className="px-6 py-4 text-slate-600">{user.zone || 'N/A'}</td>
@@ -273,14 +317,20 @@ const UserManagement = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-1">
-                                        <button onClick={() => openModal('edit', user)} title="Edit" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
-                                        <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
+                                        {!(user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER) && (
+                                            <>
+                                                <button onClick={() => openModal('edit', user)} title="Edit" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
+                                                <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
+                                            </>
+                                        )}
                                         {user.role === UserRole.CLIENT && currentUser?.role === UserRole.ADMIN && (
                                             <button onClick={() => openModal('taxCard', user)} title="Set Tax Card" className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md">
                                                 <DocumentDownloadIcon />
                                             </button>
                                         )}
-                                        <button onClick={() => openModal('delete', user)} title="Delete" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
+                                        {!(user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER) && (
+                                            <button onClick={() => openModal('delete', user)} title="Delete" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

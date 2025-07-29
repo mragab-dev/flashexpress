@@ -321,16 +321,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             addToast(`Cannot assign to ${courierUser?.name}: ${courierStat?.restrictionReason || 'Performance restrictions'}`, 'error');
             return false;
         }
-        await updateShipmentStatus(shipmentId, ShipmentStatus.ASSIGNED_TO_COURIER, { courierId });
+        // Automatically mark as IN_TRANSIT when assigned to courier (skip pickup step)
+        await updateShipmentStatus(shipmentId, ShipmentStatus.IN_TRANSIT, { courierId });
         const courier = users.find(u => u.id === courierId);
-        if(courier) addToast(`Shipment ${shipmentId} assigned to ${courier.name}.`, 'success');
+        if(courier) addToast(`Shipment ${shipmentId} assigned to ${courier.name} and marked as in transit.`, 'success');
         return true;
     }, [updateShipmentStatus, users, addToast, canCourierReceiveAssignment, courierStats]);
     
     const reassignCourier = useCallback(async (shipmentId: string, newCourierId: number) => {
-        await updateShipmentStatus(shipmentId, ShipmentStatus.ASSIGNED_TO_COURIER, { courierId: newCourierId });
+        await updateShipmentStatus(shipmentId, ShipmentStatus.IN_TRANSIT, { courierId: newCourierId });
         const courier = users.find(u => u.id === newCourierId);
-        if(courier) addToast(`Shipment ${shipmentId} re-assigned to ${courier.name}.`, 'success');
+        if(courier) addToast(`Shipment ${shipmentId} re-assigned to ${courier.name} and marked as in transit.`, 'success');
     }, [updateShipmentStatus, users, addToast]);
     
     const assignReturn = useCallback(async (shipmentId: string, courierId: number): Promise<boolean> => {

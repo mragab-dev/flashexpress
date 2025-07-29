@@ -17,7 +17,7 @@ const CourierTasks = () => {
     const shipmentTaskRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
 
     if (!currentUser) return null;
-    const myDeliveryTasks = shipments.filter(s => s.courierId === currentUser.id && [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
+    const myDeliveryTasks = shipments.filter(s => s.courierId === currentUser.id && [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
     const myReturnTasks = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.RETURN_IN_PROGRESS);
 
     const handleUpdateStatus = (shipmentId: string, status: ShipmentStatus) => {
@@ -56,8 +56,8 @@ const CourierTasks = () => {
     }, [myDeliveryTasks, myReturnTasks, addToast]);
 
     const nextAction: Record<ShipmentStatus, { label: string; nextStatus: ShipmentStatus } | null> = {
-        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Mark as Picked Up', nextStatus: ShipmentStatus.PICKED_UP },
-        [ShipmentStatus.PICKED_UP]: { label: 'Mark In Transit', nextStatus: ShipmentStatus.IN_TRANSIT },
+        [ShipmentStatus.ASSIGNED_TO_COURIER]: null, // Not used anymore - packages go directly to IN_TRANSIT
+        [ShipmentStatus.PICKED_UP]: null, // Not used anymore
         [ShipmentStatus.IN_TRANSIT]: { label: 'Mark Out for Delivery', nextStatus: ShipmentStatus.OUT_FOR_DELIVERY },
         [ShipmentStatus.OUT_FOR_DELIVERY]: null, // Special case with two buttons
         [ShipmentStatus.PENDING_ASSIGNMENT]: null,

@@ -31,10 +31,21 @@ export const mockUsers: User[] = [
     flatRateFee: 7.5,
     taxCardNumber: '987-654-321'
   },
+  // Couriers for Cairo Zone A
   { id: 6, name: 'Courier Ahmed', email: 'ahmed@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_A, location: { lat: 30.0444, lng: 31.2357 } },
-  { id: 7, name: 'Courier Fatima', email: 'fatima@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_B, location: { lat: 29.9792, lng: 31.1342 } },
+  { id: 10, name: 'Courier Youssef', email: 'youssef@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_A, location: { lat: 30.0626, lng: 31.2497 } },
+  
+  // Couriers for Cairo Zone B
   { id: 8, name: 'Courier Omar', email: 'omar@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_B, location: { lat: 30.0769, lng: 31.3436 } },
+  { id: 11, name: 'Courier Mariam', email: 'mariam@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_B, location: { lat: 30.0875, lng: 31.3284 } },
+  
+  // Couriers for Giza Zone A
   { id: 9, name: 'Courier Layla', email: 'layla@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_A, location: { lat: 30.0131, lng: 31.2089 } },
+  { id: 12, name: 'Courier Hassan', email: 'hassan@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_A, location: { lat: 30.0254, lng: 31.2113 } },
+  
+  // Couriers for Giza Zone B
+  { id: 7, name: 'Courier Fatima', email: 'fatima@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_B, location: { lat: 29.9792, lng: 31.1342 } },
+  { id: 13, name: 'Courier Amr', email: 'amr@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_B, location: { lat: 29.9756, lng: 31.1378 } },
 ];
 
 export const mockShipments: Shipment[] = [
@@ -67,7 +78,7 @@ export const mockShipments: Shipment[] = [
     isLargeOrder: true,
     price: 450,
     paymentMethod: PaymentMethod.INSTAPAY,
-    status: ShipmentStatus.ASSIGNED_TO_COURIER,
+    status: ShipmentStatus.IN_TRANSIT,
     courierId: 7,
     creationDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     priority: ShipmentPriority.STANDARD,
@@ -158,6 +169,10 @@ export const mockCourierStats: CourierStats[] = [
     { courierId: 7, deliveriesCompleted: 80, deliveriesFailed: 10, totalEarnings: 1200.00, pendingEarnings: 200.00, currentBalance: 1000.00, commissionType: CommissionType.FLAT, commissionValue: 15, consecutiveFailures: 1, isRestricted: false, performanceRating: 4.2 },
     { courierId: 8, deliveriesCompleted: 20, deliveriesFailed: 5, totalEarnings: 250.00, pendingEarnings: 0, currentBalance: 250.00, commissionType: CommissionType.PERCENTAGE, commissionValue: 10, consecutiveFailures: 2, isRestricted: true, restrictionReason: 'Performance rating too low', performanceRating: 1.8 },
     { courierId: 9, deliveriesCompleted: 150, deliveriesFailed: 3, totalEarnings: 2500.00, pendingEarnings: 500.00, currentBalance: 2000.00, commissionType: CommissionType.FLAT, commissionValue: 18, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.9 },
+    { courierId: 10, deliveriesCompleted: 35, deliveriesFailed: 1, totalEarnings: 520.00, pendingEarnings: 75.00, currentBalance: 445.00, commissionType: CommissionType.FLAT, commissionValue: 15, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.8 },
+    { courierId: 11, deliveriesCompleted: 62, deliveriesFailed: 4, totalEarnings: 895.00, pendingEarnings: 120.00, currentBalance: 775.00, commissionType: CommissionType.FLAT, commissionValue: 15, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.5 },
+    { courierId: 12, deliveriesCompleted: 28, deliveriesFailed: 2, totalEarnings: 410.00, pendingEarnings: 45.00, currentBalance: 365.00, commissionType: CommissionType.FLAT, commissionValue: 15, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.6 },
+    { courierId: 13, deliveriesCompleted: 91, deliveriesFailed: 8, totalEarnings: 1340.00, pendingEarnings: 180.00, currentBalance: 1160.00, commissionType: CommissionType.FLAT, commissionValue: 15, consecutiveFailures: 0, isRestricted: false, performanceRating: 4.3 },
 ];
 
 export const mockCourierTransactions: CourierTransaction[] = [];
