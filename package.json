@@ -11,6 +11,8 @@
     "postinstall": "npm install --prefix server"
   },
   "dependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
     "html5-qrcode": "^2.3.8",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
@@ -19,6 +21,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

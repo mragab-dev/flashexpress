@@ -3,6 +3,7 @@ import { Shipment } from '../types';
 import { LogoIcon, PhoneIcon } from '../components/Icons';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { TrackingTimeline } from '../components/specific/TrackingTimeline';
+import { apiFetch } from '../api/client';
 
 interface RecipientTrackingProps {
     onBackToApp: () => void;
@@ -28,23 +29,13 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
         setIsLoading(true);
 
         try {
-            const response = await fetch('/api/track', {
+            const foundShipment = await apiFetch('/api/track', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
                 body: JSON.stringify({
                     trackingId: trackingId,
                     phone: phoneNumber,
                 }),
             });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `No shipment found with those details.`);
-            }
-
-            const foundShipment = await response.json();
             setShipment(foundShipment);
 
         } catch (err: any) {

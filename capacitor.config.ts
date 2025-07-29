@@ -2,11 +2,11 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.flashexpress.app',
-  appName: 'FlashExpress',
+  appName: 'Flash Express',
   webDir: 'dist',
   server: {
     androidScheme: 'https'
   }
 };
 
-export default config; 
+export default config;

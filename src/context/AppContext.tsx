@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address } from '../types';
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus } from '../types';
+import { apiFetch } from '../api/client';
 
 type NotificationStatus = 'sending' | 'sent' | 'failed';
 
@@ -53,28 +54,6 @@ export const useAppContext = () => {
     return context;
 };
 
-// --- API Helper ---
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    // Requests are now relative (e.g., '/api/login'). 
-    // Vite's proxy will forward them to http://localhost:3001.
-    const response = await fetch(endpoint, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
-    });
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Server error: ${response.statusText}`);
-    }
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-        return response.json();
-    }
-    return; // For empty responses (e.g., 200 OK on a PUT/DELETE)
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [users, setUsers] = useState<User[]>([]);
@@ -102,7 +81,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!currentUser) return; // Don't fetch if not logged in
         setIsLoading(true);
         try {
-            const data = await apiCall('/api/data');
+            const data = await apiFetch('/api/data');
             setUsers(data.users || []);
             setShipments(data.shipments || []);
             setClientTransactions(data.clientTransactions || []);
@@ -121,7 +100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const login = useCallback(async (email: string, password: string): Promise<boolean> => {
         setIsLoading(true);
         try {
-            const user = await apiCall('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+            const user = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
             setCurrentUser(user);
             addToast(`Welcome back, ${user.name}!`, 'success');
             return true;
@@ -171,38 +150,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [addToast, fetchData]);
 
     const addUser = useCallback((userData: Omit<User, 'id'>) =>
-        executeApiAction(apiCall('/api/users', { method: 'POST', body: JSON.stringify(userData) }), `User "${userData.name}" created successfully.`, 'Failed to create user'),
+        executeApiAction(apiFetch('/api/users', { method: 'POST', body: JSON.stringify(userData) }), `User "${userData.name}" created successfully.`, 'Failed to create user'),
         [executeApiAction]);
     
     const updateUser = useCallback(async (userId: number, userData: Partial<User>, silent = false) => {
         try {
-            await apiCall(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(userData) });
+            await apiFetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(userData) });
             if (!silent) addToast('User updated successfully.', 'success');
             await fetchData();
         } catch (error: any) { if (!silent) addToast(`Update failed: ${error.message}`, 'error'); }
     }, [addToast, fetchData]);
 
     const removeUser = useCallback((userId: number) =>
-        executeApiAction(apiCall(`/api/users/${userId}`, { method: 'DELETE' }), 'User removed successfully.', 'Failed to remove user'),
+        executeApiAction(apiFetch(`/api/users/${userId}`, { method: 'DELETE' }), 'User removed successfully.', 'Failed to remove user'),
         [executeApiAction]);
 
     const resetPassword = useCallback((userId: number, password: string) =>
-        executeApiAction(apiCall(`/api/users/${userId}/password`, { method: 'PUT', body: JSON.stringify({ password }) }), 'Password reset successfully.', 'Failed to reset password'),
+        executeApiAction(apiFetch(`/api/users/${userId}/password`, { method: 'PUT', body: JSON.stringify({ password }) }), 'Password reset successfully.', 'Failed to reset password'),
         [executeApiAction]);
     
     const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => {
         if (!currentUser) return;
         const payload = { ...shipmentData, clientId: currentUser.id, clientName: currentUser.name, clientFlatRateFee: currentUser.flatRateFee };
-        await executeApiAction(apiCall('/api/shipments', { method: 'POST', body: JSON.stringify(payload) }), 'Shipment created successfully!', 'Failed to create shipment');
+        await executeApiAction(apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(payload) }), 'Shipment created successfully!', 'Failed to create shipment');
     }, [currentUser, executeApiAction]);
 
     const updateShipmentStatus = useCallback((shipmentId: string, status: ShipmentStatus, details?: { signature?: string; }) =>
-        executeApiAction(apiCall(`/api/shipments/${shipmentId}/status`, { method: 'PUT', body: JSON.stringify({ status, ...details }) }), `Shipment ${shipmentId} updated to ${status}.`, 'Failed to update status'),
+        executeApiAction(apiFetch(`/api/shipments/${shipmentId}/status`, { method: 'PUT', body: JSON.stringify({ status, ...details }) }), `Shipment ${shipmentId} updated to ${status}.`, 'Failed to update status'),
         [executeApiAction]);
 
     const assignShipmentToCourier = useCallback(async (shipmentId: string, courierId: number): Promise<boolean> => {
         try {
-            await apiCall(`/api/shipments/${shipmentId}/assign`, { method: 'PUT', body: JSON.stringify({ courierId }) });
+            await apiFetch(`/api/shipments/${shipmentId}/assign`, { method: 'PUT', body: JSON.stringify({ courierId }) });
             addToast(`Shipment ${shipmentId} assigned.`, 'success');
             await fetchData();
             return true;
@@ -227,12 +206,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [updateShipmentStatus, assignShipmentToCourier, addToast]);
 
     const updateShipmentFees = async (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) =>
-        executeApiAction(apiCall(`/api/shipments/${shipmentId}/fees`, { method: 'PUT', body: JSON.stringify(fees) }), 'Shipment fees updated.', 'Failed to update fees');
+        executeApiAction(apiFetch(`/api/shipments/${shipmentId}/fees`, { method: 'PUT', body: JSON.stringify(fees) }), 'Shipment fees updated.', 'Failed to update fees');
     
     const resendNotification = useCallback(async (notificationId: string) => {
         setNotificationStatus(prev => ({...prev, [notificationId]: 'sending' }));
         try {
-            await apiCall(`/api/notifications/${notificationId}/resend`, { method: 'POST' });
+            await apiFetch(`/api/notifications/${notificationId}/resend`, { method: 'POST' });
             addToast('Notification resent successfully.', 'success');
             await fetchData(); // This will update the 'sent' status from the DB
             setNotificationStatus(prev => ({...prev, [notificationId]: 'sent' }));
@@ -243,22 +222,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [addToast, fetchData]);
     
     const updateCourierSettings = (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) =>
-        executeApiAction(apiCall(`/api/couriers/${courierId}/settings`, { method: 'PUT', body: JSON.stringify(newSettings) }), "Courier settings updated.", 'Failed to update settings');
+        executeApiAction(apiFetch(`/api/couriers/${courierId}/settings`, { method: 'PUT', body: JSON.stringify(newSettings) }), "Courier settings updated.", 'Failed to update settings');
 
     const applyManualPenalty = (courierId: number, amount: number, description: string) =>
-        executeApiAction(apiCall(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) }), 'Penalty applied successfully.', 'Failed to apply penalty');
+        executeApiAction(apiFetch(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) }), 'Penalty applied successfully.', 'Failed to apply penalty');
 
     const requestCourierPayout = (courierId: number, amount: number) =>
-        executeApiAction(apiCall(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount }) }), 'Payout request submitted.', 'Failed to submit payout request');
+        executeApiAction(apiFetch(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount }) }), 'Payout request submitted.', 'Failed to submit payout request');
 
     const processCourierPayout = (transactionId: string) =>
-        executeApiAction(apiCall(`/api/payouts/${transactionId}/process`, { method: 'PUT' }), 'Payout processed successfully.', 'Failed to process payout');
+        executeApiAction(apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT' }), 'Payout processed successfully.', 'Failed to process payout');
     
     const updateClientFlatRate = (clientId: number, flatRateFee: number) =>
-        executeApiAction(apiCall(`/api/clients/${clientId}/flatrate`, { method: 'PUT', body: JSON.stringify({ flatRateFee }) }), "Client's flat rate updated.", 'Failed to update flat rate');
+        executeApiAction(apiFetch(`/api/clients/${clientId}/flatrate`, { method: 'PUT', body: JSON.stringify({ flatRateFee }) }), "Client's flat rate updated.", 'Failed to update flat rate');
 
     const updateClientTaxCard = (clientId: number, taxCardNumber: string) =>
-        executeApiAction(apiCall(`/api/clients/${clientId}/taxcard`, { method: 'PUT', body: JSON.stringify({ taxCardNumber }) }), "Client's tax card number updated.", 'Failed to update tax card');
+        executeApiAction(apiFetch(`/api/clients/${clientId}/taxcard`, { method: 'PUT', body: JSON.stringify({ taxCardNumber }) }), "Client's tax card number updated.", 'Failed to update tax card');
 
     const walletBalance = useMemo(() => {
         if (!currentUser) return 0;
