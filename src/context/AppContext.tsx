@@ -55,9 +55,9 @@ export const useAppContext = () => {
 
 // --- API Helper ---
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    // In production, this would be a relative path, e.g., `/api/login`
-    // For local development, we specify the backend server's port.
-    const response = await fetch(`http://localhost:3001${endpoint}`, {
+    // Requests are now relative (e.g., '/api/login'). 
+    // Vite's proxy will forward them to http://localhost:3001.
+    const response = await fetch(endpoint, {
         ...options,
         headers: {
             'Content-Type': 'application/json',

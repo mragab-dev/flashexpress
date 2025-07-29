@@ -28,7 +28,7 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
         setIsLoading(true);
 
         try {
-            const response = await fetch('http://localhost:3001/api/track', {
+            const response = await fetch('/api/track', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

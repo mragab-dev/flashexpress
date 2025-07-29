@@ -8,9 +8,8 @@ import type { Notification } from '../types';
  * @returns A promise that resolves on success or rejects on failure.
  */
 export const sendEmailNotification = async (notification: Notification): Promise<void> => {
-    // The backend server is expected to be running on a port like 3001.
-    // In production, you would configure this to be the URL of your deployed backend.
-    const backendUrl = 'http://localhost:3001/api/send-email';
+    // This is now a relative path. Vite's proxy will handle forwarding it.
+    const backendUrl = '/api/send-email';
 
     // The message from the notification object contains both the subject and body.
     // We can split it to send them as separate fields to the backend.
