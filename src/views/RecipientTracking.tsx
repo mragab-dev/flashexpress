@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useAppContext } from '../context/AppContext';
 import { Shipment } from '../types';
 import { LogoIcon, PhoneIcon } from '../components/Icons';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
@@ -10,21 +9,23 @@ interface RecipientTrackingProps {
 }
 
 const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) => {
-    const { addToast } = useAppContext();
     const [trackingId, setTrackingId] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [shipment, setShipment] = useState<Shipment | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const handleTrackPackage = async (e: React.FormEvent) => {
         e.preventDefault();
+        setShipment(null);
+        setError(null);
+
         if (!trackingId.trim() || !phoneNumber.trim()) {
-            addToast('Please enter both a tracking ID and phone number.', 'error');
+            setError('Please enter both a tracking ID and phone number.');
             return;
         }
 
         setIsLoading(true);
-        setShipment(null);
 
         try {
             const response = await fetch('http://localhost:3001/api/track', {
@@ -45,10 +46,9 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
 
             const foundShipment = await response.json();
             setShipment(foundShipment);
-            addToast('Shipment found!', 'success');
 
-        } catch (error: any) {
-            addToast(error.message, 'error');
+        } catch (err: any) {
+            setError(err.message);
         } finally {
             setIsLoading(false);
         }
@@ -73,6 +73,14 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
                         <div className="w-full max-w-lg mx-auto bg-white p-8 rounded-xl shadow-lg">
                             <h2 className="text-3xl font-bold text-slate-800 text-center">Track Your Shipment</h2>
                             <p className="text-slate-600 text-center mt-2 mb-8">Enter the shipment ID and your phone number to see its status.</p>
+                            
+                            {error && (
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md relative mb-6" role="alert">
+                                    <strong className="font-bold">Tracking Failed: </strong>
+                                    <span className="block sm:inline">{error}</span>
+                                </div>
+                            )}
+
                             <form onSubmit={handleTrackPackage} className="space-y-6">
                                 <div>
                                     <label htmlFor="trackingId" className="block text-sm font-medium text-slate-700">Shipment ID</label>

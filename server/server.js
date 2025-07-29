@@ -367,7 +367,7 @@ async function main() {
 
             // If we reach here, either shipment not found or phone didn't match.
             // Return a generic error to prevent fishing for valid tracking IDs.
-            return res.status(404).json({ error: 'No shipment found with the provided details.' });
+            return res.status(404).json({ error: 'Wrong shipment ID or phone number. Please check your details and try again.' });
 
         } catch (error) {
             console.error('Error tracking shipment:', error);
