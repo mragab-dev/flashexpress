@@ -12,7 +12,7 @@ export const mockUsers: User[] = [
     password: 'password123', 
     role: UserRole.CLIENT,
     phone: '01012345678',
-    address: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: 'Apt 5' },
+    address: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_MAADI_9, details: 'Apt 5' },
     flatRateFee: 75.0,
     taxCardNumber: '123-456-789'
   },
@@ -23,25 +23,25 @@ export const mockUsers: User[] = [
     password: 'password123', 
     role: UserRole.CLIENT,
     phone: '01187654321',
-    address: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_ZONE_A, details: 'Villa 10' },
+    address: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_DOKKI, details: 'Villa 10' },
     flatRateFee: 75.0,
     taxCardNumber: '987-654-321'
   },
   // Couriers for Cairo Zone A
-  { id: 6, name: 'Courier Ahmed', email: 'ahmed@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_A, location: { lat: 30.0444, lng: 31.2357 } },
-  { id: 10, name: 'Courier Youssef', email: 'youssef@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_A, location: { lat: 30.0626, lng: 31.2497 } },
+  { id: 6, name: 'Courier Ahmed', email: 'ahmed@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_DOWNTOWN, location: { lat: 30.0444, lng: 31.2357 } },
+  { id: 10, name: 'Courier Youssef', email: 'youssef@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_HELIOPOLIS_HEGAZ, location: { lat: 30.0626, lng: 31.2497 } },
   
   // Couriers for Cairo Zone B
-  { id: 8, name: 'Courier Omar', email: 'omar@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_B, location: { lat: 30.0769, lng: 31.3436 } },
-  { id: 11, name: 'Courier Mariam', email: 'mariam@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_ZONE_B, location: { lat: 30.0875, lng: 31.3284 } },
+  { id: 8, name: 'Courier Omar', email: 'omar@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_NASR_CITY_MAKRAM, location: { lat: 30.0769, lng: 31.3436 } },
+  { id: 11, name: 'Courier Mariam', email: 'mariam@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.CAIRO_NEW_CAIRO_90TH, location: { lat: 30.0875, lng: 31.3284 } },
   
   // Couriers for Giza Zone A
-  { id: 9, name: 'Courier Layla', email: 'layla@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_A, location: { lat: 30.0131, lng: 31.2089 } },
-  { id: 12, name: 'Courier Hassan', email: 'hassan@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_A, location: { lat: 30.0254, lng: 31.2113 } },
+  { id: 9, name: 'Courier Layla', email: 'layla@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_HARAM, location: { lat: 30.0131, lng: 31.2089 } },
+  { id: 12, name: 'Courier Hassan', email: 'hassan@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_MOHANDISEEN, location: { lat: 30.0254, lng: 31.2113 } },
   
   // Couriers for Giza Zone B
-  { id: 7, name: 'Courier Fatima', email: 'fatima@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_B, location: { lat: 29.9792, lng: 31.1342 } },
-  { id: 13, name: 'Courier Amr', email: 'amr@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_ZONE_B, location: { lat: 29.9756, lng: 31.1378 } },
+  { id: 7, name: 'Courier Fatima', email: 'fatima@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_FAISAL, location: { lat: 29.9792, lng: 31.1342 } },
+  { id: 13, name: 'Courier Amr', email: 'amr@flash.com', password: 'password123', role: UserRole.COURIER, zone: Zone.GIZA_SHEIKH_ZAYED, location: { lat: 29.9756, lng: 31.1378 } },
 ];
 
 export const mockShipments: Shipment[] = [
@@ -51,8 +51,8 @@ export const mockShipments: Shipment[] = [
     clientName: 'Client Alice',
     recipientName: 'John Doe',
     recipientPhone: '01234567890',
-    fromAddress: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: 'Apt 5' },
-    toAddress: { street: '456 Nasr City St', city: 'Cairo', zone: Zone.CAIRO_ZONE_B, details: 'Bldg 2' },
+    fromAddress: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_MAADI_9, details: 'Apt 5' },
+    toAddress: { street: '456 Nasr City St', city: 'Cairo', zone: Zone.CAIRO_NASR_CITY_MAKRAM, details: 'Bldg 2' },
     packageDescription: 'Box of electronics',
     isLargeOrder: false,
     price: 875,
@@ -69,8 +69,8 @@ export const mockShipments: Shipment[] = [
     clientName: 'Client Bob',
     recipientName: 'Jane Smith',
     recipientPhone: '01123456789',
-    fromAddress: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_ZONE_A, details: 'Villa 10' },
-    toAddress: { street: '101 Haram St', city: 'Giza', zone: Zone.GIZA_ZONE_B, details: 'Floor 3' },
+    fromAddress: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_DOKKI, details: 'Villa 10' },
+    toAddress: { street: '101 Haram St', city: 'Giza', zone: Zone.GIZA_HARAM, details: 'Floor 3' },
     packageDescription: 'Large furniture item',
     isLargeOrder: true,
     price: 3075,
@@ -89,8 +89,8 @@ export const mockShipments: Shipment[] = [
     clientName: 'Client Alice',
     recipientName: 'sdfasf', // From user prompt
     recipientPhone: '01012345678', // Alice's phone number for tracking test
-    fromAddress: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: 'Apt 5' },
-    toAddress: { street: '456 Somewhere Else', city: 'Cairo', zone: Zone.CAIRO_ZONE_B, details: 'Floor 1' },
+    fromAddress: { street: '123 Maadi St', city: 'Cairo', zone: Zone.CAIRO_MAADI_9, details: 'Apt 5' },
+    toAddress: { street: '456 Somewhere Else', city: 'Cairo', zone: Zone.CAIRO_HELIOPOLIS_SHERATON, details: 'Floor 1' },
     packageDescription: 'Important Documents',
     isLargeOrder: false,
     price: 575.00,
@@ -110,8 +110,8 @@ export const mockShipments: Shipment[] = [
     clientName: 'Client Bob',
     recipientName: 'Emily Carter',
     recipientPhone: '01555123456',
-    fromAddress: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_ZONE_A, details: 'Villa 10' },
-    toAddress: { street: '321 Mohandessin Rd', city: 'Giza', zone: Zone.GIZA_ZONE_A, details: 'Shop 7' },
+    fromAddress: { street: '789 Dokki St', city: 'Giza', zone: Zone.GIZA_DOKKI, details: 'Villa 10' },
+    toAddress: { street: '321 Mohandessin Rd', city: 'Giza', zone: Zone.GIZA_MOHANDISEEN, details: 'Shop 7' },
     packageDescription: 'Fashion apparel',
     isLargeOrder: false,
     price: 1275,

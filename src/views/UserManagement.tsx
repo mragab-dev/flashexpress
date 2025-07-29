@@ -63,7 +63,7 @@ const UserManagement = () => {
         
         setMode(modalMode);
         setSelectedUser(user || null);
-        setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_ZONE_A, flatRateFee: 75.0 });
+        setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_DOWNTOWN, flatRateFee: 75.0 });
         
         if (modalMode === 'taxCard' && user) {
             setTempTaxCardNumber(getTaxCardNumber(user.id) || '');

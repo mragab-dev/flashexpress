@@ -5,7 +5,8 @@ import { UserRole } from '../types';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon, CurrencyDollarIcon
+    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon, CurrencyDollarIcon,
+    UploadCloudIcon
 } from '../components/Icons';
 
 interface SidebarProps {

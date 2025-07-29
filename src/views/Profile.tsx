@@ -15,7 +15,7 @@ const Profile = () => {
             setFormData({
                 name: currentUser.name,
                 phone: currentUser.phone || '',
-                address: currentUser.address || { street: '', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: '' }
+                address: currentUser.address || { street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' }
             });
         }
     }, [currentUser]);
@@ -34,7 +34,11 @@ const Profile = () => {
         setIsEditing(false);
     };
 
-    const availableZones = Object.values(Zone).filter(z => z.toLowerCase().startsWith(formData.address?.city.toLowerCase() || ''));
+    const getAvailableZones = (city: string) => {
+        return Object.values(Zone).filter(z => z.startsWith(city));
+    };
+    
+    const availableZones = getAvailableZones(formData.address?.city || 'Cairo');
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -97,9 +101,11 @@ const Profile = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
-                                    <select name="address.city" value={formData.address?.city || 'Cairo'} onChange={e => handleAddressChange({...formData.address!, city: e.target.value as 'Cairo' | 'Giza'})} className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-100" disabled>
+                                    <select name="address.city" value={formData.address?.city || 'Cairo'} onChange={e => handleAddressChange({...formData.address!, city: e.target.value as 'Cairo' | 'Giza' | 'Alexandria' | 'Other', zone: getAvailableZones(e.target.value)[0]})} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
                                        <option value="Cairo">Cairo</option>
                                        <option value="Giza">Giza</option>
+                                       <option value="Alexandria">Alexandria</option>
+                                       <option value="Other">Other Governorates</option>
                                     </select>
                                 </div>
                                 <div>

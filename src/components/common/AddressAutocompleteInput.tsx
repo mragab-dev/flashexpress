@@ -40,7 +40,7 @@ export const AddressAutocompleteInput: React.FC<{
             setInputValue(newStreet);
 
             const cityComponent = place.address_components.find((c: any) => c.types.includes('administrative_area_level_1'));
-            let newCity: 'Cairo' | 'Giza' = value.city;
+            let newCity: 'Cairo' | 'Giza' | 'Alexandria' | 'Other' = value.city;
             if (cityComponent?.long_name.includes('Cairo')) newCity = 'Cairo';
             if (cityComponent?.long_name.includes('Giza')) newCity = 'Giza';
 
