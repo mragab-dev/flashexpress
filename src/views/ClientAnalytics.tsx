@@ -1,5 +1,3 @@
-
-
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, User, Shipment, ShipmentStatus } from '../types';
@@ -27,7 +25,8 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
         const counts = clients.map(client => ({
             id: client.id,
             name: client.name,
-            shipmentCount: shipments.filter(s => s.clientId === client.id).length
+            shipmentCount: shipments.filter(s => s.clientId === client.id).length,
+            flatRateFee: client.flatRateFee || 0
         }));
 
         return counts.sort((a, b) => {
@@ -83,10 +82,11 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
     };
 
     const handleExport = () => {
-        const headers = ['Client Name', 'Number of Shipments'];
+        const headers = ['Client Name', 'Number of Shipments', 'Flat Rate Fee (EGP)'];
         const data = clientShipmentCounts.map(client => [
             client.name,
-            client.shipmentCount
+            client.shipmentCount,
+            client.flatRateFee.toFixed(2)
         ]);
         exportToCsv(headers, data, 'Client_Shipment_Analytics');
     };
@@ -123,6 +123,7 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                             <tr>
                                 <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Client Name</th>
                                 <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider text-right">Number of Shipments</th>
+                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider text-right">Flat Rate Fee (EGP)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
@@ -135,11 +136,12 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                                         {client.name}
                                     </td>
                                     <td className="px-6 py-4 font-semibold text-slate-800 text-right font-mono text-lg">{client.shipmentCount}</td>
+                                    <td className="px-6 py-4 font-semibold text-orange-600 text-right font-mono text-lg">{client.flatRateFee.toFixed(2)}</td>
                                 </tr>
                             ))}
                             {clientShipmentCounts.length === 0 && (
                                 <tr>
-                                    <td colSpan={2} className="text-center py-8 text-slate-500">
+                                    <td colSpan={3} className="text-center py-8 text-slate-500">
                                         No client data available.
                                     </td>
                                 </tr>
@@ -233,7 +235,10 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                             </div>
                             <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-200">
                                 <div className="max-h-96 overflow-y-auto">
-                                    <ShipmentList shipments={filteredClientShipments} onSelect={handleSelectShipment} />
+                                    <ShipmentList 
+                                        shipments={filteredClientShipments} 
+                                        onSelect={handleSelectShipment}
+                                    />
                                 </div>
                             </div>
                         </div>

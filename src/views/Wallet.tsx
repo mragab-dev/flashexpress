@@ -1,50 +1,30 @@
 
 
-import { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { TransactionType } from '../types';
 import { StatCard } from '../components/common/StatCard';
-import { Modal } from '../components/common/Modal';
-import { WalletIcon, ArrowUpCircleIcon } from '../components/Icons';
+import { WalletIcon } from '../components/Icons';
 
 const Wallet = () => {
-    const { currentUser, clientTransactions, topUpWallet } = useAppContext();
-    const [isTopUpModalOpen, setTopUpModalOpen] = useState(false);
-    const [topUpAmount, setTopUpAmount] = useState(100);
+    const { currentUser, clientTransactions } = useAppContext();
 
     if (!currentUser) return null;
 
     const myTransactions = clientTransactions.filter(t => t.userId === currentUser.id);
 
-    const handleTopUp = () => {
-        topUpWallet(currentUser.id, topUpAmount);
-        setTopUpModalOpen(false);
-    }
-
     return (
         <div className="space-y-8">
              <div>
                  <h1 className="text-3xl font-bold text-slate-800">My Wallet</h1>
-                 <p className="text-slate-500 mt-1">Manage your balance and view your transaction history.</p>
+                 <p className="text-slate-500 mt-1">Your wallet is credited with the value of your delivered packages. You can use this balance to pay for future shipping fees.</p>
             </div>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-1">
-                    <StatCard 
-                        title="Current Balance" 
-                        value={`${(currentUser.walletBalance ?? 0).toFixed(2)} EGP`} 
-                        icon={<WalletIcon className="w-7 h-7"/>} 
-                        color="#22c55e" 
-                    />
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-sm flex items-center justify-center md:col-span-2">
-                     <button 
-                        onClick={() => setTopUpModalOpen(true)}
-                        className="flex items-center gap-3 px-8 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
-                    >
-                        <ArrowUpCircleIcon className="w-6 h-6"/>
-                        <span className="text-lg">Top Up Wallet</span>
-                    </button>
-                </div>
+             <div className="max-w-md">
+                <StatCard 
+                    title="Current Balance" 
+                    value={`${(currentUser.walletBalance ?? 0).toFixed(2)} EGP`} 
+                    icon={<WalletIcon className="w-7 h-7"/>} 
+                    color="#22c55e" 
+                />
             </div>
 
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -87,26 +67,6 @@ const Wallet = () => {
                     </table>
                 </div>
             </div>
-            <Modal isOpen={isTopUpModalOpen} onClose={() => setTopUpModalOpen(false)} title="Top Up Your Wallet">
-                <div className="space-y-6">
-                    <p>Select an amount to add to your wallet balance. In a real application, this would redirect to a payment gateway.</p>
-                    <div className="flex justify-center gap-4">
-                       {[100, 250, 500, 1000].map(amount => (
-                           <button 
-                                key={amount} 
-                                onClick={() => setTopUpAmount(amount)}
-                                className={`px-8 py-4 text-xl font-bold rounded-lg border-2 transition ${topUpAmount === amount ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-slate-700 border-slate-300 hover:border-primary-500'}`}
-                            >
-                               {amount} EGP
-                           </button>
-                       ))}
-                    </div>
-                     <div className="flex justify-end gap-4 pt-4">
-                        <button onClick={() => setTopUpModalOpen(false)} className="px-6 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 font-semibold">Cancel</button>
-                        <button onClick={handleTopUp} className="px-6 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700">Add Funds</button>
-                    </div>
-                </div>
-            </Modal>
         </div>
     );
 };

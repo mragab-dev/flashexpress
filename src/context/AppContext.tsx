@@ -1,10 +1,9 @@
 
 
-
-import React, { useState, useCallback, useMemo } from 'react';
-import { mockUsers, mockShipments, mockClientTransactions, mockNotifications, mockCourierStats, mockCourierTransactions, mockFinancialSettings } from '../data';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { mockUsers, mockShipments, mockNotifications, mockCourierStats, mockFinancialSettings } from '../data';
 import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary } from '../types';
-import { UserRole, ShipmentStatus, PaymentMethod, TransactionType, NotificationChannel, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
+import { UserRole, ShipmentStatus, PaymentMethod, TransactionType, NotificationChannel, CommissionType, CourierTransactionType, CourierTransactionStatus } from '../types';
 import { sendEmailNotification } from '../api/email';
 
 // --- App State Context ---
@@ -24,7 +23,8 @@ export type AppContextType = {
     login: (email: string, password: string) => boolean;
     logout: () => void;
     addShipment: (shipment: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => void;
-    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { courierId?: number; signature?: string }) => Promise<void>;
+    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { courierId?: number; signature?: string; }) => Promise<void>;
+    updateShipmentFees: (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => void;
     assignShipmentToCourier: (shipmentId: string, courierId: number) => Promise<boolean>;
     reassignCourier: (shipmentId: string, newCourierId: number) => Promise<void>;
     assignReturn: (shipmentId: string, courierId: number) => Promise<boolean>;
@@ -33,7 +33,6 @@ export type AppContextType = {
     removeUser: (userId: number) => void;
     resetPassword: (userId: number, newPassword: string) => void;
     addToast: (message: string, type: Toast['type']) => void;
-    topUpWallet: (userId: number, amount: number) => void;
     resendNotification: (notificationId: string) => Promise<void>;
     canCourierReceiveAssignment: (courierId: number) => boolean;
     updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => void;
@@ -48,6 +47,7 @@ export type AppContextType = {
     getClientFinancials: () => ClientFinancialSummary[];
     canAccessAdminFinancials: (user: User) => boolean;
     canCreateUsers: (user: User) => boolean;
+    calculateCommission: (shipment: Shipment, courier: CourierStats) => number;
 };
 
 export const AppContext = React.createContext<AppContextType | null>(null);
@@ -62,14 +62,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [users, setUsers] = useState<User[]>(mockUsers);
     const [shipments, setShipments] = useState<Shipment[]>(mockShipments);
-    const [clientTransactions, setClientTransactions] = useState<ClientTransaction[]>(mockClientTransactions);
+    const [clientTransactions, setClientTransactions] = useState<ClientTransaction[]>([]);
     const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
     const [notificationStatus, setNotificationStatus] = useState<Record<string, NotificationStatus>>({});
     const [toasts, setToasts] = useState<Toast[]>([]);
     
     // New Financial State
-    const [courierStats, setCourierStats] = useState<CourierStats[]>(mockCourierStats);
-    const [courierTransactions, setCourierTransactions] = useState<CourierTransaction[]>(mockCourierTransactions);
+    const [rawCourierStats, setRawCourierStats] = useState<CourierStats[]>(mockCourierStats);
+    const [courierTransactions, setCourierTransactions] = useState<CourierTransaction[]>([]);
     const [financialSettings] = useState<FinancialSettings>(mockFinancialSettings);
 
     const addToast = useCallback((message: string, type: Toast['type']) => {
@@ -79,8 +79,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setToasts(prev => prev.filter(t => t.id !== id));
         }, 5000);
     }, []);
+
+    // --- Dynamic Balance Calculation ---
+    const walletBalance = useMemo(() => {
+        if (!currentUser) return 0;
+        return clientTransactions
+            .filter(t => t.userId === currentUser.id)
+            .reduce((sum, transaction) => sum + transaction.amount, 0);
+    }, [clientTransactions, currentUser]);
+
+    const currentUserWithBalance = useMemo(() => {
+        if (!currentUser) return null;
+        return {
+            ...currentUser,
+            walletBalance,
+        };
+    }, [currentUser, walletBalance]);
     
     // --- Financial Logic ---
+
+    // --- Data Initialization Effect ---
+    useEffect(() => {
+        const initialClientTransactions: ClientTransaction[] = [];
+        const initialCourierTransactions: CourierTransaction[] = [];
+
+        // Loop through all shipments to generate initial transactions based on mock data
+        for (const shipment of mockShipments) {
+            // 1. Generate client transactions for DELIVERED COD shipments
+            if (shipment.status === ShipmentStatus.DELIVERED && shipment.paymentMethod === PaymentMethod.COD && shipment.packageValue > 0) {
+                initialClientTransactions.push({
+                    id: `TXN-COD-${shipment.id}`,
+                    userId: shipment.clientId,
+                    type: TransactionType.DEPOSIT,
+                    amount: shipment.packageValue,
+                    date: shipment.deliveryDate || new Date().toISOString(),
+                    description: `COD collection for shipment ${shipment.id}`
+                });
+            }
+
+            // 2. Generate client transactions for WALLET payments
+            if (shipment.paymentMethod === PaymentMethod.WALLET) {
+                 initialClientTransactions.push({
+                    id: `TXN-PAY-${shipment.id}`,
+                    userId: shipment.clientId,
+                    type: TransactionType.PAYMENT,
+                    amount: -(shipment.clientFlatRateFee || 0), // Deduct only the shipping fee
+                    date: shipment.creationDate,
+                    description: `Payment for shipment ${shipment.id}`
+                });
+            }
+
+            // 3. Generate courier commission transactions for completed (delivered/returned) shipments
+            if ((shipment.status === ShipmentStatus.DELIVERED || shipment.status === ShipmentStatus.RETURNED) && shipment.courierId && typeof shipment.courierCommission === 'number') {
+                initialCourierTransactions.push({
+                    id: `txn-init-${shipment.id}`,
+                    courierId: shipment.courierId,
+                    type: CourierTransactionType.COMMISSION,
+                    amount: shipment.courierCommission,
+                    description: `Commission for ${shipment.id}`,
+                    shipmentId: shipment.id,
+                    timestamp: shipment.deliveryDate || new Date().toISOString(),
+                    status: CourierTransactionStatus.PROCESSED
+                });
+            }
+        }
+        
+        setClientTransactions(initialClientTransactions);
+        setCourierTransactions(initialCourierTransactions);
+    }, []); // Run only once on mount to seed data
+
+    // Derive real-time courier stats from raw data
+    const courierStats = useMemo((): CourierStats[] => {
+        return rawCourierStats.map(statConfig => {
+            const courierId = statConfig.courierId;
+            const transactions = courierTransactions.filter(t => t.courierId === courierId);
+            
+            const deliveredCount = shipments.filter(s => s.courierId === courierId && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED)).length;
+            const failedCount = shipments.filter(s => s.courierId === courierId && s.status === ShipmentStatus.DELIVERY_FAILED).length;
+
+            const totalEarnings = transactions
+                .filter(t => (t.type === CourierTransactionType.COMMISSION || t.type === CourierTransactionType.BONUS) && t.status === CourierTransactionStatus.PROCESSED)
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const currentBalance = transactions
+                .filter(t => t.status === CourierTransactionStatus.PROCESSED)
+                .reduce((sum, t) => sum + t.amount, 0);
+            
+            const totalPayouts = transactions
+                .filter(t => t.type === CourierTransactionType.WITHDRAWAL_REQUEST || t.type === CourierTransactionType.WITHDRAWAL_PROCESSED)
+                .reduce((sum, t) => sum - t.amount, 0);
+
+            const pendingEarnings = totalEarnings - totalPayouts;
+
+            return {
+                ...statConfig,
+                deliveriesCompleted: deliveredCount,
+                deliveriesFailed: failedCount,
+                totalEarnings,
+                currentBalance,
+                pendingEarnings: Math.max(0, pendingEarnings),
+            };
+        });
+    }, [rawCourierStats, courierTransactions, shipments]);
 
     const calculatePerformanceRating = useCallback((courier: CourierStats, latestDeliverySuccess: boolean): number => {
       const totalDeliveries = courier.deliveriesCompleted + courier.deliveriesFailed;
@@ -110,46 +210,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           baseCommission = courier.commissionValue;
       }
       
-      if (shipment.priority === ShipmentPriority.URGENT) baseCommission += financialSettings.urgentDeliveryBonus;
-      else if (shipment.priority === ShipmentPriority.EXPRESS) baseCommission += financialSettings.expressDeliveryBonus;
-      
-      if (courier.performanceRating >= 4.5) baseCommission *= 1.1;
-      else if (courier.performanceRating >= 4.0) baseCommission *= 1.05;
-      
-      if (shipment.packageValue > 1000) baseCommission += Math.min(shipment.packageValue * 0.001, 20);
-      
       return Math.round(baseCommission * 100) / 100;
-    }, [financialSettings]);
+    }, []);
 
     const handleDeliveryCompletion = useCallback((shipment: Shipment, success: boolean) => {
         if (!shipment.courierId) return;
         const courierId = shipment.courierId;
-
-        setCourierStats(prevStats => prevStats.map(courier => {
+        
+        if (success) {
+            const commission = shipment.courierCommission;
+            if (typeof commission !== 'number') {
+                addToast(`Critical error: Missing commission snapshot for shipment ${shipment.id}. Payout cannot be processed.`, 'error');
+                return;
+            }
+            const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.COMMISSION, amount: commission, description: `Commission for ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
+            setCourierTransactions(prev => [transaction, ...prev]);
+        } else {
+            const penalty = financialSettings.penaltyAmount;
+            const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.PENALTY, amount: -penalty, description: `Penalty for ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
+            setCourierTransactions(prev => [transaction, ...prev]);
+        }
+        
+        setRawCourierStats(prevStats => prevStats.map(courier => {
             if (courier.courierId === courierId) {
+                const currentStats = courierStats.find(cs => cs.courierId === courierId) || courier;
                 if (success) {
-                    const commission = calculateCommission(shipment, courier);
-                    const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.COMMISSION, amount: commission, description: `Commission for ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
-                    setCourierTransactions(prev => [transaction, ...prev]);
-                    
-                    return { ...courier, deliveriesCompleted: courier.deliveriesCompleted + 1, totalEarnings: courier.totalEarnings + commission, pendingEarnings: courier.pendingEarnings + commission, currentBalance: courier.currentBalance + commission, consecutiveFailures: 0, lastDeliveryDate: new Date().toISOString(), performanceRating: calculatePerformanceRating(courier, true) };
+                    return { ...courier, consecutiveFailures: 0, lastDeliveryDate: new Date().toISOString(), performanceRating: calculatePerformanceRating(currentStats, true) };
                 } else {
-                    const penalty = financialSettings.penaltyAmount; // Use the global penalty setting
                     const newConsecutiveFailures = courier.consecutiveFailures + 1;
-                    const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.PENALTY, amount: -penalty, description: `Penalty for ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
-                    setCourierTransactions(prev => [transaction, ...prev]);
-                    
-                    const newPerfRating = calculatePerformanceRating(courier, false);
+                    const newPerfRating = calculatePerformanceRating(currentStats, false);
                     const shouldRestrict = newConsecutiveFailures >= financialSettings.consecutiveFailureLimit || newPerfRating < financialSettings.performanceThreshold;
-                    
-                    return { ...courier, deliveriesFailed: courier.deliveriesFailed + 1, currentBalance: courier.currentBalance - penalty, consecutiveFailures: newConsecutiveFailures, isRestricted: shouldRestrict, restrictionReason: shouldRestrict ? `Performance rating below threshold` : undefined, performanceRating: newPerfRating };
+                    return { ...courier, consecutiveFailures: newConsecutiveFailures, isRestricted: shouldRestrict, restrictionReason: shouldRestrict ? `Performance rating below threshold` : undefined, performanceRating: newPerfRating };
                 }
             }
             return courier;
         }));
         
-        addToast( success ? 'Delivery completed! Commission added.' : 'Delivery failed. Penalty applied.', success ? 'success' : 'error');
-    }, [calculateCommission, financialSettings, addToast, calculatePerformanceRating]);
+        addToast( success ? 'Delivery completed! Commission processed.' : 'Delivery failed. Penalty applied.', success ? 'success' : 'error');
+    }, [financialSettings, addToast, calculatePerformanceRating, courierStats]);
 
     // --- User & Auth ---
     
@@ -187,8 +285,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const newUserData = { ...userData };
         
         // Set default flat rate fee for new clients
-        if (newUserData.role === UserRole.CLIENT && !newUserData.flatRateFee) {
-            newUserData.flatRateFee = 5.0; // Default flat rate fee
+        if (newUserData.role === UserRole.CLIENT && newUserData.flatRateFee === undefined) {
+            newUserData.flatRateFee = 75.0; // Default flat rate fee
         }
         
         const newUser: User = { ...newUserData, id: Math.max(...users.map(u => u.id), 0) + 1 };
@@ -208,7 +306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 isRestricted: false, 
                 performanceRating: 5.0 
             };
-            setCourierStats(prev => [...prev, newCourierStat]);
+            setRawCourierStats(prev => [...prev, newCourierStat]);
         }
         addToast(`User "${newUser.name}" created successfully.`, 'success');
     }, [users, addToast, financialSettings, currentUser, canCreateUsers]);
@@ -237,21 +335,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const addShipment = useCallback((newShipmentData: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => {
         if (!currentUser || currentUser.role !== UserRole.CLIENT) return;
         
+        const clientFeeSnapshot = currentUser.flatRateFee || 0;
+
         if(newShipmentData.paymentMethod === PaymentMethod.WALLET) {
-            if((currentUser.walletBalance ?? 0) < newShipmentData.price) {
-                addToast('Insufficient wallet balance.', 'error'); return;
+            if(walletBalance < clientFeeSnapshot) {
+                addToast(`Insufficient wallet balance to pay for shipping fee of ${clientFeeSnapshot.toFixed(2)} EGP.`, 'error'); 
+                return;
             }
-            const newBalance = (currentUser.walletBalance ?? 0) - newShipmentData.price;
-            updateUser(currentUser.id, { walletBalance: newBalance });
-            
-            const newTransaction: ClientTransaction = { id: 'TXN' + Math.floor(Math.random() * 900000 + 100000), userId: currentUser.id, type: TransactionType.PAYMENT, amount: -newShipmentData.price, date: new Date().toISOString(), description: `Payment for shipment to ${newShipmentData.recipientName}` };
+            const newTransaction: ClientTransaction = { 
+                id: 'TXN' + Math.floor(Math.random() * 900000 + 100000), 
+                userId: currentUser.id, 
+                type: TransactionType.PAYMENT, 
+                amount: -clientFeeSnapshot, 
+                date: new Date().toISOString(), 
+                description: `Shipping fee for shipment to ${newShipmentData.recipientName}` 
+            };
             setClientTransactions(prev => [newTransaction, ...prev]);
         }
-
-        const newShipment: Shipment = { ...newShipmentData, id: 'FLS' + Math.floor(Math.random() * 900000 + 100000), clientId: currentUser.id, clientName: currentUser.name, creationDate: new Date().toISOString(), status: ShipmentStatus.PENDING_ASSIGNMENT, };
+        
+        const newShipment: Shipment = { ...newShipmentData, id: 'FLS' + Math.floor(Math.random() * 900000 + 100000), clientId: currentUser.id, clientName: currentUser.name, creationDate: new Date().toISOString(), status: ShipmentStatus.PENDING_ASSIGNMENT, clientFlatRateFee: clientFeeSnapshot };
         setShipments(prev => [newShipment, ...prev]);
         addToast(`New shipment ${newShipment.id} created!`, 'success');
-    }, [currentUser, addToast, updateUser]);
+    }, [currentUser, addToast, walletBalance]); // Keep walletBalance dependency to ensure check is up-to-date
 
     // --- Notification Logic ---
 
@@ -286,11 +391,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     // --- Core Actions ---
 
-    const updateShipmentStatus = useCallback(async (shipmentId: string, status: ShipmentStatus, details?: { courierId?: number; signature?: string }) => {
+    const updateShipmentStatus = useCallback(async (shipmentId: string, status: ShipmentStatus, details?: { courierId?: number; signature?: string; }) => {
         let updatedShipment: Shipment | undefined;
         setShipments(prev => prev.map(s => {
             if (s.id === shipmentId) {
-                updatedShipment = { ...s, status, deliveryDate: status === ShipmentStatus.DELIVERED ? new Date().toISOString() : s.deliveryDate, signature: details?.signature ?? s.signature, courierId: details?.courierId ?? s.courierId, };
+                updatedShipment = { ...s, status, deliveryDate: (status === ShipmentStatus.DELIVERED || status === ShipmentStatus.RETURNED) ? new Date().toISOString() : s.deliveryDate, signature: details?.signature ?? s.signature, courierId: details?.courierId ?? s.courierId };
                 return updatedShipment;
             }
             return s;
@@ -299,11 +404,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast(`Shipment ${shipmentId} updated to "${status}".`, 'info');
 
         if (updatedShipment) {
-            if (status === ShipmentStatus.DELIVERED) handleDeliveryCompletion(updatedShipment, true);
-            if (status === ShipmentStatus.DELIVERY_FAILED) handleDeliveryCompletion(updatedShipment, false);
+            if (status === ShipmentStatus.DELIVERED) {
+                handleDeliveryCompletion(updatedShipment, true);
+
+                // Client wallet update logic for COD
+                if (updatedShipment.paymentMethod === PaymentMethod.COD && updatedShipment.packageValue > 0) {
+                    const client = users.find(u => u.id === updatedShipment!.clientId);
+                    if(client) {
+                        const newTransaction: ClientTransaction = {
+                            id: 'TXN' + Math.floor(Math.random() * 900000 + 100000),
+                            userId: client.id,
+                            type: TransactionType.DEPOSIT,
+                            amount: updatedShipment.packageValue,
+                            date: new Date().toISOString(),
+                            description: `COD collection for shipment ${updatedShipment.id}`
+                        };
+                        setClientTransactions(prev => [newTransaction, ...prev]);
+                        addToast(`COD value of ${updatedShipment.packageValue.toFixed(2)} EGP credited to wallet.`, 'success');
+                    }
+                }
+            }
+            if (status === ShipmentStatus.DELIVERY_FAILED) {
+                handleDeliveryCompletion(updatedShipment, false);
+            }
+            if (status === ShipmentStatus.RETURNED) {
+                handleDeliveryCompletion(updatedShipment, true); // Courier gets paid for returns too
+            }
+            
             await createAndSendNotification(updatedShipment, status);
         }
-    }, [addToast, createAndSendNotification, handleDeliveryCompletion]);
+    }, [addToast, createAndSendNotification, handleDeliveryCompletion, users]);
+
+    const updateShipmentFees = useCallback((shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => {
+        if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SUPER_USER)) {
+            addToast('You do not have permission to edit shipment fees.', 'error');
+            return;
+        }
+
+        setShipments(prev => prev.map(s => {
+            if (s.id === shipmentId) {
+                if ([ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED].includes(s.status)) {
+                    addToast('Cannot edit fees for a completed shipment.', 'error');
+                    return s;
+                }
+                addToast(`Fees for ${shipmentId} updated.`, 'success');
+                return { ...s, ...fees };
+            }
+            return s;
+        }));
+    }, [currentUser, addToast]);
     
     const canCourierReceiveAssignment = useCallback((courierId: number): boolean => {
         const courier = courierStats.find(c => c.courierId === courierId);
@@ -321,42 +470,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             addToast(`Cannot assign to ${courierUser?.name}: ${courierStat?.restrictionReason || 'Performance restrictions'}`, 'error');
             return false;
         }
-        // Automatically mark as IN_TRANSIT when assigned to courier (skip pickup step)
-        await updateShipmentStatus(shipmentId, ShipmentStatus.IN_TRANSIT, { courierId });
-        const courier = users.find(u => u.id === courierId);
-        if(courier) addToast(`Shipment ${shipmentId} assigned to ${courier.name} and marked as in transit.`, 'success');
+
+        const courierUser = users.find(u => u.id === courierId);
+        const shipmentToUpdate = shipments.find(s => s.id === shipmentId);
+        const courierStat = courierStats.find(cs => cs.courierId === courierId);
+        if (!courierUser || !shipmentToUpdate || !courierStat) {
+            addToast('Could not find necessary data for assignment.', 'error');
+            return false;
+        }
+        
+        const commissionSnapshot = calculateCommission(shipmentToUpdate, courierStat);
+
+        const updatedShipment = { ...shipmentToUpdate, status: ShipmentStatus.IN_TRANSIT, courierId, courierCommission: commissionSnapshot };
+        
+        setShipments(prev => prev.map(s => s.id === shipmentId ? updatedShipment : s));
+        await createAndSendNotification(updatedShipment, ShipmentStatus.IN_TRANSIT);
+        
+        addToast(`Shipment ${shipmentId} assigned to ${courierUser.name} and marked as in transit.`, 'success');
         return true;
-    }, [updateShipmentStatus, users, addToast, canCourierReceiveAssignment, courierStats]);
+    }, [users, shipments, courierStats, addToast, canCourierReceiveAssignment, calculateCommission, createAndSendNotification]);
     
     const reassignCourier = useCallback(async (shipmentId: string, newCourierId: number) => {
-        await updateShipmentStatus(shipmentId, ShipmentStatus.IN_TRANSIT, { courierId: newCourierId });
-        const courier = users.find(u => u.id === newCourierId);
-        if(courier) addToast(`Shipment ${shipmentId} re-assigned to ${courier.name} and marked as in transit.`, 'success');
-    }, [updateShipmentStatus, users, addToast]);
+        if (!canCourierReceiveAssignment(newCourierId)) {
+            addToast('Cannot assign to the selected courier due to restrictions.', 'error');
+            return;
+        }
+        
+        const courierUser = users.find(u => u.id === newCourierId);
+        const shipmentToUpdate = shipments.find(s => s.id === shipmentId);
+        const courierStat = courierStats.find(cs => cs.courierId === newCourierId);
+        if (!courierUser || !shipmentToUpdate || !courierStat) {
+            addToast('Could not find necessary data for re-assignment.', 'error');
+            return;
+        }
+        
+        const commissionSnapshot = calculateCommission(shipmentToUpdate, courierStat);
+
+        const updatedShipment = { ...shipmentToUpdate, status: ShipmentStatus.IN_TRANSIT, courierId: newCourierId, courierCommission: commissionSnapshot };
+        
+        setShipments(prev => prev.map(s => s.id === shipmentId ? updatedShipment : s));
+        await createAndSendNotification(updatedShipment, ShipmentStatus.IN_TRANSIT);
+        
+        addToast(`Shipment ${shipmentId} re-assigned to ${courierUser.name}.`, 'success');
+    }, [users, shipments, courierStats, addToast, canCourierReceiveAssignment, calculateCommission, createAndSendNotification]);
     
     const assignReturn = useCallback(async (shipmentId: string, courierId: number): Promise<boolean> => {
         if (!canCourierReceiveAssignment(courierId)) {
-            const courierUser = users.find(u => u.id === courierId);
-            addToast(`Cannot assign to ${courierUser?.name} due to restrictions.`, 'error');
+            addToast(`Cannot assign return to the selected courier due to restrictions.`, 'error');
             return false;
         }
-        await updateShipmentStatus(shipmentId, ShipmentStatus.RETURN_IN_PROGRESS, { courierId });
-        const courier = users.find(u => u.id === courierId);
-        if(courier) addToast(`Return for ${shipmentId} assigned to ${courier.name}.`, 'success');
+        
+        const courierUser = users.find(u => u.id === courierId);
+        const shipmentToUpdate = shipments.find(s => s.id === shipmentId);
+        const courierStat = courierStats.find(cs => cs.courierId === courierId);
+        if (!courierUser || !shipmentToUpdate || !courierStat) {
+            addToast('Could not find necessary data for return assignment.', 'error');
+            return false;
+        }
+        
+        const commissionSnapshot = calculateCommission(shipmentToUpdate, courierStat);
+
+        const updatedShipment = { ...shipmentToUpdate, status: ShipmentStatus.RETURN_IN_PROGRESS, courierId, courierCommission: commissionSnapshot };
+        
+        setShipments(prev => prev.map(s => s.id === shipmentId ? updatedShipment : s));
+        await createAndSendNotification(updatedShipment, ShipmentStatus.RETURN_IN_PROGRESS);
+        
+        addToast(`Return for ${shipmentId} assigned to ${courierUser.name}.`, 'success');
         return true;
-    }, [updateShipmentStatus, users, addToast, canCourierReceiveAssignment]);
+    }, [users, shipments, courierStats, addToast, canCourierReceiveAssignment, calculateCommission, createAndSendNotification]);
 
-    const topUpWallet = useCallback((userId: number, amount: number) => {
-        const user = users.find(u => u.id === userId);
-        if (!user) return;
-        const newBalance = (user.walletBalance ?? 0) + amount;
-        updateUser(userId, { walletBalance: newBalance });
-
-        const newTransaction: ClientTransaction = { id: 'TXN' + Math.floor(Math.random() * 900000 + 100000), userId, type: TransactionType.DEPOSIT, amount, date: new Date().toISOString(), description: `Wallet top-up` };
-        setClientTransactions(prev => [newTransaction, ...prev]);
-        addToast(`Successfully added ${amount.toFixed(2)} EGP to your wallet.`, 'success');
-    }, [users, updateUser, addToast]);
-    
     const resendNotification = useCallback(async (notificationId: string) => {
         const notification = notifications.find(n => n.id === notificationId);
         if (!notification) return;
@@ -374,14 +556,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [notifications, addToast]);
 
     const updateCourierSettings = useCallback((courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => {
-        setCourierStats(prev => prev.map(c => c.courierId === courierId ? { ...c, ...newSettings } : c));
+        setRawCourierStats(prev => prev.map(c => c.courierId === courierId ? { ...c, ...newSettings } : c));
         const courier = users.find(u => u.id === courierId);
         addToast(`Financial settings for ${courier?.name} have been updated.`, 'success');
     }, [users, addToast]);
 
     const applyManualPenalty = useCallback((courierId: number, amount: number, description: string) => {
         const positiveAmount = Math.abs(amount);
-        setCourierStats(prev => prev.map(c => c.courierId === courierId ? { ...c, currentBalance: c.currentBalance - positiveAmount, totalEarnings: c.totalEarnings - positiveAmount } : c));
         const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.PENALTY, amount: -positiveAmount, description, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
         setCourierTransactions(prev => [transaction, ...prev]);
         const courier = users.find(u => u.id === courierId);
@@ -389,7 +570,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [users, addToast]);
     
     const requestCourierPayout = useCallback((courierId: number, amount: number) => {
-        setCourierStats(prev => prev.map(c => c.courierId === courierId ? { ...c, pendingEarnings: c.pendingEarnings - amount } : c));
         const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.WITHDRAWAL_REQUEST, amount: -amount, description: 'Payout requested', timestamp: new Date().toISOString(), status: CourierTransactionStatus.PENDING };
         setCourierTransactions(prev => [transaction, ...prev]);
         addToast(`Payout of ${amount} EGP requested.`, 'success');
@@ -399,7 +579,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const transaction = courierTransactions.find(t => t.id === transactionId);
         if (!transaction) return;
         setCourierTransactions(prev => prev.map(t => t.id === transactionId ? { ...t, status: CourierTransactionStatus.PROCESSED, description: 'Payout processed by admin' } : t));
-        setCourierStats(prev => prev.map(c => c.courierId === transaction.courierId ? { ...c, currentBalance: c.currentBalance + transaction.amount } : c)); // amount is negative
         addToast(`Payout for transaction ${transactionId} processed.`, 'success');
     }, [courierTransactions, addToast]);
     
@@ -444,34 +623,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const getAdminFinancials = useCallback((): AdminFinancials => {
         const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
+        
         const grossRevenue = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
+        const totalClientFees = deliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
+        const totalCourierPayouts = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
         
-        let totalClientFees = 0;
-        deliveredShipments.forEach(shipment => {
-            const client = users.find(u => u.id === shipment.clientId);
-            if (client?.flatRateFee) {
-                totalClientFees += client.flatRateFee;
-            }
-        });
-        
-        const netRevenue = grossRevenue - totalClientFees;
+        const netRevenue = totalClientFees - totalCourierPayouts;
         const totalOrders = deliveredShipments.length;
         
         return {
             grossRevenue,
             netRevenue,
             totalClientFees,
+            totalCourierPayouts,
             totalOrders,
             taxCarNumber: '' // No longer applicable since tax cards are per client
         };
-    }, [shipments, users]);
+    }, [shipments]);
 
     const getClientFinancials = useCallback((): ClientFinancialSummary[] => {
         const clientUsers = users.filter(u => u.role === UserRole.CLIENT);
         return clientUsers.map(client => {
             const clientShipments = shipments.filter(s => s.clientId === client.id && s.status === ShipmentStatus.DELIVERED);
             const totalOrders = clientShipments.length;
-            const orderSum = clientShipments.reduce((sum, s) => sum + s.price, 0);
+            const orderSum = clientShipments.reduce((sum, s) => sum + s.packageValue, 0); // Use packageValue for client's earnings
             
             return {
                 clientId: client.id,
@@ -484,7 +659,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [users, shipments]);
 
     const value = useMemo(() => ({ 
-        currentUser, 
+        currentUser: currentUserWithBalance, 
         users, 
         shipments, 
         clientTransactions, 
@@ -498,13 +673,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout, 
         addShipment, 
         updateShipmentStatus, 
+        updateShipmentFees,
         assignShipmentToCourier, 
         addUser, 
         updateUser, 
         removeUser, 
         resetPassword, 
         addToast, 
-        topUpWallet, 
         assignReturn, 
         reassignCourier, 
         resendNotification, 
@@ -520,9 +695,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getAdminFinancials,
         getClientFinancials,
         canAccessAdminFinancials,
-        canCreateUsers
+        canCreateUsers,
+        calculateCommission
     }), [
-        currentUser, 
+        currentUserWithBalance, 
         users, 
         shipments, 
         clientTransactions, 
@@ -536,13 +712,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout, 
         addShipment, 
         updateShipmentStatus, 
+        updateShipmentFees,
         assignShipmentToCourier, 
         addUser, 
         updateUser, 
         removeUser, 
         resetPassword, 
         addToast, 
-        topUpWallet, 
         assignReturn, 
         reassignCourier, 
         resendNotification, 
@@ -558,7 +734,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getAdminFinancials,
         getClientFinancials,
         canAccessAdminFinancials,
-        canCreateUsers
+        canCreateUsers,
+        calculateCommission
     ]);
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

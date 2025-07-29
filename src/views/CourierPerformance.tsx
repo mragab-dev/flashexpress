@@ -1,39 +1,70 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType } from '../types';
+import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType, ShipmentStatus, Shipment } from '../types';
 import { Modal } from '../components/common/Modal';
+import { ShipmentList } from '../components/specific/ShipmentList';
 
-const CourierPerformance = () => {
-    const { users, courierStats, courierTransactions, updateCourierSettings, applyManualPenalty, processCourierPayout } = useAppContext();
+interface CourierPerformanceProps {
+    onSelectShipment: (shipment: Shipment) => void;
+}
+
+const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipment }) => {
+    const { users, shipments, courierStats, courierTransactions, updateCourierSettings, applyManualPenalty, processCourierPayout } = useAppContext();
     const [selectedCourier, setSelectedCourier] = useState<CourierStats | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    
-    const courierUsers = users.filter(u => u.role === 'Courier');
+    const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+
+    // New state for shipment list modal
+    const [modalShipments, setModalShipments] = useState<Shipment[] | null>(null);
+    const [modalTitle, setModalTitle] = useState('');
 
     const handleManageClick = (courierId: number) => {
         const stats = courierStats.find(cs => cs.courierId === courierId);
         if (stats) {
             setSelectedCourier(stats);
-            setIsModalOpen(true);
+            setIsManageModalOpen(true);
         }
     };
 
     const closeModal = () => {
-        setIsModalOpen(false);
+        setIsManageModalOpen(false);
         setSelectedCourier(null);
     };
 
-    const courierData = courierUsers.map(user => {
+    const handleCountClick = (courierId: number, courierName: string, type: 'delivered' | 'pending') => {
+        let filteredShipments: Shipment[] = [];
+        if (type === 'delivered') {
+            filteredShipments = shipments.filter(s => s.courierId === courierId && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED));
+            setModalTitle(`Delivered Shipments for ${courierName}`);
+        } else {
+            filteredShipments = shipments.filter(s => 
+                s.courierId === courierId && 
+                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURN_IN_PROGRESS].includes(s.status)
+            );
+            setModalTitle(`Pending Shipments for ${courierName}`);
+        }
+        setModalShipments(filteredShipments);
+    };
+    
+    const handleShipmentSelect = (shipment: Shipment) => {
+        onSelectShipment(shipment);
+        setModalShipments(null); // Close the list modal
+    };
+
+
+    const courierData = users.filter(u => u.role === 'Courier').map(user => {
         const stats = courierStats.find(cs => cs.courierId === user.id);
         const pendingPayouts = courierTransactions.filter(t => t.courierId === user.id && t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
-        const successRate = (stats && (stats.deliveriesCompleted + stats.deliveriesFailed) > 0) ? (stats.deliveriesCompleted / (stats.deliveriesCompleted + stats.deliveriesFailed)) * 100 : 100;
+        
+        const pendingCount = shipments.filter(s => 
+            s.courierId === user.id && 
+            [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURN_IN_PROGRESS].includes(s.status)
+        ).length;
 
         return {
             user,
             stats,
             pendingPayouts,
-            successRate
+            pendingCount,
         };
     });
 
@@ -49,7 +80,8 @@ const CourierPerformance = () => {
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Courier</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Performance</th>
+                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Delivered</th>
+                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Pending</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Earnings (Total / Balance)</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Commission</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Status</th>
@@ -57,18 +89,29 @@ const CourierPerformance = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                            {courierData.map(({ user, stats, pendingPayouts, successRate }) => (
+                            {courierData.map(({ user, stats, pendingPayouts, pendingCount }) => (
                                 <tr key={user.id}>
                                     <td className="p-4 font-semibold">{user.name}</td>
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-1" title={`Rating: ${stats?.performanceRating}`}>
-                                            <span className={`text-lg ${Math.floor(stats?.performanceRating || 0) > 0 ? 'text-yellow-400' : 'text-gray-300'}`}>⭐</span>
-                                            <span>{stats?.performanceRating.toFixed(1)}</span>
-                                            <span className="text-slate-500 text-xs">({successRate.toFixed(0)}% succ.)</span>
-                                        </div>
+                                    <td className="p-4 font-mono text-center">
+                                         <button 
+                                            onClick={() => handleCountClick(user.id, user.name, 'delivered')}
+                                            className="font-mono text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            disabled={!stats || stats.deliveriesCompleted === 0}
+                                        >
+                                            {stats?.deliveriesCompleted ?? 0}
+                                        </button>
+                                    </td>
+                                    <td className="p-4 font-mono text-center">
+                                         <button 
+                                            onClick={() => handleCountClick(user.id, user.name, 'pending')}
+                                            className="font-mono text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            disabled={pendingCount === 0}
+                                        >
+                                            {pendingCount}
+                                        </button>
                                     </td>
                                     <td className="p-4 font-mono">
-                                        {stats?.totalEarnings.toFixed(2)} / {stats?.currentBalance.toFixed(2)}
+                                        {stats ? `${stats.totalEarnings.toFixed(2)} / ${stats.currentBalance.toFixed(2)}` : 'N/A'}
                                     </td>
                                     <td className="p-4 text-sm">
                                         {stats?.commissionType === 'flat' ? `${stats.commissionValue} EGP` : `${stats?.commissionValue}%`}
@@ -86,9 +129,9 @@ const CourierPerformance = () => {
                     </table>
                 </div>
             </div>
-            {selectedCourier && isModalOpen && (
+            {selectedCourier && isManageModalOpen && (
                 <ManageCourierModal
-                    isOpen={isModalOpen}
+                    isOpen={isManageModalOpen}
                     onClose={closeModal}
                     courierStats={selectedCourier}
                     courierUser={users.find(u => u.id === selectedCourier.courierId)!}
@@ -98,6 +141,16 @@ const CourierPerformance = () => {
                     onProcessPayout={processCourierPayout}
                 />
             )}
+             <Modal isOpen={!!modalShipments} onClose={() => setModalShipments(null)} title={modalTitle} size="4xl">
+                {modalShipments && (
+                    <div className="max-h-[70vh] overflow-y-auto">
+                        <ShipmentList 
+                            shipments={modalShipments} 
+                            onSelect={handleShipmentSelect}
+                        />
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

@@ -11,7 +11,7 @@ interface ShipmentsViewProps {
 }
 
 const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
-    const { currentUser, shipments, users } = useAppContext();
+    const { currentUser, shipments, users, updateShipmentFees } = useAppContext();
     
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -22,6 +22,8 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     const clients = users.filter(u => u.role === UserRole.CLIENT);
 
     if (!currentUser) return null;
+
+    const isAdminOrSuperUser = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUPER_USER;
 
     const visibleShipments = useMemo(() => {
         let baseShipments = shipments;
@@ -62,10 +64,19 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         
         const shipmentsToExport = visibleShipments; // Export filtered data
         
-        if (currentUser.role === UserRole.ADMIN) {
-            const headers = ['ID', 'Client', 'Recipient', 'Recipient Phone', 'Date', 'Status', 'Courier', 'Price (EGP)'];
+        if (isAdminOrSuperUser) {
+            const headers = ['ID', 'Client', 'Recipient', 'Recipient Phone', 'Date', 'Status', 'Courier', 'Price (EGP)', 'Client Fee (EGP)', 'Courier Commission (EGP)', 'Net Profit (EGP)'];
             const body = shipmentsToExport.map(s => {
                 const courierName = users.find(u => u.id === s.courierId)?.name || 'N/A';
+                
+                const clientFee = s.clientFlatRateFee || 0;
+                const courierCommission = s.courierCommission || 0;
+                
+                let netProfit = 0;
+                if (s.courierId && s.clientFlatRateFee && s.courierCommission) {
+                    netProfit = clientFee - courierCommission;
+                }
+
                 return [
                     s.id,
                     s.clientName,
@@ -74,7 +85,10 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                     new Date(s.creationDate).toLocaleDateString(),
                     s.status,
                     courierName,
-                    s.price.toFixed(2)
+                    s.price.toFixed(2),
+                    clientFee.toFixed(2),
+                    courierCommission.toFixed(2),
+                    netProfit.toFixed(2)
                 ];
             });
             exportToCsv(headers, body, 'All_Shipments_Report');
@@ -167,7 +181,15 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                 </div>
             )}
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <ShipmentList shipments={visibleShipments} onSelect={onSelectShipment} />
+                <ShipmentList 
+                    shipments={visibleShipments} 
+                    onSelect={onSelectShipment} 
+                    showClientFee={isAdminOrSuperUser}
+                    showCourierCommission={isAdminOrSuperUser}
+                    showNetProfit={isAdminOrSuperUser}
+                    showEditableFees={isAdminOrSuperUser}
+                    updateShipmentFees={updateShipmentFees}
+                />
             </div>
         </>
     );

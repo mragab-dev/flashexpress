@@ -86,6 +86,8 @@ export interface Shipment {
   signature?: string; // base64 encoded image
   priority: ShipmentPriority;
   packageValue: number;
+  clientFlatRateFee?: number; // Snapshot of client's fee at creation
+  courierCommission?: number; // Snapshot of courier's commission at assignment
 }
 
 export interface Toast {
@@ -131,9 +133,6 @@ export interface FinancialSettings {
   penaltyAmount: number;
   consecutiveFailureLimit: number;
   performanceThreshold: number;
-  bonusThreshold: number;
-  urgentDeliveryBonus: number;
-  expressDeliveryBonus: number;
 }
 
 export enum CommissionType {
@@ -187,6 +186,7 @@ export interface AdminFinancials {
   grossRevenue: number;
   netRevenue: number;
   totalClientFees: number;
+  totalCourierPayouts: number;
   totalOrders: number;
   taxCarNumber: string;
 }

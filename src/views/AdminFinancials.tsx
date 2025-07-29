@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
-import { ChartBarIcon, CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon } from '../components/Icons';
+import { CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon, TruckIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 
 const AdminFinancials = () => {
@@ -11,8 +11,7 @@ const AdminFinancials = () => {
         getAdminFinancials, 
         getClientFinancials, 
         canAccessAdminFinancials,
-        updateClientFlatRate,
-        addToast
+        updateClientFlatRate
     } = useAppContext();
 
     const [showClientRateModal, setShowClientRateModal] = useState(false);
@@ -42,7 +41,7 @@ const AdminFinancials = () => {
 
     const handleClientRateUpdate = (e: React.FormEvent) => {
         e.preventDefault();
-        if (selectedClientId && tempFlatRate >= 0) {
+        if (selectedClientId !== null && tempFlatRate >= 0) {
             updateClientFlatRate(selectedClientId, tempFlatRate);
             setShowClientRateModal(false);
         }
@@ -51,9 +50,10 @@ const AdminFinancials = () => {
     const handleExportFinancials = () => {
         const headers = ['Metric', 'Value'];
         const data = [
-            ['Gross Revenue', `${adminFinancials.grossRevenue.toFixed(2)} EGP`],
-            ['Total Client Fees', `${adminFinancials.totalClientFees.toFixed(2)} EGP`],
-            ['Net Revenue', `${adminFinancials.netRevenue.toFixed(2)} EGP`],
+            ['Gross Revenue (Shipment Prices)', `${adminFinancials.grossRevenue.toFixed(2)} EGP`],
+            ['Total Client Fees (Company Income)', `${adminFinancials.totalClientFees.toFixed(2)} EGP`],
+            ['Total Courier Payouts (Company Cost)', `${adminFinancials.totalCourierPayouts.toFixed(2)} EGP`],
+            ['Net Revenue (Income - Cost)', `${adminFinancials.netRevenue.toFixed(2)} EGP`],
             ['Total Orders', adminFinancials.totalOrders.toString()]
         ];
         exportToCsv(headers, data, 'Admin_Financial_Report');
@@ -90,11 +90,17 @@ const AdminFinancials = () => {
 
             {/* Financial KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                    title="Gross Revenue" 
-                    value={`${adminFinancials.grossRevenue.toFixed(2)} EGP`} 
-                    icon={<ChartBarIcon className="w-7 h-7"/>} 
+                 <StatCard 
+                    title="Total Client Fees" 
+                    value={`${adminFinancials.totalClientFees.toFixed(2)} EGP`} 
+                    icon={<PackageIcon className="w-7 h-7"/>} 
                     color="#16a34a" 
+                />
+                 <StatCard 
+                    title="Total Courier Payouts" 
+                    value={`${adminFinancials.totalCourierPayouts.toFixed(2)} EGP`} 
+                    icon={<TruckIcon className="w-7 h-7"/>} 
+                    color="#f97316" 
                 />
                 <StatCard 
                     title="Net Revenue" 
@@ -102,14 +108,8 @@ const AdminFinancials = () => {
                     icon={<WalletIcon className="w-7 h-7"/>} 
                     color="#3b82f6" 
                 />
-                <StatCard 
-                    title="Total Client Fees" 
-                    value={`${adminFinancials.totalClientFees.toFixed(2)} EGP`} 
-                    icon={<PackageIcon className="w-7 h-7"/>} 
-                    color="#f97316" 
-                />
-                <StatCard 
-                    title="Total Orders" 
+                 <StatCard 
+                    title="Delivered Orders" 
                     value={adminFinancials.totalOrders} 
                     icon={<CheckCircleIcon className="w-7 h-7"/>} 
                     color="#8b5cf6" 

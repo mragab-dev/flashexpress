@@ -63,7 +63,7 @@ const UserManagement = () => {
         
         setMode(modalMode);
         setSelectedUser(user || null);
-        setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_ZONE_A });
+        setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_ZONE_A, flatRateFee: 75.0 });
         
         if (modalMode === 'taxCard' && user) {
             setTempTaxCardNumber(getTaxCardNumber(user.id) || '');
@@ -246,7 +246,7 @@ const UserManagement = () => {
                                    step="0.01" 
                                    min="0" 
                                    name="flatRateFee" 
-                                   value={formData.flatRateFee || 5.0} 
+                                   value={formData.flatRateFee ?? ''} 
                                    onChange={(e) => setFormData(prev => ({ ...prev, flatRateFee: parseFloat(e.target.value) || 0 }))}
                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg" 
                                />

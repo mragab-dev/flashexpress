@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment, UserRole, ShipmentStatus } from '../types';
@@ -88,7 +87,7 @@ const MainLayout: React.FC = () => {
             case 'profile': return <Profile />;
             case 'map': return <CourierMapView />;
             case 'courier-financials': return <CourierFinancials />;
-            case 'courier-performance': return <CourierPerformance />;
+            case 'courier-performance': return <CourierPerformance onSelectShipment={setSelectedShipment} />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }

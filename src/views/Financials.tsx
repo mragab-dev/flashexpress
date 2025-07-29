@@ -2,7 +2,7 @@ import { useAppContext } from '../context/AppContext';
 import { ShipmentStatus, PaymentMethod, UserRole } from '../types';
 import { exportToCsv } from '../utils/pdf';
 import { StatCard } from '../components/common/StatCard';
-import { ChartBarIcon, CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon } from '../components/Icons';
+import { ChartBarIcon, CheckCircleIcon, WalletIcon, DocumentDownloadIcon, CurrencyDollarIcon } from '../components/Icons';
 
 const Financials = () => {
     const { currentUser, shipments, getTaxCardNumber } = useAppContext();
@@ -19,7 +19,7 @@ const Financials = () => {
     
     const totalRevenue = filteredShipments.reduce((sum, s) => sum + s.price, 0);
     const totalDelivered = filteredShipments.length;
-    const avgRevenue = totalDelivered > 0 ? totalRevenue / totalDelivered : 0;
+    const netProfit = filteredShipments.reduce((sum, s) => sum + s.packageValue, 0);
     const totalCOD = filteredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0);
     
     const taxCardNumber = currentUser?.role === UserRole.CLIENT && currentUser.id 
@@ -98,7 +98,7 @@ const Financials = () => {
                 <StatCard title="Total Revenue" value={`${totalRevenue.toFixed(2)} EGP`} icon={<ChartBarIcon className="w-7 h-7"/>} color="#16a34a" />
                 <StatCard title="Shipments Delivered" value={totalDelivered} icon={<CheckCircleIcon className="w-7 h-7"/>} color="#3b82f6" />
                 <StatCard title="COD to Collect" value={`${totalCOD.toFixed(2)} EGP`} icon={<WalletIcon className="w-7 h-7"/>} color="#f97316"/>
-                <StatCard title="Avg. Revenue/Shipment" value={`${avgRevenue.toFixed(2)} EGP`} icon={<PackageIcon className="w-7 h-7"/>} color="#8b5cf6"/>
+                <StatCard title="Net Profit" value={`${netProfit.toFixed(2)} EGP`} icon={<CurrencyDollarIcon className="w-7 h-7"/>} color="#8b5cf6"/>
             </div>
 
             {/* Revenue Chart */}

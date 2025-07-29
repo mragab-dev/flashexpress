@@ -12,12 +12,13 @@ const CreateShipment = () => {
     const [recipientPhone, setRecipientPhone] = useState('');
     const [toAddress, setToAddress] = useState<Address>({ street: '', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: '' });
     const [packageDescription, setPackageDescription] = useState('');
-    const [isLargeOrder, setIsLargeOrder] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.COD);
     const [priority, setPriority] = useState<ShipmentPriority>(ShipmentPriority.STANDARD);
-    const [packageValue, setPackageValue] = useState(0);
+    const [packageValue, setPackageValue] = useState('');
 
-    const price = isLargeOrder ? 300 : 75;
+    const shippingFee = currentUser?.flatRateFee || 0;
+    const numericPackageValue = parseFloat(packageValue) || 0;
+    const totalPrice = numericPackageValue + shippingFee;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -26,19 +27,39 @@ const CreateShipment = () => {
             addToast('Please complete your profile address before creating a shipment.', 'error');
             return;
         }
-        
-        if (paymentMethod === PaymentMethod.WALLET && (currentUser?.walletBalance ?? 0) < price) {
-            addToast(`Insufficient funds. Your balance is ${(currentUser?.walletBalance ?? 0).toFixed(2)} EGP.`, 'error');
+
+        const numericPackageValue = parseFloat(packageValue);
+        if (isNaN(numericPackageValue) || numericPackageValue <= 0) {
+            addToast('Please enter a valid price for the package contents.', 'error');
             return;
         }
         
-        addShipment({ recipientName, recipientPhone, fromAddress: currentUser.address, toAddress, packageDescription, isLargeOrder, price, paymentMethod, priority, packageValue });
+        if (paymentMethod === PaymentMethod.WALLET && (currentUser?.walletBalance ?? 0) < totalPrice) {
+            addToast(`Insufficient wallet balance to cover the shipping fee. Your balance is ${(currentUser?.walletBalance ?? 0).toFixed(2)} EGP, but the total cost is ${totalPrice.toFixed(2)} EGP.`, 'error');
+            return;
+        }
+        
+        addShipment({ 
+            recipientName, 
+            recipientPhone, 
+            fromAddress: currentUser.address, 
+            toAddress, 
+            packageDescription, 
+            isLargeOrder: false,
+            price: totalPrice, 
+            paymentMethod, 
+            priority, 
+            packageValue: numericPackageValue 
+        });
         
         // Reset form
-        setRecipientName(''); setRecipientPhone('');
+        setRecipientName(''); 
+        setRecipientPhone('');
         setToAddress({ street: '', city: 'Cairo', zone: Zone.CAIRO_ZONE_A, details: '' });
-        setPackageDescription(''); setIsLargeOrder(false); setPaymentMethod(PaymentMethod.COD);
-        setPriority(ShipmentPriority.STANDARD); setPackageValue(0);
+        setPackageDescription(''); 
+        setPaymentMethod(PaymentMethod.COD);
+        setPriority(ShipmentPriority.STANDARD); 
+        setPackageValue('');
     };
     
     const availableZones = Object.values(Zone).filter(z => z.toLowerCase().startsWith(toAddress.city.toLowerCase()));
@@ -88,17 +109,8 @@ const CreateShipment = () => {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Package Value (EGP)</label>
-                        <input type="number" value={packageValue} onChange={e => setPackageValue(Number(e.target.value))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required />
-                    </div>
-                </div>
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center">
-                        <input id="largeOrder" type="checkbox" checked={isLargeOrder} onChange={e => setIsLargeOrder(e.target.checked)} className="h-4 w-4 text-primary-600 border-slate-300 rounded focus:ring-primary-500"/>
-                        <label htmlFor="largeOrder" className="ml-2 block text-sm text-slate-900">This is a large order</label>
-                    </div>
-                    <div className="text-2xl font-bold text-slate-800">
-                        Price: <span className="text-primary-600">{price} EGP</span>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Price of Package Contents (EGP)</label>
+                        <input type="number" value={packageValue} onChange={e => setPackageValue(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required placeholder="e.g. 500" min="0.01" step="0.01" />
                     </div>
                 </div>
                  {/* Payment Method */}
@@ -112,6 +124,14 @@ const CreateShipment = () => {
                        ))}
                     </div>
                 </div>
+
+                <div className="p-4 bg-slate-50 rounded-lg text-right">
+                    <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
+                    <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{shippingFee.toFixed(2)} EGP</span></div>
+                    <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
+                    {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
+                </div>
+
                 <div className="text-right pt-2">
                     <button type="submit" className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition">
                        <PlusCircleIcon className="w-5 h-5 mr-2" />
