@@ -428,8 +428,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [currentUser, users, addToast]);
 
     const updateClientTaxCard = useCallback((clientId: number, taxCardNumber: string) => {
-        if (!currentUser || currentUser.role !== UserRole.ADMIN) {
-            addToast('Only admins can update client tax card numbers.', 'error');
+        if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SUPER_USER)) {
+            addToast('Only admins and super users can update client tax card numbers.', 'error');
             return;
         }
         setUsers(prev => prev.map(u => u.id === clientId ? { ...u, taxCardNumber } : u));

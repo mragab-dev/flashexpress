@@ -47,9 +47,9 @@ const UserManagement = () => {
     const availableRoles = getAvailableRoles(mode === 'edit' ? selectedUser || undefined : undefined);
     
     const openModal = (modalMode: 'add' | 'edit' | 'reset' | 'delete' | 'taxCard', user?: User) => {
-        // Prevent SUPER_USERs from accessing tax card functionality
-        if (modalMode === 'taxCard' && currentUser?.role !== UserRole.ADMIN) {
-            addToast('Only administrators can manage tax card numbers', 'error');
+        // Allow both ADMINs and SUPER_USERs to access tax card functionality
+        if (modalMode === 'taxCard' && currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_USER) {
+            addToast('Only administrators and super users can manage tax card numbers', 'error');
             return;
         }
         
@@ -99,9 +99,9 @@ const UserManagement = () => {
     const handleTaxCardUpdate = () => {
         if (!selectedUser) return;
         
-        // Double-check: Only admins can update tax cards
-        if (currentUser?.role !== UserRole.ADMIN) {
-            addToast('Only administrators can manage tax card numbers', 'error');
+        // Double-check: Only admins and super users can update tax cards
+        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_USER) {
+            addToast('Only administrators and super users can manage tax card numbers', 'error');
             closeModal();
             return;
         }
@@ -168,7 +168,7 @@ const UserManagement = () => {
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg font-mono"
                         />
                         <p className="text-sm text-slate-500 mt-1">
-                            Leave empty to remove the tax card number. Only administrators can modify this value.
+                            Leave empty to remove the tax card number. Only administrators and super users can modify this value.
                         </p>
                     </div>
                     <div className="flex justify-end gap-4 pt-4">
@@ -323,9 +323,9 @@ const UserManagement = () => {
                                                 <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
                                             </>
                                         )}
-                                        {user.role === UserRole.CLIENT && currentUser?.role === UserRole.ADMIN && (
-                                            <button onClick={() => openModal('taxCard', user)} title="Set Tax Card" className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md">
-                                                <DocumentDownloadIcon />
+                                        {user.role === UserRole.CLIENT && (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.SUPER_USER) && (
+                                            <button onClick={() => openModal('taxCard', user)} title="Set Tax Card" className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600">
+                                                Tax Card
                                             </button>
                                         )}
                                         {!(user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER) && (
