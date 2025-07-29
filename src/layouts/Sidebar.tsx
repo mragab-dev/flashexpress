@@ -21,6 +21,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'My Shipments', icon: <PackageIcon />, view: 'shipments' },
             { name: 'Create Shipment', icon: <PlusCircleIcon />, view: 'create' },
             { name: 'Wallet', icon: <WalletIcon />, view: 'wallet' },
+            { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
             { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile' },
         ],
         [UserRole.COURIER]: [
@@ -33,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
             { name: 'Live Map', icon: <MapIcon />, view: 'map' },
         ],
-        [UserRole.ADMIN]: [
+        [UserRole.SUPER_USER]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
             { name: 'Live Map', icon: <MapIcon />, view: 'map' },
             { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
@@ -43,6 +44,18 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
             { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
             { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
+            { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
+        ],
+        [UserRole.ADMIN]: [
+            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
+            { name: 'Live Map', icon: <MapIcon />, view: 'map' },
+            { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
+            { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
+            { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
+            { name: 'User Management', icon: <UsersIcon />, view: 'users' },
+            { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
+            { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
+            { name: 'Admin Financials', icon: <ChartBarIcon />, view: 'admin-financials' },
             { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
         ],
     };

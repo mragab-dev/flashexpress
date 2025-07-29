@@ -4,6 +4,7 @@ export enum UserRole {
   CLIENT = 'Client',
   COURIER = 'Courier',
   ASSIGNING_USER = 'Assigning User',
+  SUPER_USER = 'Super User',
   ADMIN = 'Administrator',
 }
 
@@ -62,6 +63,8 @@ export interface User {
   phone?: string;
   address?: Address;
   location?: GeoLocation;
+  flatRateFee?: number; // Client-specific flat rate fee (only for clients)
+  taxCardNumber?: string; // Client-specific tax card number (only admins can set)
 }
 
 export interface Shipment {
@@ -147,7 +150,6 @@ export interface CourierStats {
   currentBalance: number; // totalEarnings - withdrawals
   commissionType: CommissionType;
   commissionValue: number;
-  penaltyAmount: number;
   consecutiveFailures: number;
   lastDeliveryDate?: string;
   isRestricted: boolean;
@@ -178,4 +180,21 @@ export interface CourierTransaction {
   shipmentId?: string;
   timestamp: string;
   status: CourierTransactionStatus;
+}
+
+// Admin Financial System Types
+export interface AdminFinancials {
+  grossRevenue: number;
+  netRevenue: number;
+  totalClientFees: number;
+  totalOrders: number;
+  taxCarNumber: string;
+}
+
+export interface ClientFinancialSummary {
+  clientId: number;
+  clientName: string;
+  totalOrders: number;
+  orderSum: number;
+  flatRateFee: number;
 }

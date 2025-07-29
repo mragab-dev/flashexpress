@@ -8,15 +8,45 @@ import { PlusCircleIcon, PencilIcon, KeyIcon, TrashIcon, DocumentDownloadIcon } 
 import { exportToCsv } from '../utils/pdf';
 
 const UserManagement = () => {
-    const { users, addUser, updateUser, removeUser, resetPassword } = useAppContext();
-    const [mode, setMode] = useState<'add' | 'edit' | 'reset' | 'delete' | null>(null);
+    const { users, addUser, updateUser, removeUser, resetPassword, currentUser, canCreateUsers, updateClientTaxCard, getTaxCardNumber, addToast } = useAppContext();
+    const [mode, setMode] = useState<'add' | 'edit' | 'reset' | 'delete' | 'taxCard' | null>(null);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [formData, setFormData] = useState<Partial<User>>({});
+    const [tempTaxCardNumber, setTempTaxCardNumber] = useState('');
+
+    // Check if user can access this page
+    if (!currentUser || !canCreateUsers(currentUser)) {
+        return (
+            <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Denied</h2>
+                    <p className="text-slate-600">Only administrators and super users can manage users.</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Filter roles based on current user permissions
+    const getAvailableRoles = () => {
+        if (currentUser.role === UserRole.ADMIN) {
+            return Object.values(UserRole);
+        } else if (currentUser.role === UserRole.SUPER_USER) {
+            // Super users can create everyone except admins
+            return Object.values(UserRole).filter(role => role !== UserRole.ADMIN);
+        }
+        return [];
+    };
+
+    const availableRoles = getAvailableRoles();
     
-    const openModal = (modalMode: 'add' | 'edit' | 'reset' | 'delete', user?: User) => {
+    const openModal = (modalMode: 'add' | 'edit' | 'reset' | 'delete' | 'taxCard', user?: User) => {
         setMode(modalMode);
         setSelectedUser(user || null);
         setFormData(user ? { ...user } : { role: UserRole.CLIENT, zone: Zone.CAIRO_ZONE_A });
+        
+        if (modalMode === 'taxCard' && user) {
+            setTempTaxCardNumber(getTaxCardNumber(user.id) || '');
+        }
     };
 
     const closeModal = () => {
@@ -38,7 +68,25 @@ const UserManagement = () => {
             updateUser(selectedUser.id, formData);
         } else if (mode === 'reset' && selectedUser && formData.password) {
             resetPassword(selectedUser.id, formData.password);
+        } else if (mode === 'taxCard' && selectedUser) {
+            handleTaxCardUpdate();
+            return;
         }
+        closeModal();
+    };
+
+    const handleTaxCardUpdate = () => {
+        if (!selectedUser) return;
+        
+        // Validate XXX-XXX-XXX format
+        const taxCardRegex = /^\d{3}-\d{3}-\d{3}$/;
+        if (tempTaxCardNumber && !taxCardRegex.test(tempTaxCardNumber)) {
+            addToast('Tax card number must be in format XXX-XXX-XXX', 'error');
+            return;
+        }
+        
+        updateClientTaxCard(selectedUser.id, tempTaxCardNumber);
+        addToast(`Tax card number updated for ${selectedUser.name}`, 'success');
         closeModal();
     };
 
@@ -72,6 +120,34 @@ const UserManagement = () => {
                         <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Delete User</button>
                     </div>
                 </div>
+            )
+        }
+        
+        if (mode === 'taxCard' && selectedUser) {
+            return (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <p>Setting tax card number for client <strong>{selectedUser.name}</strong>.</p>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Tax Card Number (XXX-XXX-XXX format)
+                        </label>
+                        <input
+                            type="text"
+                            value={tempTaxCardNumber}
+                            onChange={(e) => setTempTaxCardNumber(e.target.value)}
+                            placeholder="123-456-789"
+                            pattern="\d{3}-\d{3}-\d{3}"
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg font-mono"
+                        />
+                        <p className="text-sm text-slate-500 mt-1">
+                            Leave empty to remove the tax card number. Only administrators can modify this value.
+                        </p>
+                    </div>
+                    <div className="flex justify-end gap-4 pt-4">
+                        <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Update Tax Card</button>
+                    </div>
+                </form>
             )
         }
         
@@ -112,7 +188,7 @@ const UserManagement = () => {
                         <div>
                            <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                            <select name="role" value={formData.role || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
-                               {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
+                               {availableRoles.map(r => <option key={r} value={r}>{r}</option>)}
                            </select>
                        </div>
                         {formData.role === UserRole.COURIER && (
@@ -121,6 +197,20 @@ const UserManagement = () => {
                                <select name="zone" value={formData.zone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
                                    {Object.values(Zone).map(z => <option key={z} value={z}>{z}</option>)}
                                </select>
+                           </div>
+                        )}
+                        {formData.role === UserRole.CLIENT && (
+                             <div>
+                               <label className="block text-sm font-medium text-slate-700 mb-1">Flat Rate Fee (EGP)</label>
+                               <input 
+                                   type="number" 
+                                   step="0.01" 
+                                   min="0" 
+                                   name="flatRateFee" 
+                                   value={formData.flatRateFee || 5.0} 
+                                   onChange={(e) => setFormData(prev => ({ ...prev, flatRateFee: parseFloat(e.target.value) || 0 }))}
+                                   className="w-full px-4 py-2 border border-slate-300 rounded-lg" 
+                               />
                            </div>
                         )}
                     </div>
@@ -161,6 +251,7 @@ const UserManagement = () => {
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Zone</th>
+                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Tax Card</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
@@ -171,10 +262,24 @@ const UserManagement = () => {
                                 <td className="px-6 py-4 text-slate-600">{user.email}</td>
                                 <td className="px-6 py-4 text-slate-600">{user.role}</td>
                                 <td className="px-6 py-4 text-slate-600">{user.zone || 'N/A'}</td>
+                                <td className="px-6 py-4 text-slate-600">
+                                    {user.role === UserRole.CLIENT ? (
+                                        <span className="font-mono text-sm">
+                                            {getTaxCardNumber(user.id) || <span className="text-slate-400">Not Set</span>}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400">N/A</span>
+                                    )}
+                                </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-1">
                                         <button onClick={() => openModal('edit', user)} title="Edit" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
                                         <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
+                                        {user.role === UserRole.CLIENT && currentUser?.role === UserRole.ADMIN && (
+                                            <button onClick={() => openModal('taxCard', user)} title="Set Tax Card" className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md">
+                                                <DocumentDownloadIcon />
+                                            </button>
+                                        )}
                                         <button onClick={() => openModal('delete', user)} title="Delete" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
                                     </div>
                                 </td>
@@ -186,7 +291,9 @@ const UserManagement = () => {
             <Modal isOpen={!!mode} onClose={closeModal} title={
                 mode === 'add' ? 'Add New User' : 
                 mode === 'edit' ? 'Edit User' : 
-                mode === 'reset' ? 'Reset Password' : 'Confirm Deletion'
+                mode === 'reset' ? 'Reset Password' : 
+                mode === 'taxCard' ? 'Set Tax Card Number' :
+                'Confirm Deletion'
             }>
                 {renderModalContent()}
             </Modal>

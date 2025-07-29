@@ -4,13 +4,28 @@ import { useAppContext } from '../context/AppContext';
 import { ShipmentStatus, UserRole } from '../types';
 
 const AssignShipments = () => {
-    const { shipments, users, assignShipmentToCourier, canCourierReceiveAssignment } = useAppContext();
+    const { shipments, users, assignShipmentToCourier, canCourierReceiveAssignment, addToast } = useAppContext();
     const pendingShipments = shipments.filter(s => s.status === ShipmentStatus.PENDING_ASSIGNMENT);
     const couriers = users.filter(u => u.role === UserRole.COURIER);
 
-    const handleAssign = (shipmentId: string, courierId: string) => {
-        if (!courierId) return;
-        assignShipmentToCourier(shipmentId, parseInt(courierId));
+    const handleAssign = async (shipmentId: string, courierId: string) => {
+        if (!courierId) {
+            addToast('Please select a courier', 'error');
+            return;
+        }
+        
+        try {
+            const success = await assignShipmentToCourier(shipmentId, parseInt(courierId));
+            if (success) {
+                // Reset the select dropdown after successful assignment
+                const selectElement = document.querySelector(`select[data-shipment-id="${shipmentId}"]`) as HTMLSelectElement;
+                if (selectElement) {
+                    selectElement.value = '';
+                }
+            }
+        } catch (error) {
+            addToast('Failed to assign shipment', 'error');
+        }
     };
 
     return (
@@ -39,12 +54,16 @@ const AssignShipments = () => {
                                     <select 
                                         onChange={(e) => handleAssign(s.id, e.target.value)} 
                                         defaultValue=""
+                                        data-shipment-id={s.id}
                                         className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                                     >
                                         <option value="" disabled>Select an available courier...</option>
                                         {couriers
                                             .filter(c => c.zone === s.toAddress.zone && canCourierReceiveAssignment(c.id))
                                             .map(c => <option key={c.id} value={c.id}>{c.name} ({c.zone})</option>)}
+                                        {couriers.filter(c => c.zone === s.toAddress.zone && canCourierReceiveAssignment(c.id)).length === 0 && (
+                                            <option value="" disabled>No available couriers in {s.toAddress.zone}</option>
+                                        )}
                                     </select>
                                 </td>
                             </tr>

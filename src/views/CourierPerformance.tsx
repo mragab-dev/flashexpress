@@ -108,7 +108,7 @@ interface ManageCourierModalProps {
     courierStats: CourierStats;
     courierUser: User;
     payoutRequests: CourierTransaction[];
-    onUpdateSettings: (courierId: number, settings: Partial<Pick<CourierStats, 'commissionType'|'commissionValue'|'penaltyAmount'>>) => void;
+    onUpdateSettings: (courierId: number, settings: Partial<Pick<CourierStats, 'commissionType'|'commissionValue'>>) => void;
     onApplyPenalty: (courierId: number, amount: number, description: string) => void;
     onProcessPayout: (transactionId: string) => void;
 }
@@ -117,7 +117,6 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
     const [settings, setSettings] = useState({
         commissionType: courierStats.commissionType,
         commissionValue: courierStats.commissionValue,
-        penaltyAmount: courierStats.penaltyAmount,
     });
     const [penaltyAmount, setPenaltyAmount] = useState(0);
     const [penaltyReason, setPenaltyReason] = useState('');
@@ -126,7 +125,6 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
         setSettings({
             commissionType: courierStats.commissionType,
             commissionValue: courierStats.commissionValue,
-            penaltyAmount: courierStats.penaltyAmount,
         });
     }, [courierStats]);
 
@@ -167,15 +165,6 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
                             type="number"
                             value={settings.commissionValue}
                             onChange={(e) => setSettings(s => ({ ...s, commissionValue: Number(e.target.value) }))}
-                            className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">Standard Penalty Amount (EGP)</label>
-                        <input
-                            type="number"
-                            value={settings.penaltyAmount}
-                            onChange={(e) => setSettings(s => ({ ...s, penaltyAmount: Number(e.target.value) }))}
                             className="w-full mt-1 p-2 border border-slate-300 rounded-md"
                         />
                     </div>

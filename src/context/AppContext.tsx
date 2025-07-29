@@ -3,7 +3,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { mockUsers, mockShipments, mockClientTransactions, mockNotifications, mockCourierStats, mockCourierTransactions, mockFinancialSettings } from '../data';
-import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings } from '../types';
+import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary } from '../types';
 import { UserRole, ShipmentStatus, PaymentMethod, TransactionType, NotificationChannel, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
 import { sendEmailNotification } from '../api/email';
 
@@ -36,11 +36,18 @@ export type AppContextType = {
     topUpWallet: (userId: number, amount: number) => void;
     resendNotification: (notificationId: string) => Promise<void>;
     canCourierReceiveAssignment: (courierId: number) => boolean;
-    updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue' | 'penaltyAmount'>>) => void;
+    updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => void;
     applyManualPenalty: (courierId: number, amount: number, description: string) => void;
     processCourierPayout: (transactionId: string) => void;
     requestCourierPayout: (courierId: number, amount: number) => void;
     trackShipment: (trackingId: string, phone: string) => Shipment | null;
+    updateClientFlatRate: (clientId: number, flatRate: number) => void;
+    updateClientTaxCard: (clientId: number, taxCardNumber: string) => void;
+    getTaxCardNumber: (clientId: number) => string;
+    getAdminFinancials: () => AdminFinancials;
+    getClientFinancials: () => ClientFinancialSummary[];
+    canAccessAdminFinancials: (user: User) => boolean;
+    canCreateUsers: (user: User) => boolean;
 };
 
 export const AppContext = React.createContext<AppContextType | null>(null);
@@ -127,7 +134,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     
                     return { ...courier, deliveriesCompleted: courier.deliveriesCompleted + 1, totalEarnings: courier.totalEarnings + commission, pendingEarnings: courier.pendingEarnings + commission, currentBalance: courier.currentBalance + commission, consecutiveFailures: 0, lastDeliveryDate: new Date().toISOString(), performanceRating: calculatePerformanceRating(courier, true) };
                 } else {
-                    const penalty = courier.penaltyAmount;
+                    const penalty = financialSettings.penaltyAmount; // Use the global penalty setting
                     const newConsecutiveFailures = courier.consecutiveFailures + 1;
                     const transaction: CourierTransaction = { id: `txn-${Date.now()}`, courierId, type: CourierTransactionType.PENALTY, amount: -penalty, description: `Penalty for ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: CourierTransactionStatus.PROCESSED };
                     setCourierTransactions(prev => [transaction, ...prev]);
@@ -161,16 +168,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast("You have been logged out.", 'info');
         setCurrentUser(null)
     }, [addToast]);
+
+    // Role-based access control functions
+    const canAccessAdminFinancials = useCallback((user: User): boolean => {
+        return user.role === UserRole.ADMIN;
+    }, []);
+
+    const canCreateUsers = useCallback((user: User): boolean => {
+        return user.role === UserRole.ADMIN || user.role === UserRole.SUPER_USER;
+    }, []);
     
     const addUser = useCallback((userData: Omit<User, 'id'>) => {
-        const newUser: User = { ...userData, id: Math.max(...users.map(u => u.id), 0) + 1 };
+        if (!currentUser || !canCreateUsers(currentUser)) {
+            addToast('You do not have permission to create users.', 'error');
+            return;
+        }
+        
+        const newUserData = { ...userData };
+        
+        // Set default flat rate fee for new clients
+        if (newUserData.role === UserRole.CLIENT && !newUserData.flatRateFee) {
+            newUserData.flatRateFee = 5.0; // Default flat rate fee
+        }
+        
+        const newUser: User = { ...newUserData, id: Math.max(...users.map(u => u.id), 0) + 1 };
         setUsers(prev => [...prev, newUser]);
+        
         if(newUser.role === UserRole.COURIER) {
-            const newCourierStat: CourierStats = { courierId: newUser.id, deliveriesCompleted: 0, deliveriesFailed: 0, totalEarnings: 0, pendingEarnings: 0, currentBalance: 0, commissionType: CommissionType.FLAT, commissionValue: financialSettings.baseCommissionRate, penaltyAmount: financialSettings.penaltyAmount, consecutiveFailures: 0, isRestricted: false, performanceRating: 5.0 };
+            const newCourierStat: CourierStats = { 
+                courierId: newUser.id, 
+                deliveriesCompleted: 0, 
+                deliveriesFailed: 0, 
+                totalEarnings: 0, 
+                pendingEarnings: 0, 
+                currentBalance: 0, 
+                commissionType: CommissionType.FLAT, 
+                commissionValue: financialSettings.baseCommissionRate, 
+                consecutiveFailures: 0, 
+                isRestricted: false, 
+                performanceRating: 5.0 
+            };
             setCourierStats(prev => [...prev, newCourierStat]);
         }
         addToast(`User "${newUser.name}" created successfully.`, 'success');
-    }, [users, addToast, financialSettings]);
+    }, [users, addToast, financialSettings, currentUser, canCreateUsers]);
 
     const updateUser = useCallback((userId: number, userData: Partial<Omit<User, 'id'>>, silent = false) => {
         setUsers(prev => prev.map(u => (u.id === userId ? { ...u, ...userData } : u)));
@@ -331,7 +372,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [notifications, addToast]);
 
-    const updateCourierSettings = useCallback((courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue' | 'penaltyAmount'>>) => {
+    const updateCourierSettings = useCallback((courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => {
         setCourierStats(prev => prev.map(c => c.courierId === courierId ? { ...c, ...newSettings } : c));
         const courier = users.find(u => u.id === courierId);
         addToast(`Financial settings for ${courier?.name} have been updated.`, 'success');
@@ -374,7 +415,150 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return null;
     }, [shipments, users]);
 
-    const value = useMemo(() => ({ currentUser, users, shipments, clientTransactions, toasts, notifications, notificationStatus, courierStats, courierTransactions, financialSettings, login, logout, addShipment, updateShipmentStatus, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, topUpWallet, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, trackShipment }), [currentUser, users, shipments, clientTransactions, toasts, notifications, notificationStatus, courierStats, courierTransactions, financialSettings, login, logout, addShipment, updateShipmentStatus, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, topUpWallet, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, trackShipment]);
+    // New role-based access control functions
+    const updateClientFlatRate = useCallback((clientId: number, flatRate: number) => {
+        if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+            addToast('Only admins can update client flat rates.', 'error');
+            return;
+        }
+        setUsers(prev => prev.map(u => u.id === clientId ? { ...u, flatRateFee: flatRate } : u));
+        const client = users.find(u => u.id === clientId);
+        addToast(`Flat rate for ${client?.name} updated to ${flatRate.toFixed(2)} EGP.`, 'success');
+    }, [currentUser, users, addToast]);
+
+    const updateClientTaxCard = useCallback((clientId: number, taxCardNumber: string) => {
+        if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+            addToast('Only admins can update client tax card numbers.', 'error');
+            return;
+        }
+        setUsers(prev => prev.map(u => u.id === clientId ? { ...u, taxCardNumber } : u));
+        const client = users.find(u => u.id === clientId);
+        addToast(`Tax card number for ${client?.name} updated successfully.`, 'success');
+    }, [currentUser, users, addToast]);
+
+    const getTaxCardNumber = useCallback((clientId: number): string => {
+        const client = users.find(u => u.id === clientId);
+        return client?.taxCardNumber || '';
+    }, [users]);
+
+    const getAdminFinancials = useCallback((): AdminFinancials => {
+        const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
+        const grossRevenue = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
+        
+        let totalClientFees = 0;
+        deliveredShipments.forEach(shipment => {
+            const client = users.find(u => u.id === shipment.clientId);
+            if (client?.flatRateFee) {
+                totalClientFees += client.flatRateFee;
+            }
+        });
+        
+        const netRevenue = grossRevenue - totalClientFees;
+        const totalOrders = deliveredShipments.length;
+        
+        return {
+            grossRevenue,
+            netRevenue,
+            totalClientFees,
+            totalOrders,
+            taxCarNumber: '' // No longer applicable since tax cards are per client
+        };
+    }, [shipments, users]);
+
+    const getClientFinancials = useCallback((): ClientFinancialSummary[] => {
+        const clientUsers = users.filter(u => u.role === UserRole.CLIENT);
+        return clientUsers.map(client => {
+            const clientShipments = shipments.filter(s => s.clientId === client.id && s.status === ShipmentStatus.DELIVERED);
+            const totalOrders = clientShipments.length;
+            const orderSum = clientShipments.reduce((sum, s) => sum + s.price, 0);
+            
+            return {
+                clientId: client.id,
+                clientName: client.name,
+                totalOrders,
+                orderSum,
+                flatRateFee: client.flatRateFee || 0
+            };
+        });
+    }, [users, shipments]);
+
+    const value = useMemo(() => ({ 
+        currentUser, 
+        users, 
+        shipments, 
+        clientTransactions, 
+        toasts, 
+        notifications, 
+        notificationStatus, 
+        courierStats, 
+        courierTransactions, 
+        financialSettings, 
+        login, 
+        logout, 
+        addShipment, 
+        updateShipmentStatus, 
+        assignShipmentToCourier, 
+        addUser, 
+        updateUser, 
+        removeUser, 
+        resetPassword, 
+        addToast, 
+        topUpWallet, 
+        assignReturn, 
+        reassignCourier, 
+        resendNotification, 
+        canCourierReceiveAssignment, 
+        updateCourierSettings, 
+        applyManualPenalty, 
+        processCourierPayout, 
+        requestCourierPayout, 
+        trackShipment,
+        updateClientFlatRate,
+        updateClientTaxCard,
+        getTaxCardNumber,
+        getAdminFinancials,
+        getClientFinancials,
+        canAccessAdminFinancials,
+        canCreateUsers
+    }), [
+        currentUser, 
+        users, 
+        shipments, 
+        clientTransactions, 
+        toasts, 
+        notifications, 
+        notificationStatus, 
+        courierStats, 
+        courierTransactions, 
+        financialSettings, 
+        login, 
+        logout, 
+        addShipment, 
+        updateShipmentStatus, 
+        assignShipmentToCourier, 
+        addUser, 
+        updateUser, 
+        removeUser, 
+        resetPassword, 
+        addToast, 
+        topUpWallet, 
+        assignReturn, 
+        reassignCourier, 
+        resendNotification, 
+        canCourierReceiveAssignment, 
+        updateCourierSettings, 
+        applyManualPenalty, 
+        processCourierPayout, 
+        requestCourierPayout, 
+        trackShipment,
+        updateClientFlatRate,
+        updateClientTaxCard,
+        getTaxCardNumber,
+        getAdminFinancials,
+        getClientFinancials,
+        canAccessAdminFinancials,
+        canCreateUsers
+    ]);
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

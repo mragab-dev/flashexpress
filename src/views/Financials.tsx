@@ -1,18 +1,30 @@
-
 import { useAppContext } from '../context/AppContext';
-import { ShipmentStatus, PaymentMethod } from '../types';
+import { ShipmentStatus, PaymentMethod, UserRole } from '../types';
 import { exportToCsv } from '../utils/pdf';
 import { StatCard } from '../components/common/StatCard';
 import { ChartBarIcon, CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon } from '../components/Icons';
 
 const Financials = () => {
-    const { shipments } = useAppContext();
+    const { currentUser, shipments, getTaxCardNumber } = useAppContext();
+    
+    // This view is for non-admin users to see basic financial information
+    // Admin users should use the AdminFinancials view for complete access
+    
     const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED && s.deliveryDate);
     
-    const totalRevenue = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
-    const totalDelivered = deliveredShipments.length;
+    // For clients, only show their own shipments
+    const filteredShipments = currentUser?.role === UserRole.CLIENT 
+        ? deliveredShipments.filter(s => s.clientId === currentUser.id)
+        : deliveredShipments;
+    
+    const totalRevenue = filteredShipments.reduce((sum, s) => sum + s.price, 0);
+    const totalDelivered = filteredShipments.length;
     const avgRevenue = totalDelivered > 0 ? totalRevenue / totalDelivered : 0;
-    const totalCOD = deliveredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0);
+    const totalCOD = filteredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0);
+    
+    const taxCardNumber = currentUser?.role === UserRole.CLIENT && currentUser.id 
+        ? getTaxCardNumber(currentUser.id) 
+        : '';
 
     // Prepare data for the chart (last 30 days)
     const revenueByDay: { [key: string]: number } = {};
@@ -24,7 +36,7 @@ const Financials = () => {
         revenueByDay[dateString] = 0;
     }
 
-    deliveredShipments.forEach(s => {
+    filteredShipments.forEach(s => {
         if(s.deliveryDate) {
             const dateString = s.deliveryDate.split('T')[0];
             if(revenueByDay.hasOwnProperty(dateString)) {
@@ -41,7 +53,7 @@ const Financials = () => {
 
     const handleExport = () => {
         const headers = ['Shipment ID', 'Delivery Date', 'Client', 'Payment Method', 'Revenue (EGP)'];
-        const body = deliveredShipments
+        const body = filteredShipments
             .sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime())
             .map(s => [
                 s.id,
@@ -59,13 +71,27 @@ const Financials = () => {
             <div className="flex justify-between items-start">
                  <div>
                      <h1 className="text-3xl font-bold text-slate-800">Financial Reports</h1>
-                     <p className="text-slate-500 mt-1">An overview of the company's financial performance.</p>
+                     <p className="text-slate-500 mt-1">
+                         {currentUser?.role === UserRole.CLIENT 
+                             ? 'Your order history and financial summary.' 
+                             : 'An overview of the company\'s financial performance.'}
+                     </p>
                  </div>
                  <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
                      <DocumentDownloadIcon className="w-5 h-5"/>
                      Export as CSV
                  </button>
             </div>
+
+            {/* Tax Card Number for Clients */}
+            {currentUser?.role === UserRole.CLIENT && taxCardNumber && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Tax Information</h3>
+                    <p className="text-blue-800">
+                        Tax Card Number: <span className="font-mono font-bold">{taxCardNumber}</span>
+                    </p>
+                </div>
+            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -109,7 +135,7 @@ const Financials = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                           {deliveredShipments.sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime()).map(s => (
+                           {filteredShipments.sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime()).map(s => (
                                <tr key={s.id}>
                                    <td className="px-6 py-4 font-mono text-sm text-slate-600">{s.id}</td>
                                    <td className="px-6 py-4 text-slate-800">{new Date(s.deliveryDate!).toLocaleDateString()}</td>
@@ -118,7 +144,7 @@ const Financials = () => {
                                    <td className="px-6 py-4 font-semibold text-slate-800 text-right">{s.price.toFixed(2)} EGP</td>
                                </tr>
                            ))}
-                           {deliveredShipments.length === 0 && (
+                           {filteredShipments.length === 0 && (
                                <tr><td colSpan={5} className="text-center py-8 text-slate-500">No delivered shipments yet.</td></tr>
                            )}
                         </tbody>

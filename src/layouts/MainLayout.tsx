@@ -14,6 +14,7 @@ import UserManagement from '../views/UserManagement';
 import ManageReturns from '../views/ManageReturns';
 import Wallet from '../views/Wallet';
 import Financials from '../views/Financials';
+import AdminFinancials from '../views/AdminFinancials';
 import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
 import CourierMapView from '../views/CourierMapView';
@@ -81,6 +82,7 @@ const MainLayout: React.FC = () => {
             case 'returns': return <ManageReturns />;
             case 'wallet': return <Wallet />;
             case 'financials': return <Financials />;
+            case 'admin-financials': return <AdminFinancials />;
             case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;

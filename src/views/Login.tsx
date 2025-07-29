@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { LogoIcon, MailIcon, KeyIcon } from '../components/Icons';
+import { LogoIcon, MailIcon, KeyIcon, PackageIcon } from '../components/Icons';
 
 const LoginScreen = ({ onTrackPackageClick }: { onTrackPackageClick: () => void; }) => {
     const { login } = useAppContext();
@@ -67,11 +67,27 @@ const LoginScreen = ({ onTrackPackageClick }: { onTrackPackageClick: () => void;
                     <p className="text-center text-sm text-slate-500 mt-8">
                         Test with: <code className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md">admin@flash.com</code> / <code className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-md">password123</code>
                     </p>
-                     <div className="text-center mt-6 text-sm">
-                        <span className="text-slate-600">Looking for your package? </span>
-                        <button onClick={onTrackPackageClick} className="font-semibold text-primary-600 hover:text-primary-700 focus:outline-none focus:ring-0">
-                            Track your shipment here.
-                        </button>
+                    
+                    {/* Track Shipment Button */}
+                    <div className="mt-8">
+                        <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-slate-300" />
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-2 bg-slate-50 text-slate-500">or</span>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-6">
+                            <button 
+                                onClick={onTrackPackageClick} 
+                                className="w-full flex items-center justify-center gap-3 bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-300"
+                            >
+                                <PackageIcon className="h-5 w-5" />
+                                Track Your Shipment
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
