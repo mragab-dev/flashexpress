@@ -1,5 +1,10 @@
 
 
+export interface GeoLocation {
+  lat: number;
+  lng: number;
+}
+
 export enum UserRole {
   CLIENT = 'Client',
   COURIER = 'Courier',
@@ -97,11 +102,6 @@ export enum ShipmentPriority {
     STANDARD = 'Standard',
     URGENT = 'Urgent',
     EXPRESS = 'Express',
-}
-
-export interface GeoLocation {
-  lat: number;
-  lng: number;
 }
 
 export interface Address {

@@ -1,12 +1,9 @@
-
-
 import React from 'react';
 import { UserRole } from '../types';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, MapIcon, TrendingUpIcon, CurrencyDollarIcon,
-    UploadCloudIcon
+    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon
 } from '../components/Icons';
 
 interface SidebarProps {
@@ -33,11 +30,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
         [UserRole.ASSIGNING_USER]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
             { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
-            { name: 'Live Map', icon: <MapIcon />, view: 'map' },
         ],
         [UserRole.SUPER_USER]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'Live Map', icon: <MapIcon />, view: 'map' },
             { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
             { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
             { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
@@ -49,7 +44,6 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
         ],
         [UserRole.ADMIN]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'Live Map', icon: <MapIcon />, view: 'map' },
             { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
             { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
             { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},

@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, Address, Zone } from '../types';
-import { AddressAutocompleteInput } from '../components/common/AddressAutocompleteInput';
 import { PencilIcon } from '../components/Icons';
 
 const Profile = () => {
@@ -22,11 +21,22 @@ const Profile = () => {
     
     if (!currentUser) return null;
 
-    const handleAddressChange = (newAddress: Address) => {
-        setFormData(prev => ({
-            ...prev,
-            address: newAddress
-        }));
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        if (name.startsWith('address.')) {
+            const field = name.split('.')[1] as keyof Address;
+            let newAddress = { ...formData.address!, [field]: value };
+
+            if (field === 'city') {
+                const newCity = value as Address['city'];
+                const firstZoneForCity = Object.values(Zone).find(z => z.toLowerCase().startsWith(newCity.toLowerCase()));
+                newAddress.zone = firstZoneForCity || newAddress.zone;
+            }
+
+            setFormData(prev => ({ ...prev, address: newAddress }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
     
     const handleSave = () => {
@@ -68,7 +78,7 @@ const Profile = () => {
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
                             {isEditing ? (
-                                <input type="text" name="name" value={formData.name || ''} onChange={e => setFormData(p => ({...p, name: e.target.value}))} className="w-full px-4 py-2 border border-slate-300 rounded-lg"/>
+                                <input type="text" name="name" value={formData.name || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg"/>
                             ) : (
                                 <p className="text-lg text-slate-800 p-2">{currentUser.name}</p>
                             )}
@@ -80,7 +90,7 @@ const Profile = () => {
                          <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
                             {isEditing ? (
-                                <input type="tel" name="phone" value={formData.phone || ''} onChange={e => setFormData(p => ({...p, phone: e.target.value}))} className="w-full px-4 py-2 border border-slate-300 rounded-lg"/>
+                                <input type="tel" name="phone" value={formData.phone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg"/>
                             ) : (
                                 <p className="text-lg text-slate-800 p-2">{currentUser.phone || 'Not set'}</p>
                             )}
@@ -97,11 +107,20 @@ const Profile = () => {
                      <h2 className="text-lg font-bold text-slate-800 mb-4">Default Pickup Address</h2>
                      {isEditing ? (
                         <div className="space-y-4">
-                            <AddressAutocompleteInput label="Street Address" value={formData.address!} onChange={handleAddressChange} />
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Street Address</label>
+                                <input
+                                    type="text"
+                                    name="address.street"
+                                    value={formData.address?.street || ''}
+                                    onChange={handleFormChange}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                                />
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
-                                    <select name="address.city" value={formData.address?.city || 'Cairo'} onChange={e => handleAddressChange({...formData.address!, city: e.target.value as 'Cairo' | 'Giza' | 'Alexandria' | 'Other', zone: getAvailableZones(e.target.value)[0]})} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                                    <select name="address.city" value={formData.address?.city || 'Cairo'} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
                                        <option value="Cairo">Cairo</option>
                                        <option value="Giza">Giza</option>
                                        <option value="Alexandria">Alexandria</option>
@@ -110,14 +129,14 @@ const Profile = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Zone</label>
-                                    <select name="address.zone" value={formData.address?.zone || ''} onChange={e => handleAddressChange({...formData.address!, zone: e.target.value as Zone})} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                                    <select name="address.zone" value={formData.address?.zone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
                                        {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
                                     </select>
                                 </div>
                             </div>
                              <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Apartment, Suite, etc.</label>
-                                <input type="text" name="address.details" value={formData.address?.details || ''} onChange={e => handleAddressChange({...formData.address!, details: e.target.value})} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
+                                <input type="text" name="address.details" value={formData.address?.details || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
                             </div>
                         </div>
                      ) : (

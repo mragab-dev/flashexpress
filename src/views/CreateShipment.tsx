@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Address, PaymentMethod, Zone, ShipmentPriority, Shipment } from '../types';
-import { AddressAutocompleteInput } from '../components/common/AddressAutocompleteInput';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
 import Papa from 'papaparse';
 
@@ -226,7 +225,17 @@ const CreateShipment = () => {
                         </div>
                     </div>
                     {/* Address Info */}
-                     <AddressAutocompleteInput label="Recipient Street Address" value={toAddress} onChange={setToAddress} />
+                     <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Street Address</label>
+                        <input
+                            type="text"
+                            value={toAddress.street}
+                            onChange={(e) => setToAddress((prev) => ({ ...prev, street: e.target.value }))}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            placeholder="e.g., 123 Main St"
+                            required
+                        />
+                    </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                          <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">City</label>

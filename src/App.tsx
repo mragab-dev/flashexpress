@@ -1,32 +1,34 @@
 
-
 import { useState } from 'react';
 import { AppProvider, useAppContext } from './context/AppContext';
-import { useGoogleMaps } from './hooks/useGoogleMaps';
-import { CourierLocationTracker } from './components/specific/CourierLocationTracker';
 import { ToastContainer } from './components/common/Toast';
 import LoginScreen from './views/Login';
 import MainLayout from './layouts/MainLayout';
-import { UserRole } from './types';
 import RecipientTracking from './views/RecipientTracking';
 
-// This component is now responsible for loading global scripts and deciding which view to show.
+// This component is now responsible for deciding which view to show.
 const AppContent = () => {
-    const { currentUser, addToast } = useAppContext();
+    const { currentUser, isLoading } = useAppContext();
     const [isTrackingView, setIsTrackingView] = useState(false);
 
-    // Use the custom hook to load the Google Maps script
-    useGoogleMaps((globalThis as any).process?.env?.API_KEY, addToast);
-    
     if (isTrackingView) {
         return <RecipientTracking onBackToApp={() => setIsTrackingView(false)} />;
     }
 
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-slate-100">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-primary-600 mx-auto"></div>
+                    <h2 className="text-2xl font-bold text-slate-800 mt-4">Loading Data...</h2>
+                    <p className="text-slate-600">Please wait while we fetch your information.</p>
+                </div>
+            </div>
+        )
+    }
+
     return (
          <>
-            {/* The location tracker is a non-visual component that runs for couriers */}
-            {currentUser?.role === UserRole.COURIER && <CourierLocationTracker />}
-
             {/* Render either the login screen or the main app layout */}
             <div className={`transition-opacity duration-500 ${currentUser ? 'opacity-100' : 'opacity-100'}`}>
                 {!currentUser ? <LoginScreen onTrackPackageClick={() => setIsTrackingView(true)} /> : <MainLayout />}

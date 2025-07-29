@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment } from '../types';
@@ -11,13 +10,13 @@ interface RecipientTrackingProps {
 }
 
 const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) => {
-    const { trackShipment, addToast } = useAppContext();
+    const { addToast } = useAppContext();
     const [trackingId, setTrackingId] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [shipment, setShipment] = useState<Shipment | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleTrackPackage = (e: React.FormEvent) => {
+    const handleTrackPackage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!trackingId.trim() || !phoneNumber.trim()) {
             addToast('Please enter both a tracking ID and phone number.', 'error');
@@ -26,16 +25,33 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
 
         setIsLoading(true);
         setShipment(null);
-        setTimeout(() => {
-            const foundShipment = trackShipment(trackingId, phoneNumber);
-            if (foundShipment) {
-                setShipment(foundShipment);
-                addToast('Shipment found!', 'success');
-            } else {
-                addToast('No shipment found with those details.', 'error');
+
+        try {
+            const response = await fetch('http://localhost:3001/api/track', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    trackingId: trackingId,
+                    phone: phoneNumber,
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `No shipment found with those details.`);
             }
+
+            const foundShipment = await response.json();
+            setShipment(foundShipment);
+            addToast('Shipment found!', 'success');
+
+        } catch (error: any) {
+            addToast(error.message, 'error');
+        } finally {
             setIsLoading(false);
-        }, 500); // Simulate network delay
+        }
     };
 
     return (

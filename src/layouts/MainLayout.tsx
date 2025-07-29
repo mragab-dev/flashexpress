@@ -16,7 +16,6 @@ import Financials from '../views/Financials';
 import AdminFinancials from '../views/AdminFinancials';
 import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
-import CourierMapView from '../views/CourierMapView';
 import ClientAnalytics from '../views/ClientAnalytics';
 import CourierFinancials from '../views/CourierFinancials';
 import CourierPerformance from '../views/CourierPerformance';
@@ -85,7 +84,6 @@ const MainLayout: React.FC = () => {
             case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
-            case 'map': return <CourierMapView />;
             case 'courier-financials': return <CourierFinancials />;
             case 'courier-performance': return <CourierPerformance onSelectShipment={setSelectedShipment} />;
             default: return <Dashboard setActiveView={setActiveView} />;
