@@ -94,30 +94,32 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
     return (
         <>
             <div className="bg-white rounded-xl shadow-sm">
-                <div className="p-5 border-b border-slate-200 flex justify-between items-center">
+                <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <h2 className="text-xl font-bold text-slate-800">Client Shipment Analytics</h2>
                         <p className="text-slate-500 mt-1 text-sm">A summary of shipment volumes per client.</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                         <button
                             onClick={handleExport}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
                         >
                             <DocumentDownloadIcon className="w-5 h-5"/>
-                            Export as CSV
+                            <span className="hidden sm:inline">Export</span>
                         </button>
                         <button
                             onClick={toggleSortOrder}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition"
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition"
                             aria-label={`Sort by ${sortOrder === 'asc' ? 'highest first' : 'lowest first'}`}
                         >
                             <ArrowUpCircleIcon className={`w-5 h-5 transition-transform duration-300 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
-                            <span>Sort by {sortOrder === 'asc' ? 'Highest' : 'Lowest'}</span>
+                            <span className="hidden sm:inline">Sort</span>
                         </button>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
+
+                {/* Desktop Table */}
+                <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50">
                             <tr>
@@ -139,16 +141,35 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                                     <td className="px-6 py-4 font-semibold text-orange-600 text-right font-mono text-lg">{client.flatRateFee.toFixed(2)}</td>
                                 </tr>
                             ))}
-                            {clientShipmentCounts.length === 0 && (
-                                <tr>
-                                    <td colSpan={3} className="text-center py-8 text-slate-500">
-                                        No client data available.
-                                    </td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
                 </div>
+
+                 {/* Mobile Cards */}
+                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                    {clientShipmentCounts.map(client => (
+                        <div key={client.id} className="responsive-card" onClick={() => handleSelectClient(client)}>
+                            <div className="responsive-card-header">
+                                <span className="font-semibold text-slate-800">{client.name}</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Shipments</span>
+                                <span className="responsive-card-value">{client.shipmentCount}</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Flat Rate Fee</span>
+                                <span className="responsive-card-value font-semibold text-orange-600">{client.flatRateFee.toFixed(2)} EGP</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {clientShipmentCounts.length === 0 && (
+                    <div className="text-center py-16 text-slate-500">
+                        <p className="font-semibold">No Client Data</p>
+                        <p className="text-sm">No clients have been added to the system yet.</p>
+                    </div>
+                )}
             </div>
 
             {selectedClient && (

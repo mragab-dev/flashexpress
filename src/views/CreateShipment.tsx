@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Address, PaymentMethod, Zone, ShipmentPriority, Shipment } from '../types';
@@ -239,7 +237,7 @@ const CreateShipment = () => {
 
 
     return (
-        <div className="bg-white p-8 rounded-xl shadow-sm max-w-6xl mx-auto">
+        <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm max-w-6xl mx-auto">
             <h2 className="text-2xl font-bold text-slate-800 mb-6">Create Shipments</h2>
 
             <div className="border-b border-slate-200 mb-6">
@@ -392,40 +390,73 @@ const CreateShipment = () => {
 
                     {/* Data Table */}
                     {parsedData.length > 0 && (
-                        <div className="mt-8 overflow-x-auto">
-                            <table className="min-w-full divide-y divide-slate-200">
-                                <thead className="bg-slate-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                                        {Object.keys(parsedData[0]).map(key => (
-                                            <th key={key} className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{key.replace(/([A-Z])/g, ' $1').trim()}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-slate-200">
-                                    {parsedData.map((row, index) => (
-                                        <tr key={index} className={verificationResults[index]?.isValid ? '' : 'bg-red-50'}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                {verificationResults[index]?.isValid ? (
-                                                    <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                                                ) : (
-                                                    <div className="relative group">
-                                                        <XCircleIcon className="w-6 h-6 text-red-500" />
-                                                        <div className="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded py-1 px-2 bottom-full left-1/2 -translate-x-1/2 w-48">
-                                                            {verificationResults[index]?.errors.join(' ')}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </td>
-                                            {Object.values(row).map((value, i) => (
-                                                <td key={i} className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
-                                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                                </td>
+                        <div className="mt-8">
+                            {/* Desktop Table */}
+                            <div className="overflow-x-auto hidden lg:block">
+                                <table className="min-w-full divide-y divide-slate-200">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                                            {Object.keys(parsedData[0]).map(key => (
+                                                <th key={key} className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{key.replace(/([A-Z])/g, ' $1').trim()}</th>
                                             ))}
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-slate-200">
+                                        {parsedData.map((row, index) => (
+                                            <tr key={index} className={verificationResults[index]?.isValid ? '' : 'bg-red-50'}>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                    {verificationResults[index]?.isValid ? (
+                                                        <CheckCircleIcon className="w-6 h-6 text-green-500" />
+                                                    ) : (
+                                                        <div className="relative group">
+                                                            <XCircleIcon className="w-6 h-6 text-red-500" />
+                                                            <div className="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded py-1 px-2 bottom-full left-1/2 -translate-x-1/2 w-48">
+                                                                {verificationResults[index]?.errors.join(' ')}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                {Object.values(row).map((value, i) => (
+                                                    <td key={i} className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
+                                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {/* Mobile Cards */}
+                            <div className="lg:hidden space-y-4">
+                                {parsedData.map((row, index) => (
+                                    <div key={index} className={`responsive-card ${!verificationResults[index]?.isValid && 'border-red-300 bg-red-50'}`}>
+                                        <div className="responsive-card-header">
+                                            <div className="font-semibold text-slate-800">{row.recipientName}</div>
+                                            {verificationResults[index]?.isValid ? (
+                                                <CheckCircleIcon className="w-6 h-6 text-green-500" />
+                                            ) : (
+                                                <XCircleIcon className="w-6 h-6 text-red-500" />
+                                            )}
+                                        </div>
+                                        {!verificationResults[index]?.isValid && (
+                                            <p className="text-xs text-red-700">{verificationResults[index].errors.join(', ')}</p>
+                                        )}
+                                        <div className="responsive-card-item">
+                                            <div className="responsive-card-label">Phone</div>
+                                            <div className="responsive-card-value">{row.recipientPhone}</div>
+                                        </div>
+                                        <div className="responsive-card-item">
+                                            <div className="responsive-card-label">Address</div>
+                                            <div className="responsive-card-value">{row.toAddress.street}, {row.toAddress.zone}</div>
+                                        </div>
+                                         <div className="responsive-card-item">
+                                            <div className="responsive-card-label">Package Value</div>
+                                            <div className="responsive-card-value">{row.packageValue} EGP</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Shipment, ShipmentStatus } from '../../types';
 import { ShipmentStatusBadge } from '../common/ShipmentStatusBadge';
@@ -91,7 +90,8 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
 
     return (
         <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            {/* Desktop Table */}
+            <table className="w-full text-left hidden lg:table">
                 <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                         <th className="px-6 py-3 text-sm font-semibold text-slate-600">ID</th>
@@ -116,8 +116,6 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                         if (showNetProfit && typeof clientFee === 'number' && typeof courierCommission === 'number') {
                             netProfit = clientFee - courierCommission;
                             netProfitText = `${netProfit.toFixed(2)} EGP`;
-                        } else if (showNetProfit && typeof clientFee === 'number') {
-                             netProfitText = `${clientFee.toFixed(2)} EGP`;
                         }
 
                         return (
@@ -143,11 +141,78 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                             </tr>
                         );
                     })}
-                    {shipments.length === 0 && (
-                        <tr><td colSpan={10} className="text-center py-8 text-slate-500">No shipments found for the selected period.</td></tr>
-                    )}
                 </tbody>
             </table>
+            
+             {/* Mobile Cards */}
+            <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                {shipments.map(s => {
+                     const clientFee = s.clientFlatRateFee;
+                     const courierCommission = s.courierCommission;
+                     let netProfit = 0;
+                     let netProfitText = 'N/A';
+                     if (showNetProfit && typeof clientFee === 'number' && typeof courierCommission === 'number') {
+                         netProfit = clientFee - courierCommission;
+                         netProfitText = `${netProfit.toFixed(2)} EGP`;
+                     }
+
+                    return (
+                        <div key={s.id} className="responsive-card">
+                            <div className="responsive-card-header">
+                                <div className="font-mono text-sm text-slate-700">{s.id}</div>
+                                <ShipmentStatusBadge status={s.status} />
+                            </div>
+                            <div className="responsive-card-item">
+                                <div className="responsive-card-label">From</div>
+                                <div className="responsive-card-value">{s.clientName}</div>
+                            </div>
+                            <div className="responsive-card-item">
+                                <div className="responsive-card-label">To</div>
+                                <div className="responsive-card-value">{s.recipientName}</div>
+                            </div>
+                            <div className="responsive-card-item">
+                                <div className="responsive-card-label">Date</div>
+                                <div className="responsive-card-value">{new Date(s.creationDate).toLocaleDateString()}</div>
+                            </div>
+                            <div className="responsive-card-item">
+                                <div className="responsive-card-label">Price</div>
+                                <div className="responsive-card-value">{s.price.toFixed(2)} EGP</div>
+                            </div>
+                            {showClientFee && (
+                                <div className="responsive-card-item">
+                                    <div className="responsive-card-label text-orange-600">Client Fee</div>
+                                    <div className="responsive-card-value text-orange-600">{s.clientFlatRateFee ? `${s.clientFlatRateFee.toFixed(2)} EGP` : 'N/A'}</div>
+                                </div>
+                            )}
+                            {showCourierCommission && (
+                                <div className="responsive-card-item">
+                                    <div className="responsive-card-label text-indigo-600">Commission</div>
+                                    <div className="responsive-card-value text-indigo-600">{s.courierCommission ? `${s.courierCommission.toFixed(2)} EGP` : 'N/A'}</div>
+                                </div>
+                            )}
+                            {showNetProfit && (
+                                <div className="responsive-card-item">
+                                    <div className="responsive-card-label text-green-600">Net Profit</div>
+                                    <div className="responsive-card-value text-green-600">{netProfitText}</div>
+                                </div>
+                            )}
+
+                             {onSelect && (
+                                <button onClick={() => onSelect(s)} className="mt-4 w-full text-center px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
+                                    View Details
+                                </button>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
+
+            {shipments.length === 0 && (
+                <div className="text-center py-16 text-slate-500">
+                    <p className="font-semibold">No shipments found</p>
+                    <p className="text-sm">There are no shipments matching your current filters.</p>
+                </div>
+            )}
         </div>
     );
 };

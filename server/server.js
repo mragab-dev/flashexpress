@@ -21,7 +21,7 @@ async function main() {
     app.use(express.static(path.join(__dirname, '../dist')));
 
     // --- Helper Functions ---
-    const generateId = (prefix) => `${prefix}${Date.now()}${Math.floor(Math.random() * 100)}`;
+    const generateId = (prefix) => `${prefix}${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
     const parseJsonField = (item, field) => (item && item[field] && typeof item[field] === 'string' ? { ...item, [field]: JSON.parse(item[field]) } : item);
 
 
@@ -233,59 +233,153 @@ async function main() {
 
     app.put('/api/shipments/:id/status', async (req, res) => {
         const { id } = req.params;
-        const { status, signature } = req.body;
-        
+        const { status, deliveryPhoto, failureReason } = req.body;
+    
         try {
             await knex.transaction(async (trx) => {
-                const [shipment] = await trx('shipments').where({ id }).update({ status, signature: signature || null }, '*');
-                
-                await createNotification(trx, shipment, status);
-                
+                // 1. Fetch shipment to ensure it exists and get its current state.
+                const shipment = await trx('shipments').where({ id }).first();
+                if (!shipment) {
+                    const err = new Error('Shipment not found');
+                    // @ts-ignore
+                    err.statusCode = 404;
+                    throw err;
+                }
+    
+                // 2. Prepare and execute the primary update in a single operation.
+                const updatePayload = { status };
+                if (req.body.hasOwnProperty('deliveryPhoto')) {
+                    updatePayload.deliveryPhoto = deliveryPhoto || null;
+                }
+                if (req.body.hasOwnProperty('failureReason')) {
+                    updatePayload.failureReason = failureReason || null;
+                }
                 if (status === 'Delivered') {
-                    await trx('shipments').where({id}).update({ deliveryDate: new Date().toISOString() });
-                    const client = await trx('users').where({ id: shipment.clientId }).first();
-                    const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
-                    
-                    if (shipment.paymentMethod === 'Wallet' && client) {
-                        await trx('client_transactions').insert([{ id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: shipment.packageValue, date: new Date().toISOString(), description: `Credit for delivered shipment ${shipment.id}`}, { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shipment.clientFlatRateFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}`}]);
+                    updatePayload.deliveryDate = new Date().toISOString();
+                }
+                await trx('shipments').where({ id }).update(updatePayload);
+    
+                // 3. Handle side effects based on the new status.
+                await createNotification(trx, shipment, status);
+    
+                if (status === 'Delivered') {
+                    // Ensure a courier is assigned before proceeding with courier-related logic.
+                    if (!shipment.courierId) {
+                        console.warn(`Shipment ${id} marked 'Delivered' without an assigned courier. Skipping courier transactions.`);
+                    } else {
+                        const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
+                        if (courierStats) {
+                            // Use the commission value snapshotted during assignment for accuracy.
+                            const commissionAmount = shipment.courierCommission || 0;
+                            if (commissionAmount > 0) {
+                                await trx('courier_transactions').insert({
+                                    id: generateId('TRN'),
+                                    courierId: shipment.courierId,
+                                    type: 'Commission',
+                                    amount: commissionAmount,
+                                    description: `Commission for shipment ${id}`,
+                                    shipmentId: id,
+                                    timestamp: new Date().toISOString(),
+                                    status: 'Processed'
+                                });
+                            }
+                            // Reset consecutive failures on a successful delivery.
+                            await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: 0 });
+                        }
                     }
-
-                    if (courierStats) {
-                        const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
-                        await trx('courier_transactions').insert({ id: generateId('TRN'), courierId: shipment.courierId, type: 'Commission', amount: commission, description: `Commission for shipment ${shipment.id}`, shipmentId: shipment.id, timestamp: new Date().toISOString(), status: 'Processed' });
-                        await trx('shipments').where({ id }).update({ courierCommission: commission });
-                        await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: 0 }); // Reset failures on success
+    
+                    // Handle client wallet transactions for 'Wallet' payment method.
+                    if (shipment.paymentMethod === 'Wallet') {
+                        const client = await trx('users').where({ id: shipment.clientId }).first();
+                        if (client) {
+                            // Use fallbacks to prevent errors from null/undefined values.
+                            const packageValue = shipment.packageValue || 0;
+                            const shippingFee = shipment.clientFlatRateFee || 0;
+                            await trx('client_transactions').insert([
+                                {
+                                    id: generateId('TRN'), // Use a robust unique ID generator
+                                    userId: client.id,
+                                    type: 'Deposit',
+                                    amount: packageValue,
+                                    date: new Date().toISOString(),
+                                    description: `Credit for delivered shipment ${id}`
+                                },
+                                {
+                                    id: generateId('TRN'),
+                                    userId: client.id,
+                                    type: 'Payment',
+                                    amount: -shippingFee,
+                                    date: new Date().toISOString(),
+                                    description: `Shipping fee for ${id}`
+                                }
+                            ]);
+                        }
                     }
-
                 } else if (status === 'Delivery Failed') {
-                    // Remove automatic penalty - penalties should be set manually by admin/super user
-                    const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
-
-                    if (courierStats) {
-                        // Only track consecutive failures for restriction purposes, no automatic penalty
-                        const newFailures = (courierStats.consecutiveFailures || 0) + 1;
-                        const shouldRestrict = newFailures >= 3; // Keep failure limit for restrictions
-                        await trx('courier_stats').where({ courierId: shipment.courierId }).update({ 
-                            consecutiveFailures: newFailures, 
-                            isRestricted: shouldRestrict, 
-                            restrictionReason: shouldRestrict ? 'Exceeded consecutive failure limit' : null 
-                        });
+                    if (shipment.courierId) {
+                        const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
+                        if (courierStats) {
+                            const newFailures = (courierStats.consecutiveFailures || 0) + 1;
+                            const failureLimit = 3; // This should ideally be a configurable value.
+                            const shouldRestrict = newFailures >= failureLimit;
+                            await trx('courier_stats').where({ courierId: shipment.courierId }).update({
+                                consecutiveFailures: newFailures,
+                                isRestricted: shouldRestrict,
+                                restrictionReason: shouldRestrict ? `Exceeded failure limit of ${failureLimit}.` : null
+                            });
+                        }
                     }
                 }
             });
             res.status(200).json({ success: true });
-        } catch (error) { res.status(500).json({ error: 'Server error while updating status' }); }
+        } catch (error) {
+            console.error("Error updating shipment status:", error);
+            // @ts-ignore
+            const statusCode = error.statusCode || 500;
+            const message = error.message || 'Server error while updating status';
+            res.status(statusCode).json({ error: message });
+        }
     });
 
     app.put('/api/shipments/:id/assign', async (req, res) => {
         const { id } = req.params;
         const { courierId } = req.body;
         try {
-            const shipment = await knex('shipments').where({ id }).first();
-            const client = await knex('users').where({ id: shipment.clientId }).first();
-            await knex('shipments').where({ id }).update({ courierId, status: shipment.status === 'Return Requested' ? 'Return in Progress' : 'In Transit', clientFlatRateFee: client.flatRateFee });
+            await knex.transaction(async (trx) => {
+                const shipment = await trx('shipments').where({ id }).first();
+                if (!shipment) {
+                    return res.status(404).json({ error: 'Shipment not found' });
+                }
+
+                const client = await trx('users').where({ id: shipment.clientId }).first();
+                if (!client) {
+                    return res.status(404).json({ error: 'Client not found for shipment' });
+                }
+
+                const courierStats = await trx('courier_stats').where({ courierId }).first();
+                if (!courierStats) {
+                     return res.status(404).json({ error: 'Courier financial settings not found.' });
+                }
+
+                // Calculate courier commission based on their settings
+                const commission = courierStats.commissionType === 'flat'
+                    ? courierStats.commissionValue
+                    : shipment.price * (courierStats.commissionValue / 100);
+
+                const updatePayload = {
+                    courierId,
+                    status: shipment.status === 'Return Requested' ? 'Return in Progress' : 'In Transit',
+                    clientFlatRateFee: client.flatRateFee,
+                    courierCommission: commission // Save calculated commission on assignment
+                };
+
+                await trx('shipments').where({ id }).update(updatePayload);
+            });
             res.status(200).json({ success: true });
-        } catch (error) { res.status(500).json({ error: 'Server error' }); }
+        } catch (error) {
+            console.error("Error in shipment assignment:", error);
+            res.status(500).json({ error: 'Server error during assignment' });
+        }
     });
 
     app.put('/api/shipments/:id/fees', async (req, res) => {

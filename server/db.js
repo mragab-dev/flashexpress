@@ -57,11 +57,12 @@ async function setupDatabase() {
             table.integer('courierId').unsigned().references('id').inTable('users');
             table.string('creationDate').notNullable();
             table.string('deliveryDate');
-            table.text('signature');
+            table.text('deliveryPhoto');
             table.string('priority').notNullable();
             table.decimal('packageValue', 10, 2).notNullable();
             table.decimal('clientFlatRateFee', 10, 2);
             table.decimal('courierCommission', 10, 2);
+            table.text('failureReason');
         });
     }
 
@@ -122,6 +123,35 @@ async function setupDatabase() {
         });
     }
 
+    // --- Schema Migrations ---
+    // This block ensures that an existing database is updated with new columns
+    // without losing any data. It runs every time the server starts.
+    if (await knex.schema.hasTable('shipments')) {
+        const hasDeliveryPhoto = await knex.schema.hasColumn('shipments', 'deliveryPhoto');
+        const hasFailureReason = await knex.schema.hasColumn('shipments', 'failureReason');
+        const hasSignature = await knex.schema.hasColumn('shipments', 'signature');
+
+        if (!hasDeliveryPhoto || !hasFailureReason || hasSignature) {
+            await knex.schema.alterTable('shipments', (table) => {
+                // Rename legacy 'signature' column to 'deliveryPhoto' if it exists. This is top priority.
+                if (hasSignature && !hasDeliveryPhoto) {
+                    console.log('Migration: Renaming "signature" column to "deliveryPhoto".');
+                    table.renameColumn('signature', 'deliveryPhoto');
+                } 
+                // If both are missing, add 'deliveryPhoto'.
+                else if (!hasSignature && !hasDeliveryPhoto) {
+                    console.log('Migration: Adding "deliveryPhoto" column.');
+                    table.text('deliveryPhoto');
+                }
+
+                // Add 'failureReason' if it's missing.
+                if (!hasFailureReason) {
+                    console.log('Migration: Adding "failureReason" column.');
+                    table.text('failureReason');
+                }
+            });
+        }
+    }
 
     console.log('Database setup complete.');
   } catch (error) {

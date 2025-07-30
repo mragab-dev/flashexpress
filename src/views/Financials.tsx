@@ -1,5 +1,5 @@
 import { useAppContext } from '../context/AppContext';
-import { ShipmentStatus, PaymentMethod, UserRole } from '../types';
+import { ShipmentStatus, PaymentMethod, UserRole, ClientTransaction } from '../types';
 import { exportToCsv } from '../utils/pdf';
 import { StatCard } from '../components/common/StatCard';
 import { ChartBarIcon, CheckCircleIcon, WalletIcon, DocumentDownloadIcon, CurrencyDollarIcon } from '../components/Icons';
@@ -68,7 +68,7 @@ const Financials = () => {
 
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <div>
                      <h1 className="text-3xl font-bold text-slate-800">Financial Reports</h1>
                      <p className="text-slate-500 mt-1">
@@ -77,7 +77,7 @@ const Financials = () => {
                              : 'An overview of the company\'s financial performance.'}
                      </p>
                  </div>
-                 <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
+                 <button onClick={handleExport} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
                      <DocumentDownloadIcon className="w-5 h-5"/>
                      Export as CSV
                  </button>
@@ -123,7 +123,8 @@ const Financials = () => {
                 <div className="p-5">
                     <h2 className="text-xl font-bold text-slate-800">All Transactions</h2>
                 </div>
-                <div className="overflow-x-auto">
+                {/* Desktop Table */}
+                <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -144,12 +145,38 @@ const Financials = () => {
                                    <td className="px-6 py-4 font-semibold text-slate-800 text-right">{s.price.toFixed(2)} EGP</td>
                                </tr>
                            ))}
-                           {filteredShipments.length === 0 && (
-                               <tr><td colSpan={5} className="text-center py-8 text-slate-500">No delivered shipments yet.</td></tr>
-                           )}
                         </tbody>
                     </table>
                 </div>
+                {/* Mobile Cards */}
+                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                     {filteredShipments.sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime()).map(s => (
+                        <div key={s.id} className="responsive-card">
+                            <div className="responsive-card-header">
+                                <span className="font-mono text-sm text-slate-700">{s.id}</span>
+                                <span className="font-semibold text-slate-800">{s.price.toFixed(2)} EGP</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Client</span>
+                                <span className="responsive-card-value">{s.clientName}</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Date</span>
+                                <span className="responsive-card-value">{new Date(s.deliveryDate!).toLocaleDateString()}</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Payment</span>
+                                <span className="responsive-card-value">{s.paymentMethod}</span>
+                            </div>
+                        </div>
+                     ))}
+                </div>
+                {filteredShipments.length === 0 && (
+                    <div className="text-center py-16 text-slate-500">
+                        <p className="font-semibold">No Delivered Shipments</p>
+                        <p className="text-sm">There are no financial transactions to display yet.</p>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -1,16 +1,16 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useAppContext } from '../context/AppContext';
-import { BellIcon, LogoutIcon } from '../components/Icons';
+import { BellIcon, LogoutIcon, MenuIcon } from '../components/Icons';
 
 interface HeaderProps {
     onLogout: () => void; 
     user: User; 
-    onNavigate: (view: string) => void
+    onNavigate: (view: string) => void;
+    onMenuClick: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate }) => {
+const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick }) => {
     const { notifications, notificationStatus } = useAppContext();
     const [isDropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -29,10 +29,15 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate }) => {
 
     return (
         <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 p-4 flex justify-between items-center z-20 sticky top-0">
-            <div className="text-lg font-bold text-slate-800">
-                {user.role} Portal
+            <div className="flex items-center gap-4">
+                <button onClick={onMenuClick} className="p-1 -ml-1 text-slate-600 lg:hidden">
+                    <MenuIcon className="w-6 h-6" />
+                </button>
+                <div className="text-lg font-bold text-slate-800">
+                    {user.role} Portal
+                </div>
             </div>
-             <div className="flex items-center gap-4">
+             <div className="flex items-center gap-2 sm:gap-4">
                 {user.role === UserRole.ADMIN && (
                     <div className="relative" ref={dropdownRef}>
                         <button onClick={() => setDropdownOpen(prev => !prev)} className="p-2 rounded-full hover:bg-slate-100 transition relative">
@@ -71,7 +76,7 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate }) => {
                     </div>
                 )}
                 <div className="flex items-center gap-3">
-                    <div className="text-right">
+                    <div className="text-right hidden sm:block">
                         <p className="font-semibold text-slate-800">{user.name}</p>
                         <p className="text-xs text-slate-500">{user.email}</p>
                     </div>

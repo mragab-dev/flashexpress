@@ -3,16 +3,18 @@ import { UserRole } from '../types';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon
+    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon
 } from '../components/Icons';
 
 interface SidebarProps {
     role: UserRole;
     activeView: string;
     setActiveView: (view: string) => void;
+    isOpen: boolean;
+    setIsOpen: (isOpen: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) => {
+const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView, isOpen, setIsOpen }) => {
     const navItems = {
         [UserRole.CLIENT]: [
             { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
@@ -59,32 +61,54 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
     };
     
     const currentNav = navItems[role] || [];
+    
+    const handleItemClick = (view: string) => {
+        setActiveView(view);
+        setIsOpen(false);
+    }
 
     return (
-        <aside className="w-64 bg-slate-800 text-slate-300 flex flex-col flex-shrink-0">
-            <div className="p-6 flex items-center gap-3 border-b border-slate-700">
-                <LogoIcon className="w-9 h-9"/>
-                <div>
-                    <h1 className="text-lg font-bold text-white">Flash Express</h1>
-                </div>
-            </div>
-            <nav className="flex-1 p-4 space-y-1.5">
-                {currentNav.map(item => (
-                    <button 
-                        key={item.name} 
-                        onClick={() => setActiveView(item.view)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition ${
-                            activeView === item.view 
-                            ? 'bg-primary-600 text-white font-semibold' 
-                            : 'hover:bg-slate-700 hover:text-white'
-                        }`}
-                    >
-                        {React.cloneElement(item.icon, { className: 'w-6 h-6' })}
-                        <span className="text-sm font-medium">{item.name}</span>
+        <>
+            {/* Backdrop for mobile */}
+            <div 
+                className={`fixed inset-0 bg-black/60 z-30 lg:hidden transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                onClick={() => setIsOpen(false)}
+            ></div>
+            
+            <aside 
+                className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-800 text-slate-300 flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out
+                ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+                lg:relative lg:translate-x-0 lg:w-64`}
+            >
+                <div className="p-4 flex items-center justify-between border-b border-slate-700">
+                    <div className="flex items-center gap-3">
+                        <LogoIcon className="w-9 h-9"/>
+                        <div>
+                            <h1 className="text-lg font-bold text-white">Flash Express</h1>
+                        </div>
+                    </div>
+                     <button onClick={() => setIsOpen(false)} className="p-1 text-slate-400 hover:text-white lg:hidden">
+                        <XIcon className="w-6 h-6"/>
                     </button>
-                ))}
-            </nav>
-        </aside>
+                </div>
+                <nav className="flex-1 p-4 space-y-1.5">
+                    {currentNav.map(item => (
+                        <button 
+                            key={item.name} 
+                            onClick={() => handleItemClick(item.view)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition ${
+                                activeView === item.view 
+                                ? 'bg-primary-600 text-white font-semibold' 
+                                : 'hover:bg-slate-700 hover:text-white'
+                            }`}
+                        >
+                            {React.cloneElement(item.icon, { className: 'w-6 h-6' })}
+                            <span className="text-sm font-medium">{item.name}</span>
+                        </button>
+                    ))}
+                </nav>
+            </aside>
+        </>
     );
 };
 

@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, Zone, ShipmentPriority } from '../types';
@@ -405,23 +403,25 @@ const UserManagement = () => {
 
     return (
         <div className="bg-white rounded-xl shadow-sm">
-             <div className="p-5 border-b border-slate-200 flex justify-between items-center">
+             <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-xl font-bold text-slate-800">User Management</h2>
                     <p className="text-slate-500 mt-1 text-sm">Add, edit, or remove users from the platform.</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button onClick={handleExport} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
                         <DocumentDownloadIcon className="w-5 h-5"/>
-                        Export as CSV
+                        <span className="hidden sm:inline">Export</span>
                     </button>
-                    <button onClick={() => openModal('add')} className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
+                    <button onClick={() => openModal('add')} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition">
                         <PlusCircleIcon className="w-5 h-5"/>
-                        Add User
+                        <span className="hidden sm:inline">Add User</span>
                     </button>
                 </div>
             </div>
-            <div className="overflow-x-auto">
+            
+            {/* Desktop Table */}
+            <div className="overflow-x-auto hidden lg:block">
                  <table className="w-full text-left">
                     <thead className="bg-slate-50">
                         <tr>
@@ -483,6 +483,49 @@ const UserManagement = () => {
                     </tbody>
                  </table>
             </div>
+
+             {/* Mobile Cards */}
+            <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                {users.map(user => (
+                    <div key={user.id} className="responsive-card">
+                        <div className="responsive-card-header">
+                            <span className="font-semibold text-slate-800">{user.name}</span>
+                            <span className="text-sm text-slate-600">{user.role}</span>
+                        </div>
+                        <div className="responsive-card-item">
+                            <span className="responsive-card-label">Email</span>
+                            <span className="responsive-card-value">{user.email}</span>
+                        </div>
+                        <div className="responsive-card-item">
+                            <span className="responsive-card-label">Zone</span>
+                            <span className="responsive-card-value">{user.zone || 'N/A'}</span>
+                        </div>
+                        <div className="responsive-card-item">
+                            <span className="responsive-card-label">Tax Card</span>
+                            <span className="responsive-card-value font-mono">{user.role === UserRole.CLIENT ? (getTaxCardNumber(user.id) || 'N/A') : 'N/A'}</span>
+                        </div>
+                         <div className="flex items-center justify-end gap-1 pt-3 border-t border-slate-200 mt-3">
+                            {!(user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER) && (
+                                <>
+                                    <button onClick={() => openModal('edit', user)} title="Edit" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
+                                    <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
+                                </>
+                            )}
+                            {user.role === UserRole.CLIENT && (currentUser?.role === UserRole.ADMIN || currentUser?.role === UserRole.SUPER_USER) && (
+                                <>
+                                    <button onClick={() => openModal('taxCard', user)} title="Set Tax Card" className="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md">Tax</button>
+                                    <button onClick={() => openModal('priorityPricing', user)} title="Priority Pricing" className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md">Pricing</button>
+                                </>
+                            )}
+                            {!(user.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER) && (
+                                <button onClick={() => openModal('delete', user)} title="Delete" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+
             <Modal isOpen={!!mode} onClose={closeModal} title={
                 mode === 'add' ? 'Add New User' : 
                 mode === 'edit' ? 'Edit User' : 

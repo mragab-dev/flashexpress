@@ -1,5 +1,3 @@
-
-
 import { useAppContext } from '../context/AppContext';
 import { ReplyIcon } from '../components/Icons';
 
@@ -12,13 +10,17 @@ const NotificationsLog = () => {
         failed: { text: 'Failed', color: 'bg-red-100 text-red-800' },
     };
 
+    const sortedNotifications = notifications.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
     return (
         <div className="bg-white rounded-xl shadow-sm">
              <div className="p-5 border-b border-slate-200">
                 <h2 className="text-xl font-bold text-slate-800">Notifications Log</h2>
                 <p className="text-slate-500 mt-1 text-sm">A log of all automated email notifications and their delivery status.</p>
             </div>
-            <div className="overflow-x-auto">
+            
+            {/* Desktop Table */}
+            <div className="overflow-x-auto hidden lg:block">
                 <table className="w-full text-left">
                     <thead className="bg-slate-50">
                         <tr>
@@ -31,7 +33,7 @@ const NotificationsLog = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {notifications.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(n => {
+                        {sortedNotifications.map(n => {
                             const currentStatus = notificationStatus[n.id] || (n.sent ? 'sent' : 'failed');
                             return (
                                 <tr key={n.id}>
@@ -55,12 +57,44 @@ const NotificationsLog = () => {
                                 </tr>
                             )
                         })}
-                        {notifications.length === 0 && (
-                             <tr><td colSpan={6} className="text-center py-8 text-slate-500">No notifications have been generated yet.</td></tr>
-                        )}
                     </tbody>
                 </table>
             </div>
+
+            {/* Mobile Cards */}
+            <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                {sortedNotifications.map(n => {
+                     const currentStatus = notificationStatus[n.id] || (n.sent ? 'sent' : 'failed');
+                    return (
+                        <div key={n.id} className="responsive-card">
+                            <div className="responsive-card-header">
+                                <span className="font-mono text-sm text-slate-700">{n.shipmentId}</span>
+                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusDisplay[currentStatus].color}`}>
+                                    {statusDisplay[currentStatus].text}
+                                </span>
+                            </div>
+                            <div className="text-sm">
+                                <p className="font-semibold">{n.message.split('\n\n')[0]}</p>
+                                <p className="text-slate-600">To: {n.recipient}</p>
+                                <p className="text-xs text-slate-500 mt-1">{new Date(n.date).toLocaleString()}</p>
+                            </div>
+                            {currentStatus === 'failed' && (
+                                <button onClick={() => resendNotification(n.id)} className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary-500 text-white text-sm font-semibold rounded-lg hover:bg-primary-600 transition">
+                                    <ReplyIcon className="w-4 h-4 transform -scale-x-100"/>
+                                    Resend Notification
+                                </button>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
+
+            {notifications.length === 0 && (
+                <div className="text-center py-16 text-slate-500">
+                    <p className="font-semibold">No Notifications Found</p>
+                    <p className="text-sm">No notifications have been generated yet.</p>
+                </div>
+            )}
         </div>
     );
 };

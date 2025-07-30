@@ -83,7 +83,8 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                 <p className="text-slate-500 mt-1">Manage courier financials, restrictions, and view performance metrics.</p>
             </div>
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+                 {/* Desktop Table */}
+                <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50">
                             <tr>
@@ -139,6 +140,50 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                    {courierData.map(({ user, stats, pendingPayouts, pendingCount, totalAssigned, totalCompleted, totalFailed }) => (
+                         <div key={user.id} className="responsive-card">
+                            <div className="responsive-card-header">
+                                <span className="font-semibold text-slate-800">{user.name}</span>
+                                <div className="flex items-center gap-2">
+                                     {stats?.isRestricted ? <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Restricted</span> : <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>}
+                                    {pendingPayouts.length > 0 && <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Payout</span>}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="text-center">
+                                    <div className="font-bold text-lg text-slate-800">{totalAssigned}</div>
+                                    <div className="text-xs text-slate-500">Assigned</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="font-bold text-lg text-green-600">{totalCompleted}</div>
+                                    <div className="text-xs text-slate-500">Completed</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="font-bold text-lg text-red-600">{totalFailed}</div>
+                                    <div className="text-xs text-slate-500">Failed</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="font-bold text-lg text-blue-600">{pendingCount}</div>
+                                    <div className="text-xs text-slate-500">Pending</div>
+                                </div>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Earnings (Balance)</span>
+                                <span className="responsive-card-value font-mono">{stats ? `${stats.currentBalance.toFixed(2)} EGP` : 'N/A'}</span>
+                            </div>
+                             <div className="responsive-card-item">
+                                <span className="responsive-card-label">Commission</span>
+                                <span className="responsive-card-value">{stats?.commissionType === 'flat' ? `${stats.commissionValue} EGP` : `${stats?.commissionValue}%`}</span>
+                            </div>
+                            <button onClick={() => handleManageClick(user.id)} className="mt-3 w-full px-3 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 text-sm">
+                                Manage Courier
+                            </button>
+                         </div>
+                    ))}
                 </div>
             </div>
             {selectedCourier && isManageModalOpen && (

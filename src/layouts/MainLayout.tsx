@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment, UserRole, ShipmentStatus } from '../types';
@@ -35,6 +34,7 @@ const MainLayout: React.FC = () => {
     
     const [isReassigning, setIsReassigning] = useState(false);
     const [newCourierId, setNewCourierId] = useState<number | null>(null);
+    const [isSidebarOpen, setSidebarOpen] = useState(false);
 
     const handleModalClose = () => {
         setSelectedShipment(null);
@@ -96,10 +96,21 @@ const MainLayout: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-slate-100">
-            <Sidebar role={currentUser.role} activeView={activeView} setActiveView={setActiveView} />
+            <Sidebar 
+                role={currentUser.role} 
+                activeView={activeView} 
+                setActiveView={setActiveView} 
+                isOpen={isSidebarOpen}
+                setIsOpen={setSidebarOpen}
+            />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <Header onLogout={logout} user={currentUser} onNavigate={setActiveView} />
-                <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+                <Header 
+                    onLogout={logout} 
+                    user={currentUser} 
+                    onNavigate={setActiveView}
+                    onMenuClick={() => setSidebarOpen(true)}
+                />
+                <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                     {renderActiveView()}
                 </main>
             </div>
@@ -171,11 +182,11 @@ const MainLayout: React.FC = () => {
                     </div>
                 )}
             </Modal>
-             <Modal isOpen={!!labelShipment} onClose={() => setLabelShipment(null)} title="Print Shipment Label" size="4xl">
+             <Modal isOpen={!!labelShipment} onClose={() => setLabelShipment(null)} title="Print Shipment Label" size="4xl" wrapperClassName="label-print-modal">
                  {labelShipment && (
                     <div className="flex flex-col gap-6">
                         <ShipmentLabel shipment={labelShipment} />
-                        <div className="flex justify-end gap-4 p-4 -mb-6 -mx-6 bg-slate-50 rounded-b-xl">
+                        <div className="flex justify-end gap-4 p-4 -mb-6 -mx-6 bg-slate-50 rounded-b-xl modal-footer">
                            <button onClick={() => setLabelShipment(null)} className="px-6 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 font-semibold">
                                Close
                            </button>

@@ -75,18 +75,18 @@ const AdminFinancials = () => {
 
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800">Admin Financial Dashboard</h1>
                     <p className="text-slate-500 mt-1">Enhanced financial overview with detailed tracking metrics.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                     <button 
                         onClick={handleExportFinancials} 
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
                     >
                         <DocumentDownloadIcon className="w-5 h-5"/>
-                        Export Report
+                        <span className="hidden sm:inline">Export Report</span>
                     </button>
                 </div>
             </div>
@@ -272,49 +272,23 @@ const AdminFinancials = () => {
                 </div>
             </div>
 
-            {/* Financial Summary Table */}
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Financial Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                        <h3 className="text-sm font-semibold text-green-800 mb-1">Total Revenue</h3>
-                        <p className="text-2xl font-bold text-green-600">{adminFinancials.totalRevenue.toFixed(2)} EGP</p>
-                        <p className="text-xs text-green-600 mt-1">From delivered packages</p>
-                    </div>
-                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                        <h3 className="text-sm font-semibold text-orange-800 mb-1">Total Commission</h3>
-                        <p className="text-2xl font-bold text-orange-600">{adminFinancials.totalCommission.toFixed(2)} EGP</p>
-                        <p className="text-xs text-orange-600 mt-1">Paid to couriers</p>
-                    </div>
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <h3 className="text-sm font-semibold text-blue-800 mb-1">Potential Revenue</h3>
-                        <p className="text-2xl font-bold text-blue-600">{adminFinancials.totalFees.toFixed(2)} EGP</p>
-                        <p className="text-xs text-blue-600 mt-1">If all packages delivered</p>
-                    </div>
-                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                        <h3 className="text-sm font-semibold text-purple-800 mb-1">Net Profit</h3>
-                        <p className="text-2xl font-bold text-purple-600">{adminFinancials.netRevenue.toFixed(2)} EGP</p>
-                        <p className="text-xs text-purple-600 mt-1">Revenue - Commission</p>
-                    </div>
-                </div>
-            </div>
-
             {/* Client Financial Summary */}
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-5 border-b border-slate-200 flex justify-between items-center">
+                <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <h2 className="text-xl font-bold text-slate-800">Client Financial Summary</h2>
                         <p className="text-slate-500 mt-1 text-sm">Revenue breakdown by client with adjustable flat rates.</p>
                     </div>
                     <button 
                         onClick={handleExportClientSummary}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
                     >
                         <DocumentDownloadIcon className="w-5 h-5"/>
-                        Export CSV
+                        <span className="hidden sm:inline">Export CSV</span>
                     </button>
                 </div>
-                <div className="overflow-x-auto">
+                {/* Desktop Table */}
+                <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -343,16 +317,46 @@ const AdminFinancials = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {clientFinancials.length === 0 && (
-                                <tr>
-                                    <td colSpan={5} className="text-center py-8 text-slate-500">
-                                        No client financial data available.
-                                    </td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
                 </div>
+
+                 {/* Mobile Cards */}
+                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                    {clientFinancials.map(client => (
+                        <div key={client.clientId} className="responsive-card">
+                            <div className="responsive-card-header">
+                                <span className="font-semibold text-slate-800">{client.clientName}</span>
+                                <button 
+                                    onClick={() => openClientRateModal(client.clientId, client.flatRateFee)}
+                                    className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md -mr-2 -mt-2"
+                                    title="Edit Flat Rate"
+                                >
+                                    <PencilIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                             <div className="responsive-card-item">
+                                <span className="responsive-card-label">Flat Rate</span>
+                                <span className="responsive-card-value font-semibold text-orange-600">{client.flatRateFee.toFixed(2)} EGP</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Total Orders</span>
+                                <span className="responsive-card-value">{client.totalOrders}</span>
+                            </div>
+                            <div className="responsive-card-item">
+                                <span className="responsive-card-label">Order Sum</span>
+                                <span className="responsive-card-value">{client.orderSum.toFixed(2)} EGP</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {clientFinancials.length === 0 && (
+                     <div className="text-center py-16 text-slate-500">
+                        <p className="font-semibold">No Client Data</p>
+                        <p className="text-sm">No client financial information is available yet.</p>
+                    </div>
+                )}
             </div>
 
             {/* Client Flat Rate Modal */}
