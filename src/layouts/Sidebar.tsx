@@ -40,6 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
             { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
             { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
+            { name: 'Total Shipments', icon: <PackageIcon />, view: 'total-shipments' },
             { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
         ],
         [UserRole.ADMIN]: [
@@ -50,7 +51,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView }) =>
             { name: 'User Management', icon: <UsersIcon />, view: 'users' },
             { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
             { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
+            { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
             { name: 'Admin Financials', icon: <ChartBarIcon />, view: 'admin-financials' },
+            { name: 'Total Shipments', icon: <PackageIcon />, view: 'total-shipments' },
             { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
         ],
     };

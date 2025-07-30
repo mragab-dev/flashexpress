@@ -60,11 +60,19 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
             [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURN_IN_PROGRESS].includes(s.status)
         ).length;
 
+        // New metrics
+        const totalAssigned = shipments.filter(s => s.courierId === user.id).length;
+        const totalCompleted = shipments.filter(s => s.courierId === user.id && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED)).length;
+        const totalFailed = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERY_FAILED).length;
+
         return {
             user,
             stats,
             pendingPayouts,
             pendingCount,
+            totalAssigned,
+            totalCompleted,
+            totalFailed,
         };
     });
 
@@ -80,7 +88,9 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                         <thead className="bg-slate-50">
                             <tr>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Courier</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Delivered</th>
+                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Total Assigned</th>
+                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Completed</th>
+                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Failed</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Pending</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Earnings (Total / Balance)</th>
                                 <th className="p-4 text-xs font-medium text-slate-500 uppercase">Commission</th>
@@ -89,18 +99,20 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
-                            {courierData.map(({ user, stats, pendingPayouts, pendingCount }) => (
+                            {courierData.map(({ user, stats, pendingPayouts, pendingCount, totalAssigned, totalCompleted, totalFailed }) => (
                                 <tr key={user.id}>
                                     <td className="p-4 font-semibold">{user.name}</td>
+                                    <td className="p-4 font-mono text-center text-slate-600">{totalAssigned}</td>
                                     <td className="p-4 font-mono text-center">
                                          <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'delivered')}
-                                            className="font-mono text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline"
-                                            disabled={!stats || stats.deliveriesCompleted === 0}
+                                            className="font-mono text-green-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            disabled={totalCompleted === 0}
                                         >
-                                            {stats?.deliveriesCompleted ?? 0}
+                                            {totalCompleted}
                                         </button>
                                     </td>
+                                    <td className="p-4 font-mono text-center text-red-600">{totalFailed}</td>
                                     <td className="p-4 font-mono text-center">
                                          <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'pending')}
@@ -167,12 +179,21 @@ interface ManageCourierModalProps {
 }
 
 const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout }) => {
+    const { shipments } = useAppContext();
     const [settings, setSettings] = useState({
         commissionType: courierStats.commissionType,
         commissionValue: courierStats.commissionValue,
     });
     const [penaltyAmount, setPenaltyAmount] = useState(0);
     const [penaltyReason, setPenaltyReason] = useState('');
+    const [selectedFailedShipment, setSelectedFailedShipment] = useState<string>('');
+    const [failedDeliveryPenaltyReason, setFailedDeliveryPenaltyReason] = useState('');
+
+    // Get failed shipments for this courier
+    const failedShipments = shipments.filter(s => 
+        s.courierId === courierUser.id && 
+        s.status === ShipmentStatus.DELIVERY_FAILED
+    );
 
     useEffect(() => {
         setSettings({
@@ -192,6 +213,19 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
             setPenaltyAmount(0);
             setPenaltyReason('');
             onClose();
+        }
+    };
+
+    const handleFailedDeliveryPenalty = () => {
+        if (selectedFailedShipment) {
+            const shipment = failedShipments.find(s => s.id === selectedFailedShipment);
+            if (shipment) {
+                onApplyPenalty(courierUser.id, shipment.packageValue, 
+                    failedDeliveryPenaltyReason || `Failed delivery penalty for ${shipment.id} - Package value: ${shipment.packageValue} EGP`);
+                setSelectedFailedShipment('');
+                setFailedDeliveryPenaltyReason('');
+                onClose();
+            }
         }
     };
 
@@ -249,6 +283,53 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
                         </div>
                         <button onClick={handlePenaltyApply} disabled={penaltyAmount <= 0 || !penaltyReason} className="w-full bg-red-600 text-white font-semibold py-2 rounded-lg disabled:bg-red-300">Apply Penalty</button>
                     </div>
+
+                    {/* Failed Delivery Penalty Section */}
+                    {failedShipments.length > 0 && (
+                        <div className="space-y-4 p-6 bg-orange-50 rounded-lg">
+                            <h3 className="font-bold text-lg text-orange-800">Failed Delivery Penalties</h3>
+                            <p className="text-sm text-orange-700">Apply penalty equal to package value for failed deliveries</p>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">Select Failed Shipment</label>
+                                <select
+                                    value={selectedFailedShipment}
+                                    onChange={(e) => setSelectedFailedShipment(e.target.value)}
+                                    className="w-full mt-1 p-2 border border-slate-300 rounded-md"
+                                >
+                                    <option value="">Choose a failed shipment...</option>
+                                    {failedShipments.map(shipment => (
+                                        <option key={shipment.id} value={shipment.id}>
+                                            {shipment.id} - {shipment.recipientName} (Value: {shipment.packageValue} EGP)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700">Reason (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g., Package lost, Damaged beyond repair"
+                                    value={failedDeliveryPenaltyReason}
+                                    onChange={(e) => setFailedDeliveryPenaltyReason(e.target.value)}
+                                    className="w-full mt-1 p-2 border border-slate-300 rounded-md"
+                                />
+                            </div>
+                            {selectedFailedShipment && (
+                                <div className="bg-orange-100 p-3 rounded-md">
+                                    <p className="text-sm text-orange-800">
+                                        <strong>Penalty Amount:</strong> {failedShipments.find(s => s.id === selectedFailedShipment)?.packageValue} EGP
+                                    </p>
+                                </div>
+                            )}
+                            <button 
+                                onClick={handleFailedDeliveryPenalty} 
+                                disabled={!selectedFailedShipment} 
+                                className="w-full bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:bg-orange-300"
+                            >
+                                Apply Failed Delivery Penalty
+                            </button>
+                        </div>
+                    )}
                     
                     <div className="space-y-4 p-6 bg-green-50 rounded-lg">
                         <h3 className="font-bold text-lg text-green-800">Process Payouts</h3>

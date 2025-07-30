@@ -16,16 +16,18 @@ import Financials from '../views/Financials';
 import AdminFinancials from '../views/AdminFinancials';
 import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
+import CourierMapView from '../views/CourierMapView';
 import ClientAnalytics from '../views/ClientAnalytics';
 import CourierFinancials from '../views/CourierFinancials';
 import CourierPerformance from '../views/CourierPerformance';
+import TotalShipments from '../views/TotalShipments';
 import { Modal } from '../components/common/Modal';
 import { ShipmentLabel } from '../components/common/ShipmentLabel';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { PrinterIcon, ReplyIcon, SwitchHorizontalIcon } from '../components/Icons';
 
 const MainLayout: React.FC = () => {
-    const { currentUser, logout, users, updateShipmentStatus, reassignCourier } = useAppContext();
+    const { currentUser, logout, users, updateShipmentStatus, reassignCourier, getCourierName } = useAppContext();
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
     const [labelShipment, setLabelShipment] = useState<Shipment | null>(null);
@@ -84,8 +86,10 @@ const MainLayout: React.FC = () => {
             case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
+            case 'map': return <CourierMapView />;
             case 'courier-financials': return <CourierFinancials />;
             case 'courier-performance': return <CourierPerformance onSelectShipment={setSelectedShipment} />;
+            case 'total-shipments': return <TotalShipments />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }
@@ -107,7 +111,7 @@ const MainLayout: React.FC = () => {
                                 <p className="mb-1"><strong>Status:</strong> <ShipmentStatusBadge status={selectedShipment.status} /></p>
                                 <p className="text-sm text-slate-600"><strong>From:</strong> {selectedShipment.fromAddress.street}, {selectedShipment.fromAddress.city}</p>
                                 <p className="text-sm text-slate-600"><strong>To:</strong> {selectedShipment.toAddress.street}, {selectedShipment.toAddress.city}</p>
-                                <p className="text-sm text-slate-600"><strong>Courier:</strong> {users.find(u => u.id === selectedShipment.courierId)?.name || 'Not Assigned'}</p>
+                                <p className="text-sm text-slate-600"><strong>Courier:</strong> {getCourierName(selectedShipment.courierId)}</p>
                             </div>
                             <div className="flex flex-col gap-2 items-end flex-shrink-0">
                                 {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.CLIENT) && (
@@ -124,10 +128,16 @@ const MainLayout: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                        {selectedShipment.signature && (
+                        {selectedShipment.deliveryPhoto && (
                             <div>
-                                <strong>Signature:</strong>
-                                <img src={selectedShipment.signature} alt="Recipient Signature" className="border rounded-lg mt-2"/>
+                                <strong>Delivery Photo:</strong>
+                                <img src={selectedShipment.deliveryPhoto} alt="Delivery Proof" className="border rounded-lg mt-2 max-w-sm"/>
+                            </div>
+                        )}
+                        {selectedShipment.failureReason && (
+                            <div>
+                                <strong>Failure Reason:</strong>
+                                <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mt-2">{selectedShipment.failureReason}</p>
                             </div>
                         )}
                         {currentUser.role === UserRole.ADMIN && selectedShipment.courierId && ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(selectedShipment.status) && (

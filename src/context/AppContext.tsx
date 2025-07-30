@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address } from '../types';
-import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus } from '../types';
+import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
 import { apiFetch } from '../api/client';
 
 type NotificationStatus = 'sending' | 'sent' | 'failed';
@@ -20,7 +20,7 @@ export type AppContextType = {
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
     addShipment: (shipment: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => Promise<void>;
-    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { signature?: string; }) => Promise<void>;
+    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { deliveryPhoto?: string; failureReason?: string; }) => Promise<void>;
     updateShipmentFees: (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => Promise<void>;
     assignShipmentToCourier: (shipmentId: string, courierId: number) => Promise<boolean>;
     reassignCourier: (shipmentId: string, newCourierId: number) => Promise<void>;
@@ -29,7 +29,8 @@ export type AppContextType = {
     updateUser: (userId: number, userData: Partial<Omit<User, 'id' | 'address'> & {address?: Address}>, silent?: boolean) => Promise<void>;
     removeUser: (userId: number) => Promise<void>;
     resetPassword: (userId: number, newPassword: string) => Promise<void>;
-    addToast: (message: string, type: Toast['type']) => void;
+    addToast: (message: string, type: Toast['type'], duration?: number) => void;
+    removeToast: (toastId: number) => void;
     resendNotification: (notificationId: string) => Promise<void>;
     canCourierReceiveAssignment: (courierId: number) => boolean;
     updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => Promise<void>;
@@ -44,6 +45,8 @@ export type AppContextType = {
     canAccessAdminFinancials: (user: User) => boolean;
     canCreateUsers: (user: User) => boolean;
     calculateCommission: (shipment: Shipment, courier: CourierStats) => number;
+    calculatePriorityPrice: (baseRate: number, priority: ShipmentPriority, client: User) => number;
+    getCourierName: (courierId?: number) => string;
 };
 
 export const AppContext = React.createContext<AppContextType | null>(null);
@@ -71,10 +74,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const [isLoading, setIsLoading] = useState(false);
 
-    const addToast = useCallback((message: string, type: Toast['type']) => {
+    const addToast = useCallback((message: string, type: Toast['type'], duration?: number) => {
         const id = Date.now();
-        setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+        const toastDuration = duration || 10000; // Default 10 seconds
+        setToasts(prev => [...prev, { id, message, type, duration: toastDuration }]);
+        // Auto-dismiss logic is now handled in the Toast component
+    }, []);
+
+    const removeToast = useCallback((toastId: number) => {
+        setToasts(prev => prev.filter(t => t.id !== toastId));
     }, []);
 
     const fetchData = useCallback(async () => {
@@ -175,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await executeApiAction(apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(payload) }), 'Shipment created successfully!', 'Failed to create shipment');
     }, [currentUser, executeApiAction]);
 
-    const updateShipmentStatus = useCallback((shipmentId: string, status: ShipmentStatus, details?: { signature?: string; }) =>
+    const updateShipmentStatus = useCallback((shipmentId: string, status: ShipmentStatus, details?: { deliveryPhoto?: string; failureReason?: string; }) =>
         executeApiAction(apiFetch(`/api/shipments/${shipmentId}/status`, { method: 'PUT', body: JSON.stringify({ status, ...details }) }), `Shipment ${shipmentId} updated to ${status}.`, 'Failed to update status'),
         [executeApiAction]);
 
@@ -273,11 +281,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return Math.round(baseCommission * 100) / 100;
     }, []);
     const getAdminFinancials = useCallback((): AdminFinancials => {
+        // Filter shipments by status
         const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
+        const undeliveredShipments = shipments.filter(s => 
+            s.status === ShipmentStatus.PENDING_ASSIGNMENT ||
+            s.status === ShipmentStatus.ASSIGNED_TO_COURIER ||
+            s.status === ShipmentStatus.PICKED_UP ||
+            s.status === ShipmentStatus.IN_TRANSIT ||
+            s.status === ShipmentStatus.OUT_FOR_DELIVERY
+        );
+        const failedShipments = shipments.filter(s => 
+            s.status === ShipmentStatus.DELIVERY_FAILED ||
+            s.status === ShipmentStatus.RETURN_REQUESTED ||
+            s.status === ShipmentStatus.RETURN_IN_PROGRESS ||
+            s.status === ShipmentStatus.RETURNED
+        );
+        
+        // Calculate new enhanced metrics
+        const totalCollectedMoney = deliveredShipments.reduce((sum, s) => sum + s.price, 0); // Total collected (package value + shipping)
+        const undeliveredPackagesValue = undeliveredShipments.reduce((sum, s) => sum + s.packageValue, 0);
+        const failedDeliveriesValue = failedShipments.reduce((sum, s) => sum + s.packageValue, 0);
+        const totalRevenue = deliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0); // Company revenue from shipping fees only
+        const totalFees = shipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0); // All flat rate fees
+        const totalCommission = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
+        const netRevenue = totalRevenue - totalCommission; // Fees - Commission = Net Profit
+        
+        // Legacy calculations (for backward compatibility)
         const grossRevenue = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
         const totalClientFees = deliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
         const totalCourierPayouts = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
-        return { grossRevenue, netRevenue: totalClientFees - totalCourierPayouts, totalClientFees, totalCourierPayouts, totalOrders: deliveredShipments.length, taxCarNumber: '' };
+        
+        return { 
+            // New enhanced metrics
+            totalCollectedMoney,
+            undeliveredPackagesValue,
+            failedDeliveriesValue,
+            totalRevenue,
+            totalFees,
+            totalCommission,
+            netRevenue,
+            
+            // Legacy fields
+            grossRevenue, 
+            totalClientFees, 
+            totalCourierPayouts, 
+            totalOrders: deliveredShipments.length, 
+            taxCarNumber: '' 
+        };
     }, [shipments]);
     const getClientFinancials = useCallback((): ClientFinancialSummary[] => {
         return users.filter(u => u.role === UserRole.CLIENT).map(client => {
@@ -286,12 +336,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
     }, [users, shipments]);
 
+    const calculatePriorityPrice = useCallback((baseRate: number, priority: ShipmentPriority, client: User): number => {
+        // Get priority multipliers from client settings, or use defaults
+        const defaultMultipliers = {
+            [ShipmentPriority.STANDARD]: 1.0,
+            [ShipmentPriority.URGENT]: 1.5,
+            [ShipmentPriority.EXPRESS]: 2.0,
+        };
+        
+        const multipliers = client.priorityMultipliers || defaultMultipliers;
+        const multiplier = multipliers[priority] || defaultMultipliers[priority];
+        
+        return Math.round(baseRate * multiplier * 100) / 100; // Round to 2 decimal places
+    }, []);
+
+    const getCourierName = useCallback((courierId?: number): string => {
+        if (!courierId) return 'Not Assigned';
+        const courier = users.find(u => u.id === courierId);
+        return courier ? courier.name : `Courier ${courierId} (Deleted)`;
+    }, [users]);
+
     const value = useMemo(() => ({ 
         currentUser: currentUserWithBalance, users, shipments, clientTransactions, toasts, notifications, notificationStatus, courierStats, courierTransactions, financialSettings, isLoading,
-        login, logout, addShipment, updateShipmentStatus, updateShipmentFees, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, updateClientFlatRate, updateClientTaxCard, getTaxCardNumber, getAdminFinancials, getClientFinancials, canAccessAdminFinancials, canCreateUsers, calculateCommission
+        login, logout, addShipment, updateShipmentStatus, updateShipmentFees, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, removeToast, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, updateClientFlatRate, updateClientTaxCard, getTaxCardNumber, getAdminFinancials, getClientFinancials, canAccessAdminFinancials, canCreateUsers, calculateCommission, calculatePriorityPrice, getCourierName
     }), [
         currentUserWithBalance, users, shipments, clientTransactions, toasts, notifications, notificationStatus, courierStats, courierTransactions, financialSettings, isLoading,
-        login, logout, addShipment, updateShipmentStatus, updateShipmentFees, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, updateClientFlatRate, updateClientTaxCard, getTaxCardNumber, getAdminFinancials, getClientFinancials, canAccessAdminFinancials, canCreateUsers, calculateCommission
+        login, logout, addShipment, updateShipmentStatus, updateShipmentFees, assignShipmentToCourier, addUser, updateUser, removeUser, resetPassword, addToast, removeToast, assignReturn, reassignCourier, resendNotification, canCourierReceiveAssignment, updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, updateClientFlatRate, updateClientTaxCard, getTaxCardNumber, getAdminFinancials, getClientFinancials, canAccessAdminFinancials, canCreateUsers, calculateCommission, calculatePriorityPrice, getCourierName
     ]);
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

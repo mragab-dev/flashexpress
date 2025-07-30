@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
-import { CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon, TruckIcon } from '../components/Icons';
+import { CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon, TruckIcon, XCircleIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 
 const AdminFinancials = () => {
@@ -50,11 +50,14 @@ const AdminFinancials = () => {
     const handleExportFinancials = () => {
         const headers = ['Metric', 'Value'];
         const data = [
-            ['Gross Revenue (Shipment Prices)', `${adminFinancials.grossRevenue.toFixed(2)} EGP`],
-            ['Total Client Fees (Company Income)', `${adminFinancials.totalClientFees.toFixed(2)} EGP`],
-            ['Total Courier Payouts (Company Cost)', `${adminFinancials.totalCourierPayouts.toFixed(2)} EGP`],
-            ['Net Revenue (Income - Cost)', `${adminFinancials.netRevenue.toFixed(2)} EGP`],
-            ['Total Orders', adminFinancials.totalOrders.toString()]
+            ['Total Collected Money (by Couriers)', `${adminFinancials.totalCollectedMoney.toFixed(2)} EGP`],
+            ['Undelivered Packages Value', `${adminFinancials.undeliveredPackagesValue.toFixed(2)} EGP`],
+            ['Failed Deliveries Value', `${adminFinancials.failedDeliveriesValue.toFixed(2)} EGP`],
+            ['Total Potential Fees (If All Delivered)', `${adminFinancials.totalFees.toFixed(2)} EGP`],
+            ['Total Revenue (Shipping Fees)', `${adminFinancials.totalRevenue.toFixed(2)} EGP`],
+            ['Total Commission (Paid to Couriers)', `${adminFinancials.totalCommission.toFixed(2)} EGP`],
+            ['Net Profit (Revenue - Commission)', `${adminFinancials.netRevenue.toFixed(2)} EGP`],
+            ['Total Delivered Orders', adminFinancials.totalOrders.toString()]
         ];
         exportToCsv(headers, data, 'Admin_Financial_Report');
     };
@@ -75,7 +78,7 @@ const AdminFinancials = () => {
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800">Admin Financial Dashboard</h1>
-                    <p className="text-slate-500 mt-1">Complete financial overview for administrators only.</p>
+                    <p className="text-slate-500 mt-1">Enhanced financial overview with detailed tracking metrics.</p>
                 </div>
                 <div className="flex gap-2">
                     <button 
@@ -88,32 +91,212 @@ const AdminFinancials = () => {
                 </div>
             </div>
 
-            {/* Financial KPIs */}
+            {/* Enhanced Financial KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                 <StatCard 
-                    title="Total Client Fees" 
-                    value={`${adminFinancials.totalClientFees.toFixed(2)} EGP`} 
-                    icon={<PackageIcon className="w-7 h-7"/>} 
-                    color="#16a34a" 
-                />
-                 <StatCard 
-                    title="Total Courier Payouts" 
-                    value={`${adminFinancials.totalCourierPayouts.toFixed(2)} EGP`} 
-                    icon={<TruckIcon className="w-7 h-7"/>} 
-                    color="#f97316" 
+                <StatCard 
+                    title="Total Collected Money" 
+                    value={`${adminFinancials.totalCollectedMoney.toFixed(2)} EGP`} 
+                    icon={<WalletIcon className="w-7 h-7"/>} 
+                    color="#16a34a"
+                    subtitle="Money collected by couriers"
                 />
                 <StatCard 
-                    title="Net Revenue" 
-                    value={`${adminFinancials.netRevenue.toFixed(2)} EGP`} 
+                    title="Undelivered Packages" 
+                    value={`${adminFinancials.undeliveredPackagesValue.toFixed(2)} EGP`} 
+                    icon={<PackageIcon className="w-7 h-7"/>} 
+                    color="#f59e0b"
+                    subtitle="Value of pending deliveries"
+                />
+                <StatCard 
+                    title="Failed Deliveries" 
+                    value={`${adminFinancials.failedDeliveriesValue.toFixed(2)} EGP`} 
+                    icon={<XCircleIcon className="w-7 h-7"/>} 
+                    color="#ef4444"
+                    subtitle="Value of failed/returned packages"
+                />
+                <StatCard 
+                    title="Total Potential Fees" 
+                    value={`${adminFinancials.totalFees.toFixed(2)} EGP`} 
                     icon={<WalletIcon className="w-7 h-7"/>} 
-                    color="#3b82f6" 
+                    color="#3b82f6"
+                    subtitle="If all packages delivered"
                 />
-                 <StatCard 
-                    title="Delivered Orders" 
-                    value={adminFinancials.totalOrders} 
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <StatCard 
+                    title="Total Revenue" 
+                    value={`${adminFinancials.totalRevenue.toFixed(2)} EGP`} 
+                    icon={<WalletIcon className="w-7 h-7"/>} 
+                    color="#16a34a"
+                    subtitle="Shipping fees earned"
+                />
+                <StatCard 
+                    title="Total Commission" 
+                    value={`${adminFinancials.totalCommission.toFixed(2)} EGP`} 
+                    icon={<TruckIcon className="w-7 h-7"/>} 
+                    color="#f97316"
+                    subtitle="Paid to couriers"
+                />
+                <StatCard 
+                    title="Net Profit" 
+                    value={`${adminFinancials.netRevenue.toFixed(2)} EGP`} 
                     icon={<CheckCircleIcon className="w-7 h-7"/>} 
-                    color="#8b5cf6" 
+                    color="#3b82f6"
+                    subtitle="Revenue - Commission"
                 />
+            </div>
+
+            {/* Financial Performance Chart */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h2 className="text-xl font-bold text-slate-800 mb-6">Financial Performance Overview</h2>
+                <div className="h-80 flex items-end gap-8 border-l border-b border-slate-200 pl-6 pb-6">
+                    {/* Revenue vs Commission Chart */}
+                    <div className="flex-1 h-full flex flex-col justify-end items-center group">
+                        <div className="w-full flex flex-col gap-2">
+                            <div 
+                                className="w-full bg-green-500 hover:bg-green-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.totalRevenue / Math.max(adminFinancials.totalRevenue, adminFinancials.totalCommission, adminFinancials.totalFees)) * 100)}%` }}
+                                title={`Total Revenue: ${adminFinancials.totalRevenue.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.totalRevenue.toFixed(0)}
+                                </div>
+                            </div>
+                            <div 
+                                className="w-full bg-orange-500 hover:bg-orange-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.totalCommission / Math.max(adminFinancials.totalRevenue, adminFinancials.totalCommission, adminFinancials.totalFees)) * 100)}%` }}
+                                title={`Total Commission: ${adminFinancials.totalCommission.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.totalCommission.toFixed(0)}
+                                </div>
+                            </div>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-3 text-center">Revenue vs Commission</span>
+                    </div>
+
+                    {/* Potential vs Actual Revenue */}
+                    <div className="flex-1 h-full flex flex-col justify-end items-center group">
+                        <div className="w-full flex flex-col gap-2">
+                            <div 
+                                className="w-full bg-blue-500 hover:bg-blue-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.totalFees / Math.max(adminFinancials.totalRevenue, adminFinancials.totalCommission, adminFinancials.totalFees)) * 100)}%` }}
+                                title={`Total Potential Fees: ${adminFinancials.totalFees.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.totalFees.toFixed(0)}
+                                </div>
+                            </div>
+                            <div 
+                                className="w-full bg-green-400 hover:bg-green-500 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.totalRevenue / Math.max(adminFinancials.totalRevenue, adminFinancials.totalCommission, adminFinancials.totalFees)) * 100)}%` }}
+                                title={`Actual Revenue: ${adminFinancials.totalRevenue.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.totalRevenue.toFixed(0)}
+                                </div>
+                            </div>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-3 text-center">Potential vs Actual</span>
+                    </div>
+
+                    {/* Net Profit Performance */}
+                    <div className="flex-1 h-full flex flex-col justify-end items-center group">
+                        <div 
+                            className="w-full bg-purple-500 hover:bg-purple-600 transition-colors rounded-t-md relative min-h-[20px]"
+                            style={{ height: `${Math.max(20, Math.max(0, (adminFinancials.netRevenue / Math.max(adminFinancials.totalRevenue, adminFinancials.totalCommission, adminFinancials.totalFees)) * 100))}%` }}
+                            title={`Net Profit: ${adminFinancials.netRevenue.toFixed(2)} EGP`}
+                        >
+                            <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                {adminFinancials.netRevenue.toFixed(0)}
+                            </div>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-3 text-center">Net Profit</span>
+                    </div>
+
+                    {/* Delivery Performance */}
+                    <div className="flex-1 h-full flex flex-col justify-end items-center group">
+                        <div className="w-full flex flex-col gap-2">
+                            <div 
+                                className="w-full bg-green-500 hover:bg-green-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.totalCollectedMoney / Math.max(adminFinancials.totalCollectedMoney, adminFinancials.undeliveredPackagesValue, adminFinancials.failedDeliveriesValue)) * 100)}%` }}
+                                title={`Collected Money: ${adminFinancials.totalCollectedMoney.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.totalCollectedMoney.toFixed(0)}
+                                </div>
+                            </div>
+                            <div 
+                                className="w-full bg-yellow-500 hover:bg-yellow-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.undeliveredPackagesValue / Math.max(adminFinancials.totalCollectedMoney, adminFinancials.undeliveredPackagesValue, adminFinancials.failedDeliveriesValue)) * 100)}%` }}
+                                title={`Undelivered Value: ${adminFinancials.undeliveredPackagesValue.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.undeliveredPackagesValue.toFixed(0)}
+                                </div>
+                            </div>
+                            <div 
+                                className="w-full bg-red-500 hover:bg-red-600 transition-colors rounded-t-md relative min-h-[20px]"
+                                style={{ height: `${Math.max(20, (adminFinancials.failedDeliveriesValue / Math.max(adminFinancials.totalCollectedMoney, adminFinancials.undeliveredPackagesValue, adminFinancials.failedDeliveriesValue)) * 100)}%` }}
+                                title={`Failed Deliveries: ${adminFinancials.failedDeliveriesValue.toFixed(2)} EGP`}
+                            >
+                                <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold px-1">
+                                    {adminFinancials.failedDeliveriesValue.toFixed(0)}
+                                </div>
+                            </div>
+                        </div>
+                        <span className="text-xs text-slate-500 mt-3 text-center">Delivery Status</span>
+                    </div>
+                </div>
+                
+                {/* Chart Legend */}
+                <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-green-500 rounded"></div>
+                        <span className="font-medium">Revenue</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                        <span className="font-medium">Commission</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                        <span className="font-medium">Potential Fees</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-purple-500 rounded"></div>
+                        <span className="font-medium">Net Profit</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Financial Summary Table */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h2 className="text-xl font-bold text-slate-800 mb-4">Financial Summary</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <h3 className="text-sm font-semibold text-green-800 mb-1">Total Revenue</h3>
+                        <p className="text-2xl font-bold text-green-600">{adminFinancials.totalRevenue.toFixed(2)} EGP</p>
+                        <p className="text-xs text-green-600 mt-1">From delivered packages</p>
+                    </div>
+                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                        <h3 className="text-sm font-semibold text-orange-800 mb-1">Total Commission</h3>
+                        <p className="text-2xl font-bold text-orange-600">{adminFinancials.totalCommission.toFixed(2)} EGP</p>
+                        <p className="text-xs text-orange-600 mt-1">Paid to couriers</p>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                        <h3 className="text-sm font-semibold text-blue-800 mb-1">Potential Revenue</h3>
+                        <p className="text-2xl font-bold text-blue-600">{adminFinancials.totalFees.toFixed(2)} EGP</p>
+                        <p className="text-xs text-blue-600 mt-1">If all packages delivered</p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                        <h3 className="text-sm font-semibold text-purple-800 mb-1">Net Profit</h3>
+                        <p className="text-2xl font-bold text-purple-600">{adminFinancials.netRevenue.toFixed(2)} EGP</p>
+                        <p className="text-xs text-purple-600 mt-1">Revenue - Commission</p>
+                    </div>
+                </div>
             </div>
 
             {/* Client Financial Summary */}

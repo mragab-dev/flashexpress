@@ -11,7 +11,7 @@ interface ShipmentsViewProps {
 }
 
 const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
-    const { currentUser, shipments, users, updateShipmentFees } = useAppContext();
+    const { currentUser, shipments, users, updateShipmentFees, getCourierName } = useAppContext();
     
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +67,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         if (isAdminOrSuperUser) {
             const headers = ['ID', 'Client', 'Recipient', 'Recipient Phone', 'Date', 'Status', 'Courier', 'Price (EGP)', 'Client Fee (EGP)', 'Courier Commission (EGP)', 'Net Profit (EGP)'];
             const body = shipmentsToExport.map(s => {
-                const courierName = users.find(u => u.id === s.courierId)?.name || 'N/A';
+                const courierName = getCourierName(s.courierId);
                 
                 const clientFee = s.clientFlatRateFee || 0;
                 const courierCommission = s.courierCommission || 0;

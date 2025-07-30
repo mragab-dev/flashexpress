@@ -1,12 +1,13 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Shipment, ShipmentStatus } from '../types';
+import { Shipment, ShipmentStatus, PaymentMethod } from '../types';
 import { BarcodeScanner } from '../components/common/BarcodeScanner';
-import { SignaturePad } from '../components/common/SignaturePad';
+import { PhotoCapture } from '../components/common/PhotoCapture';
 import { Modal } from '../components/common/Modal';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
-import { QrcodeIcon, ReplyIcon } from '../components/Icons';
+import { StatCard } from '../components/common/StatCard';
+import { QrcodeIcon, ReplyIcon, WalletIcon, CurrencyDollarIcon, PackageIcon, CheckCircleIcon } from '../components/Icons';
 
 const CourierTasks = () => {
     const { currentUser, shipments, updateShipmentStatus, addToast } = useAppContext();
@@ -14,11 +15,52 @@ const CourierTasks = () => {
     const [isSignatureModalOpen, setSignatureModalOpen] = useState(false);
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
+    const [isFailureModalOpen, setFailureModalOpen] = useState(false);
+    const [failureShipment, setFailureShipment] = useState<Shipment | null>(null);
+    const [failureReason, setFailureReason] = useState('');
     const shipmentTaskRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
 
     if (!currentUser) return null;
+    
+    // Filter shipments for current courier
     const myDeliveryTasks = shipments.filter(s => s.courierId === currentUser.id && [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
     const myReturnTasks = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.RETURN_IN_PROGRESS);
+    const myDeliveredShipments = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.DELIVERED);
+    
+    // Calculate financial metrics
+    const totalCashToCollect = myDeliveryTasks
+        .filter(s => s.paymentMethod === PaymentMethod.COD)
+        .reduce((sum, s) => sum + s.price, 0);
+    
+    const totalCommissionEarned = myDeliveredShipments
+        .reduce((sum, s) => sum + (s.courierCommission || 0), 0);
+    
+    const pendingDeliveries = myDeliveryTasks.length;
+    
+    // Calculate daily delivery chart data (last 30 days)
+    const deliveryByDay: { [key: string]: number } = {};
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        const dateString = date.toISOString().split('T')[0];
+        deliveryByDay[dateString] = 0;
+    }
+
+    myDeliveredShipments.forEach(s => {
+        if(s.deliveryDate) {
+            const dateString = s.deliveryDate.split('T')[0];
+            if(deliveryByDay.hasOwnProperty(dateString)) {
+                deliveryByDay[dateString]++;
+            }
+        }
+    });
+    
+    const chartData = Object.entries(deliveryByDay).map(([date, count]) => ({
+        date: new Date(date).getDate().toString(),
+        count
+    }));
+    const maxDeliveries = Math.max(...chartData.map(d => d.count), 1);
 
     const handleUpdateStatus = (shipmentId: string, status: ShipmentStatus) => {
         updateShipmentStatus(shipmentId, status);
@@ -29,12 +71,27 @@ const CourierTasks = () => {
         setSignatureModalOpen(true);
     };
 
-    const handleSaveSignature = (signature: string) => {
+    const handleSavePhoto = (photo: string) => {
         if(selectedShipment){
-            updateShipmentStatus(selectedShipment.id, ShipmentStatus.DELIVERED, { signature });
+            updateShipmentStatus(selectedShipment.id, ShipmentStatus.DELIVERED, { deliveryPhoto: photo });
         }
         setSignatureModalOpen(false);
         setSelectedShipment(null);
+    };
+
+    const handleStartFailure = (shipment: Shipment) => {
+        setFailureShipment(shipment);
+        setFailureReason('');
+        setFailureModalOpen(true);
+    };
+
+    const handleSaveFailure = () => {
+        if(failureShipment && failureReason.trim()){
+            updateShipmentStatus(failureShipment.id, ShipmentStatus.DELIVERY_FAILED, { failureReason: failureReason.trim() });
+            setFailureModalOpen(false);
+            setFailureShipment(null);
+            setFailureReason('');
+        }
     };
 
     const handleScanSuccess = useCallback((decodedText: string) => {
@@ -94,7 +151,7 @@ const CourierTasks = () => {
                                 <button onClick={() => handleStartDelivery(task)} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition w-full md:w-auto">
                                     Mark as Delivered
                                 </button>
-                                <button onClick={() => handleUpdateStatus(task.id, ShipmentStatus.DELIVERY_FAILED)} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition w-full md:w-auto">
+                                <button onClick={() => handleStartFailure(task)} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition w-full md:w-auto">
                                     Delivery Failed
                                 </button>
                             </>
@@ -116,6 +173,80 @@ const CourierTasks = () => {
                     <QrcodeIcon className="w-5 h-5"/>
                     Scan Package
                 </button>
+            </div>
+
+            {/* Courier Dashboard KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard 
+                    title="Cash to Collect" 
+                    value={`${totalCashToCollect.toFixed(2)} EGP`} 
+                    icon={<WalletIcon className="w-7 h-7"/>} 
+                    color="#f97316"
+                    subtitle={`${myDeliveryTasks.filter(s => s.paymentMethod === PaymentMethod.COD).length} COD packages`}
+                />
+                <StatCard 
+                    title="Commission Earned" 
+                    value={`${totalCommissionEarned.toFixed(2)} EGP`} 
+                    icon={<CurrencyDollarIcon className="w-7 h-7"/>} 
+                    color="#16a34a"
+                    subtitle={`From ${myDeliveredShipments.length} deliveries`}
+                />
+                <StatCard 
+                    title="Pending Deliveries" 
+                    value={pendingDeliveries} 
+                    icon={<PackageIcon className="w-7 h-7"/>} 
+                    color="#3b82f6"
+                    subtitle="Currently assigned"
+                />
+                <StatCard 
+                    title="Total Deliveries" 
+                    value={myDeliveredShipments.length} 
+                    icon={<CheckCircleIcon className="w-7 h-7"/>} 
+                    color="#8b5cf6"
+                    subtitle="All time completed"
+                />
+            </div>
+
+            {/* Performance Summary */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h3 className="text-xl font-bold text-slate-800 mb-4">Performance Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="text-center">
+                        <div className="text-3xl font-bold text-green-600">{myDeliveredShipments.length}</div>
+                        <div className="text-sm text-slate-600">Total Deliveries</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-3xl font-bold text-blue-600">{pendingDeliveries}</div>
+                        <div className="text-sm text-slate-600">Pending Deliveries</div>
+                    </div>
+                    <div className="text-center">
+                        <div className="text-3xl font-bold text-orange-600">{myDeliveryTasks.filter(s => s.paymentMethod === PaymentMethod.COD).length}</div>
+                        <div className="text-sm text-slate-600">COD Packages</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Daily Deliveries Chart */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h3 className="text-xl font-bold text-slate-800 mb-4">Daily Deliveries (Last 30 Days)</h3>
+                <div className="h-64 flex items-end gap-2 border-l border-b border-slate-200 pl-4 pb-4">
+                   {chartData.map(({ date, count }) => (
+                       <div key={date} className="flex-1 h-full flex flex-col justify-end items-center group">
+                            <div 
+                                className="w-full bg-primary-400 hover:bg-primary-500 transition-colors rounded-t-md relative"
+                                style={{ height: `${(count / maxDeliveries) * 100}%` }}
+                                title={`Day ${date}: ${count} deliveries`}
+                            >
+                                {count > 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
+                                        {count}
+                                    </div>
+                                )}
+                            </div>
+                            <span className="text-xs text-slate-500 mt-1">{date}</span>
+                       </div>
+                   ))}
+                </div>
             </div>
              <div className="space-y-4">
                 {myDeliveryTasks.length === 0 && <p className="text-slate-500 bg-white p-4 rounded-lg">You have no active delivery tasks.</p>}
@@ -146,13 +277,52 @@ const CourierTasks = () => {
                 </div>
             </div>
 
-             <Modal isOpen={isSignatureModalOpen} onClose={() => setSignatureModalOpen(false)} title="Capture Signature for Proof of Delivery">
-                {selectedShipment && <SignaturePad onSave={handleSaveSignature} />}
+             <Modal isOpen={isSignatureModalOpen} onClose={() => setSignatureModalOpen(false)} title="Capture Photo for Proof of Delivery">
+                {selectedShipment && <PhotoCapture onSave={handleSavePhoto} />}
             </Modal>
              <Modal isOpen={isScannerOpen} onClose={() => setScannerOpen(false)} title="Scan Package Barcode">
                 <div className="w-full h-96 flex justify-center items-center">
                    {isScannerOpen && <BarcodeScanner onScanSuccess={handleScanSuccess} />}
                 </div>
+            </Modal>
+             <Modal isOpen={isFailureModalOpen} onClose={() => setFailureModalOpen(false)} title="Delivery Failed - Please Provide Reason">
+                {failureShipment && (
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                            <p className="font-semibold">Shipment: {failureShipment.id}</p>
+                            <p className="text-sm text-slate-600">To: {failureShipment.recipientName}</p>
+                            <p className="text-sm text-slate-600">{failureShipment.toAddress.street}, {failureShipment.toAddress.zone}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Reason for delivery failure *
+                            </label>
+                            <textarea
+                                value={failureReason}
+                                onChange={(e) => setFailureReason(e.target.value)}
+                                placeholder="Please explain why the delivery could not be completed..."
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 resize-none"
+                                rows={3}
+                                required
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                onClick={() => setFailureModalOpen(false)}
+                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleSaveFailure}
+                                disabled={!failureReason.trim()}
+                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-slate-400 disabled:cursor-not-allowed"
+                            >
+                                Mark as Failed
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

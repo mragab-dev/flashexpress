@@ -115,14 +115,22 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  password?: string; // Made optional for existing data, but required for new users
+  password: string;
   role: UserRole;
-  zone?: Zone;
-  walletBalance?: number;
-  phone?: string;
-  address?: Address;
-  location?: GeoLocation;
-  flatRateFee?: number; // Client-specific flat rate fee (only for clients)
+  zone?: Zone; // For couriers
+  walletBalance?: number; // For couriers
+  flatRateFee?: number; // For clients
+  phone?: string; // Phone number
+  location?: GeoLocation; // For couriers (GPS location)
+  
+  // Priority pricing multipliers for clients (defaults: Standard=1.0, Urgent=1.5, Express=2.0)
+  priorityMultipliers?: {
+    [ShipmentPriority.STANDARD]: number;
+    [ShipmentPriority.URGENT]: number;
+    [ShipmentPriority.EXPRESS]: number;
+  };
+  
+  address?: Address; // Optional default address for clients (pickup location)
   taxCardNumber?: string; // Client-specific tax card number (only admins can set)
 }
 
@@ -142,7 +150,8 @@ export interface Shipment {
   courierId?: number;
   creationDate: string;
   deliveryDate?: string;
-  signature?: string; // base64 encoded image
+  deliveryPhoto?: string; // base64 encoded image for delivery proof
+  failureReason?: string; // reason for delivery failure
   priority: ShipmentPriority;
   packageValue: number;
   clientFlatRateFee?: number; // Snapshot of client's fee at creation
@@ -153,6 +162,7 @@ export interface Toast {
   id: number;
   message: string;
   type: 'success' | 'error' | 'info';
+  duration?: number; // Auto-dismiss duration in milliseconds (default: 10000)
 }
 
 export enum TransactionType {
@@ -242,8 +252,17 @@ export interface CourierTransaction {
 
 // Admin Financial System Types
 export interface AdminFinancials {
+  // New enhanced metrics
+  totalCollectedMoney: number; // Money collected by couriers (delivered packages)
+  undeliveredPackagesValue: number; // Value of packages not yet delivered
+  failedDeliveriesValue: number; // Value of packages that failed to deliver
+  totalRevenue: number; // Sum of packageValue for all delivered packages
+  totalFees: number; // Sum of flat rates of all orders
+  totalCommission: number; // Total commission paid for all orders
+  netRevenue: number; // Total Revenue + Total Fees - Total Commission
+  
+  // Legacy fields (keeping for backward compatibility)
   grossRevenue: number;
-  netRevenue: number;
   totalClientFees: number;
   totalCourierPayouts: number;
   totalOrders: number;

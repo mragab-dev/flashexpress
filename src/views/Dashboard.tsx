@@ -46,6 +46,60 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
             <StatCard title="Total Revenue" value={`${shipments.filter(s=> s.status === ShipmentStatus.DELIVERED).reduce((sum, s) => sum + s.price, 0).toFixed(2)} EGP`} icon={<ChartBarIcon className="w-7 h-7"/>} color="#16a34a" onClick={currentUser.role === UserRole.ADMIN ? () => setActiveView('financials') : undefined}/>
         </div>
     );
+
+    const renderSuperUserDashboard = () => (
+        <div className="space-y-6">
+            {/* Main KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard title="Total Shipments" value={shipments.length} icon={<PackageIcon className="w-7 h-7"/>} color="#3b82f6" onClick={() => setActiveView('total-shipments')}/>
+                <StatCard title="Total Clients" value={users.filter(u => u.role === UserRole.CLIENT).length} icon={<UsersIcon className="w-7 h-7"/>} color="#8b5cf6" onClick={() => setActiveView('client-analytics')}/>
+                <StatCard title="Total Couriers" value={users.filter(u => u.role === UserRole.COURIER).length} icon={<TruckIcon className="w-7 h-7"/>} color="#f97316" onClick={() => setActiveView('courier-performance')}/>
+                <StatCard title="Total Revenue" value={`${shipments.filter(s=> s.status === ShipmentStatus.DELIVERED).reduce((sum, s) => sum + s.price, 0).toFixed(2)} EGP`} icon={<ChartBarIcon className="w-7 h-7"/>} color="#16a34a" onClick={() => setActiveView('financials')}/>
+            </div>
+            
+            {/* Secondary Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <StatCard title="Pending Assignment" value={shipments.filter(s => s.status === ShipmentStatus.PENDING_ASSIGNMENT).length} icon={<ClipboardListIcon className="w-7 h-7"/>} color="#f59e0b" onClick={() => setActiveView('assign')}/>
+                <StatCard title="In Transit" value={shipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)).length} icon={<TruckIcon className="w-7 h-7"/>} color="#06b6d4" onClick={() => setActiveView('shipments')}/>
+                <StatCard title="Delivered Today" value={shipments.filter(s => s.status === ShipmentStatus.DELIVERED && new Date(s.deliveryDate || '').toDateString() === new Date().toDateString()).length} icon={<PackageIcon className="w-7 h-7"/>} color="#16a34a"/>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h2 className="text-xl font-bold text-slate-800 mb-4">Quick Actions</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <button 
+                        onClick={() => setActiveView('user-management')} 
+                        className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                    >
+                        <UsersIcon className="w-8 h-8 text-blue-600 mx-auto mb-2"/>
+                        <span className="text-sm font-semibold text-blue-800">Manage Users</span>
+                    </button>
+                    <button 
+                        onClick={() => setActiveView('admin-financials')} 
+                        className="p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+                    >
+                        <ChartBarIcon className="w-8 h-8 text-green-600 mx-auto mb-2"/>
+                        <span className="text-sm font-semibold text-green-800">Admin Financials</span>
+                    </button>
+                    <button 
+                        onClick={() => setActiveView('courier-performance')} 
+                        className="p-4 bg-orange-50 hover:bg-orange-100 rounded-lg border border-orange-200 transition-colors"
+                    >
+                        <TruckIcon className="w-8 h-8 text-orange-600 mx-auto mb-2"/>
+                        <span className="text-sm font-semibold text-orange-800">Courier Performance</span>
+                    </button>
+                    <button 
+                        onClick={() => setActiveView('notifications')} 
+                        className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                    >
+                        <ClipboardListIcon className="w-8 h-8 text-purple-600 mx-auto mb-2"/>
+                        <span className="text-sm font-semibold text-purple-800">Notifications Log</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
     
     return (
         <div>
@@ -53,6 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
             {currentUser.role === UserRole.CLIENT && renderClientDashboard()}
             {currentUser.role === UserRole.COURIER && renderCourierDashboard()}
             {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.ASSIGNING_USER) && renderAdminDashboard()}
+            {currentUser.role === UserRole.SUPER_USER && renderSuperUserDashboard()}
         </div>
     );
 };

@@ -258,14 +258,18 @@ async function main() {
                     }
 
                 } else if (status === 'Delivery Failed') {
-                    const financialSettings = { penaltyAmount: 10, consecutiveFailureLimit: 3 }; // Should be from DB
+                    // Remove automatic penalty - penalties should be set manually by admin/super user
                     const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
 
                     if (courierStats) {
-                        await trx('courier_transactions').insert({ id: generateId('TRN'), courierId: shipment.courierId, type: 'Penalty', amount: -financialSettings.penaltyAmount, description: `Penalty for failed delivery of ${id}`, shipmentId: id, timestamp: new Date().toISOString(), status: 'Processed' });
+                        // Only track consecutive failures for restriction purposes, no automatic penalty
                         const newFailures = (courierStats.consecutiveFailures || 0) + 1;
-                        const shouldRestrict = newFailures >= financialSettings.consecutiveFailureLimit;
-                        await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: newFailures, isRestricted: shouldRestrict, restrictionReason: shouldRestrict ? 'Exceeded consecutive failure limit' : null });
+                        const shouldRestrict = newFailures >= 3; // Keep failure limit for restrictions
+                        await trx('courier_stats').where({ courierId: shipment.courierId }).update({ 
+                            consecutiveFailures: newFailures, 
+                            isRestricted: shouldRestrict, 
+                            restrictionReason: shouldRestrict ? 'Exceeded consecutive failure limit' : null 
+                        });
                     }
                 }
             });
@@ -307,9 +311,58 @@ async function main() {
 
     app.post('/api/couriers/:id/penalty', async (req, res) => {
         const { id } = req.params;
-        const { amount, description } = req.body;
-        try { await knex('courier_transactions').insert({ id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -Math.abs(amount), description, timestamp: new Date().toISOString(), status: 'Processed' }); res.status(200).json({ success: true }); }
+        const { amount, description, shipmentId } = req.body;
+        try { 
+            await knex('courier_transactions').insert({ 
+                id: generateId('TRN'), 
+                courierId: id, 
+                type: 'Penalty', 
+                amount: -Math.abs(amount), 
+                description, 
+                shipmentId: shipmentId || null,
+                timestamp: new Date().toISOString(), 
+                status: 'Processed' 
+            }); 
+            res.status(200).json({ success: true }); 
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
+    });
+
+    app.post('/api/couriers/:id/failed-delivery-penalty', async (req, res) => {
+        const { id } = req.params;
+        const { shipmentId, description } = req.body;
+        
+        try {
+            // Get the shipment to calculate the penalty amount
+            const shipment = await knex('shipments').where({ id: shipmentId }).first();
+            if (!shipment) {
+                return res.status(404).json({ error: 'Shipment not found' });
+            }
+            
+            // Calculate penalty as the total package value
+            const penaltyAmount = shipment.packageValue;
+            
+            await knex('courier_transactions').insert({ 
+                id: generateId('TRN'), 
+                courierId: id, 
+                type: 'Penalty', 
+                amount: -penaltyAmount, 
+                description: description || `Penalty for failed delivery of ${shipmentId} - Package value: ${penaltyAmount} EGP`, 
+                shipmentId: shipmentId,
+                timestamp: new Date().toISOString(), 
+                status: 'Processed' 
+            }); 
+            
+            res.status(200).json({ 
+                success: true, 
+                penaltyAmount: penaltyAmount,
+                message: `Penalty of ${penaltyAmount} EGP applied for failed delivery`
+            }); 
+        }
+        catch (error) { 
+            console.error('Error applying failed delivery penalty:', error);
+            res.status(500).json({ error: 'Server error applying penalty' }); 
+        }
     });
 
     app.post('/api/couriers/payouts', async (req, res) => {

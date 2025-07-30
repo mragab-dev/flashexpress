@@ -9,7 +9,7 @@ import Papa from 'papaparse';
 type BulkShipment = Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'fromAddress' | 'status' | 'creationDate' | 'isLargeOrder' | 'price' | 'clientFlatRateFee' | 'courierCommission'>;
 
 const CreateShipment = () => {
-    const { currentUser, addShipment, addToast } = useAppContext();
+    const { currentUser, addShipment, addToast, calculatePriorityPrice } = useAppContext();
     const [activeTab, setActiveTab] = useState('single');
     
     // State for Single Shipment
@@ -26,49 +26,42 @@ const CreateShipment = () => {
     const [parsedData, setParsedData] = useState<BulkShipment[]>([]);
     const [verificationResults, setVerificationResults] = useState<{ isValid: boolean, errors: string[] }[]>([]);
 
-    const shippingFee = currentUser?.flatRateFee || 0;
+    // Calculate priority-adjusted shipping fee
+    const baseFee = currentUser?.flatRateFee || 0;
+    const priorityAdjustedFee = currentUser ? calculatePriorityPrice(baseFee, priority, currentUser) : baseFee;
     const numericPackageValue = parseFloat(packageValue) || 0;
-    const totalPrice = numericPackageValue + shippingFee;
+    const totalPrice = numericPackageValue + priorityAdjustedFee;
 
     const handleSingleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
-        if (!currentUser?.address) {
-            addToast('Please complete your profile address before creating a shipment.', 'error');
-            return;
-        }
+        if (!currentUser) return;
 
-        const numericPackageValue = parseFloat(packageValue);
-        if (isNaN(numericPackageValue) || numericPackageValue <= 0) {
-            addToast('Please enter a valid price for the package contents.', 'error');
-            return;
-        }
-        
-        if (paymentMethod === PaymentMethod.WALLET && (currentUser?.walletBalance ?? 0) < totalPrice) {
-            addToast(`Insufficient wallet balance to cover the shipping fee. Your balance is ${(currentUser?.walletBalance ?? 0).toFixed(2)} EGP, but the total cost is ${totalPrice.toFixed(2)} EGP.`, 'error');
-            return;
-        }
-        
-        addShipment({ 
-            recipientName, 
-            recipientPhone, 
-            fromAddress: currentUser.address, 
-            toAddress, 
-            packageDescription, 
+        const shipment: Omit<Shipment, 'id' | 'status' | 'creationDate'> = {
+            clientId: currentUser.id,
+            clientName: currentUser.name,
+            recipientName,
+            recipientPhone,
+            fromAddress: currentUser.address || { street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' },
+            toAddress,
+            packageDescription,
             isLargeOrder: false,
-            price: totalPrice, 
-            paymentMethod, 
-            priority, 
-            packageValue: numericPackageValue 
-        });
+            price: totalPrice,
+            paymentMethod,
+            priority,
+            packageValue: numericPackageValue,
+            clientFlatRateFee: priorityAdjustedFee, // Use priority-adjusted fee
+        };
+
+        addShipment(shipment);
+        addToast('Shipment created successfully!', 'success');
         
         // Reset form
-        setRecipientName(''); 
+        setRecipientName('');
         setRecipientPhone('');
         setToAddress({ street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' });
-        setPackageDescription(''); 
+        setPackageDescription('');
         setPaymentMethod(PaymentMethod.COD);
-        setPriority(ShipmentPriority.STANDARD); 
+        setPriority(ShipmentPriority.STANDARD);
         setPackageValue('');
     };
 
@@ -148,8 +141,9 @@ const CreateShipment = () => {
         }
         
         validShipments.forEach(shipment => {
-             const shippingFee = currentUser?.flatRateFee || 0;
-             const totalPrice = shipment.packageValue + shippingFee;
+             // Calculate priority-adjusted fee for each shipment
+             const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, currentUser);
+             const totalPrice = shipment.packageValue + priorityAdjustedFee;
 
             if (shipment.paymentMethod === PaymentMethod.WALLET && (currentUser?.walletBalance ?? 0) < totalPrice) {
                  addToast(`Skipping shipment for ${shipment.recipientName} due to insufficient wallet balance.`, 'error');
@@ -161,6 +155,7 @@ const CreateShipment = () => {
                 fromAddress: currentUser.address!,
                  isLargeOrder: false,
                  price: totalPrice,
+                 clientFlatRateFee: priorityAdjustedFee, // Use priority-adjusted fee
             });
         });
         
@@ -177,9 +172,56 @@ const CreateShipment = () => {
             'Package Description', 'Payment Method', 'Priority', 'Package Value'
         ];
         
+        // Get current user's priority pricing for the template
+        const baseFee = currentUser?.flatRateFee || 75;
+        const standardFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.STANDARD, currentUser) : baseFee;
+        const urgentFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.URGENT, currentUser) : baseFee * 1.5;
+        const expressFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.EXPRESS, currentUser) : baseFee * 2.0;
+        
         const templateData = [
             headers,
-            ['', '', '', '', Object.values(Zone).join(', '), '', '', Object.values(PaymentMethod).join(', '), Object.values(ShipmentPriority).join(', '), '']
+            // Instructions row
+            [
+                'Enter recipient full name',
+                'Enter phone with country code',
+                'Enter full street address',
+                'Cairo, Giza, Alexandria, or Other',
+                'Select from available zones',
+                'Additional address details',
+                'Describe package contents',
+                `${Object.values(PaymentMethod).join(' or ')}`,
+                `Standard (${standardFee.toFixed(2)} EGP), Urgent (${urgentFee.toFixed(2)} EGP), Express (${expressFee.toFixed(2)} EGP)`,
+                'Package value in EGP'
+            ],
+            // Example row
+            [
+                'Ahmed Mohamed',
+                '01012345678',
+                '123 Tahrir Square',
+                'Cairo',
+                'Cairo - Downtown (El Alfy)',
+                'Apartment 5, Floor 3',
+                'Electronics - Mobile Phone',
+                'COD',
+                'Standard',
+                '500.00'
+            ],
+            // Separator row
+            ['=== AVAILABLE OPTIONS ===', '', '', '', '', '', '', '', '', ''],
+            // Available cities
+            ['CITIES:', Object.values(['Cairo', 'Giza', 'Alexandria', 'Other']).join(', '), '', '', '', '', '', '', '', ''],
+            // Available zones (first 10 as example)
+            ['ZONES (sample):', Object.values(Zone).slice(0, 10).join(', '), '...and more', '', '', '', '', '', '', ''],
+            // Available payment methods
+            ['PAYMENT METHODS:', Object.values(PaymentMethod).join(', '), '', '', '', '', '', '', '', ''],
+            // Priority pricing explanation
+            [
+                'PRIORITY PRICING:',
+                `Standard: ${standardFee.toFixed(2)} EGP (base rate)`,
+                `Urgent: ${urgentFee.toFixed(2)} EGP (${((urgentFee/baseFee)).toFixed(1)}x base)`,
+                `Express: ${expressFee.toFixed(2)} EGP (${((expressFee/baseFee)).toFixed(1)}x base)`,
+                '', '', '', '', '', ''
+            ]
         ];
         
         const csv = Papa.unparse(templateData);
@@ -262,8 +304,18 @@ const CreateShipment = () => {
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Package Priority</label>
                             <select value={priority} onChange={e => setPriority(e.target.value as ShipmentPriority)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               {Object.values(ShipmentPriority).map(p => <option key={p} value={p}>{p}</option>)}
+                               {Object.values(ShipmentPriority).map(p => {
+                                   const priorityFee = currentUser ? calculatePriorityPrice(baseFee, p, currentUser) : baseFee;
+                                   return (
+                                       <option key={p} value={p}>
+                                           {p} - {priorityFee.toFixed(2)} EGP
+                                       </option>
+                                   );
+                               })}
                             </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Base fee: {baseFee.toFixed(2)} EGP • Selected: {priorityAdjustedFee.toFixed(2)} EGP
+                            </p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Price of Package Contents (EGP)</label>
@@ -284,7 +336,7 @@ const CreateShipment = () => {
 
                     <div className="p-4 bg-slate-50 rounded-lg text-right">
                         <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
-                        <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{shippingFee.toFixed(2)} EGP</span></div>
+                        <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
                         <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
                         {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
                     </div>
