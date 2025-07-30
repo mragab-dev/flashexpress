@@ -1,9 +1,10 @@
 
 
-export interface GeoLocation {
-  lat: number;
-  lng: number;
-}
+
+
+
+
+
 
 export enum UserRole {
   CLIENT = 'Client',
@@ -116,12 +117,13 @@ export interface User {
   name: string;
   email: string;
   password: string;
-  role: UserRole;
+  role: string; // Changed from UserRole to string
   zone?: Zone; // For couriers
   walletBalance?: number; // For couriers
   flatRateFee?: number; // For clients
   phone?: string; // Phone number
-  location?: GeoLocation; // For couriers (GPS location)
+  
+  location?: { lat: number; lng: number };
   
   // Priority pricing multipliers for clients (defaults: Standard=1.0, Urgent=1.5, Express=2.0)
   priorityMultipliers?: {
@@ -132,6 +134,7 @@ export interface User {
   
   address?: Address; // Optional default address for clients (pickup location)
   taxCardNumber?: string; // Client-specific tax card number (only admins can set)
+  permissions?: Permission[]; // For RBAC, populated client-side
 }
 
 export interface Shipment {
@@ -150,7 +153,6 @@ export interface Shipment {
   courierId?: number;
   creationDate: string;
   deliveryDate?: string;
-  deliveryPhoto?: string; // base64 encoded image for delivery proof
   failureReason?: string; // reason for delivery failure
   priority: ShipmentPriority;
   packageValue: number;
@@ -275,4 +277,45 @@ export interface ClientFinancialSummary {
   totalOrders: number;
   orderSum: number;
   flatRateFee: number;
+}
+
+// --- Role-Based Access Control (RBAC) Types ---
+
+export enum Permission {
+  // User Management
+  MANAGE_USERS = 'manage_users', // Create, edit, delete users
+  MANAGE_ROLES = 'manage_roles', // Create, edit, delete roles and permissions
+  
+  // Shipment Management
+  CREATE_SHIPMENTS = 'create_shipments',
+  VIEW_OWN_SHIPMENTS = 'view_own_shipments',
+  VIEW_ALL_SHIPMENTS = 'view_all_shipments',
+  ASSIGN_SHIPMENTS = 'assign_shipments',
+  MANAGE_RETURNS = 'manage_returns',
+  
+  // Courier-specific tasks
+  VIEW_COURIER_TASKS = 'view_courier_tasks',
+  UPDATE_SHIPMENT_STATUS = 'update_shipment_status',
+  
+  // Financials
+  VIEW_OWN_WALLET = 'view_own_wallet',
+  VIEW_OWN_FINANCIALS = 'view_own_financials',
+  VIEW_ADMIN_FINANCIALS = 'view_admin_financials', // Top-level company financials
+  VIEW_CLIENT_ANALYTICS = 'view_client_analytics',
+  VIEW_COURIER_PERFORMANCE = 'view_courier_performance',
+  MANAGE_COURIER_PAYOUTS = 'manage_courier_payouts',
+  VIEW_COURIER_EARNINGS = 'view_courier_earnings',
+  
+  // System & Logs
+  VIEW_NOTIFICATIONS_LOG = 'view_notifications_log',
+  VIEW_DASHBOARD = 'view_dashboard',
+  VIEW_PROFILE = 'view_profile',
+  VIEW_TOTAL_SHIPMENTS_OVERVIEW = 'view_total_shipments_overview',
+}
+
+export interface CustomRole {
+  id: string;
+  name: string;
+  permissions: Permission[];
+  isSystemRole?: boolean; // System roles cannot be deleted
 }

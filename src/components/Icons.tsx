@@ -4,15 +4,27 @@ type IconProps = {
 };
 
 export const LogoIcon = ({ className = 'w-10 h-10' }: IconProps) => (
-  <svg viewBox="0 0 128 128" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
-    <rect width="128" height="128" rx="32" fill="url(#paint0_linear_1_2)"/>
-    <path d="M41.8732 104L73.4475 56.4028H53.0337L86.1268 24L54.5525 71.5972H74.9663L41.8732 104Z" fill="white"/>
-    <defs>
-    <linearGradient id="paint0_linear_1_2" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
-    <stop stopColor="#4338ca"/>
-    <stop offset="1" stopColor="#6366f1"/>
-    </linearGradient>
-    </defs>
+  <svg viewBox="0 0 200 165" className={className} xmlns="http://www.w3.org/2000/svg">
+    {/* Truck and Bolt Group */}
+    <g transform="translate(0, 5)">
+        {/* Truck outline */}
+        <path d="M17,67 v-20 h20 l15-20 h50 v40 h20 v-15 h15 v20 h10 v-20 h-5" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M37,47 v20" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M17,57 H7" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        
+        {/* Wheels */}
+        <circle cx="45" cy="67" r="12" stroke="#005B9F" strokeWidth="6" fill="none" />
+        <circle cx="125" cy="67" r="12" stroke="#005B9F" strokeWidth="6" fill="none" />
+        <circle cx="45" cy="67" r="5" fill="#94C93D" />
+        <circle cx="125" cy="67" r="5" fill="#94C93D" />
+        
+        {/* Lightning Bolt */}
+        <path d="M87,25 L70,48 L85,48 L75,70 L92,45 L77,45 Z" fill="#94C93D" stroke="none" />
+    </g>
+
+    {/* Text */}
+    <text x="100" y="115" fontFamily="Arial, Helvetica, sans-serif" fontSize="36" fontWeight="bold" fill="#005B9F" textAnchor="middle">FLASH</text>
+    <text x="100" y="140" fontFamily="Arial, Helvetica, sans-serif" fontSize="16" fontWeight="500" fill="#94C93D" textAnchor="middle" letterSpacing="0.5">EXPRESS SHIPPING</text>
   </svg>
 );
 
@@ -27,10 +39,6 @@ export const PackageIcon = ({ className = 'w-6 h-6' }: IconProps) => (
 
 export const TruckIcon = ({ className = 'w-6 h-6' }: IconProps) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
-);
-
-export const MapIcon = ({ className = 'w-6 h-6' }: IconProps) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 16.382V5.618a1 1 0 00-1.447-.894L15 7m-6 10h6"></path></svg>
 );
 
 export const UsersIcon = ({ className = 'w-6 h-6' }: IconProps) => (
@@ -157,10 +165,14 @@ export const XIcon = ({ className = 'w-6 h-6' }: IconProps) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
 );
 
-export const CameraIcon = ({ className = 'w-6 h-6' }: IconProps) => (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-);
-
 export const MenuIcon = ({ className = 'w-6 h-6' }: IconProps) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+);
+
+export const CogIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+);
+
+export const LockClosedIcon = ({ className = 'w-5 h-5' }: IconProps) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
 );

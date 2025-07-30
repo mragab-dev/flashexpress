@@ -1,5 +1,7 @@
+
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
+import { Permission } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
 import { CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon, TruckIcon, XCircleIcon } from '../components/Icons';
@@ -10,7 +12,7 @@ const AdminFinancials = () => {
         currentUser, 
         getAdminFinancials, 
         getClientFinancials, 
-        canAccessAdminFinancials,
+        hasPermission,
         updateClientFlatRate
     } = useAppContext();
 
@@ -19,12 +21,12 @@ const AdminFinancials = () => {
     const [tempFlatRate, setTempFlatRate] = useState<number>(0);
 
     // Access control
-    if (!currentUser || !canAccessAdminFinancials(currentUser)) {
+    if (!currentUser || !hasPermission(Permission.VIEW_ADMIN_FINANCIALS)) {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center">
                     <h2 className="text-2xl font-bold text-slate-800 mb-2">Access Denied</h2>
-                    <p className="text-slate-600">Only administrators can access financial data.</p>
+                    <p className="text-slate-600">Only users with appropriate permissions can access financial data.</p>
                 </div>
             </div>
         );

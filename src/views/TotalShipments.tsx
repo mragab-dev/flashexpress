@@ -1,14 +1,15 @@
+
 import { useAppContext } from '../context/AppContext';
-import { ShipmentStatus, UserRole } from '../types';
+import { ShipmentStatus, Permission } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { PackageIcon, CheckCircleIcon, ClockIcon, XCircleIcon, TruckIcon, DocumentDownloadIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 
 const TotalShipments = () => {
-    const { currentUser, shipments } = useAppContext();
+    const { currentUser, shipments, hasPermission } = useAppContext();
     
-    if (currentUser?.role !== UserRole.SUPER_USER && currentUser?.role !== UserRole.ADMIN) {
-        return <div className="text-center py-8">Access denied. Super User or Admin access required.</div>;
+    if (!hasPermission(Permission.VIEW_TOTAL_SHIPMENTS_OVERVIEW)) {
+        return <div className="text-center py-8">Access denied. You do not have permission to view this page.</div>;
     }
 
     // Calculate shipment statistics
@@ -199,4 +200,4 @@ const TotalShipments = () => {
     );
 };
 
-export default TotalShipments; 
+export default TotalShipments;

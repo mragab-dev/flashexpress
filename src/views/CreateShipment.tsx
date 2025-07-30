@@ -261,7 +261,8 @@ const CreateShipment = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Phone</label>
-                            <input type="tel" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required />
+                            <input type="tel" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="01xxxxxxxxx" required />
+                            <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
                         </div>
                     </div>
                     {/* Address Info */}

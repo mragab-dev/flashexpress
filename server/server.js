@@ -3,8 +3,9 @@
 // 1. Import necessary libraries
 const express = require('express');
 const nodemailer = require('nodemailer');
-const cors = require('cors');
+const cors =require('cors');
 const path = require('path');
+const twilio = require('twilio');
 const { knex, setupDatabase } = require('./db');
 
 // Main async function to set up and start the server
@@ -15,14 +16,29 @@ async function main() {
     // 2. Initialize Express app
     const app = express();
     app.use(cors()); // Use CORS middleware
-    app.use(express.json({limit: '5mb'})); // To parse JSON request bodies, increase limit for signatures
+    app.use(express.json({limit: '5mb'})); // To parse JSON request bodies
 
     // Serve static files from the React app
     app.use(express.static(path.join(__dirname, '../dist')));
 
     // --- Helper Functions ---
-    const generateId = (prefix) => `${prefix}${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
-    const parseJsonField = (item, field) => (item && item[field] && typeof item[field] === 'string' ? { ...item, [field]: JSON.parse(item[field]) } : item);
+    const generateId = (prefix) => `${prefix}_${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
+    const parseJsonField = (item, field) => {
+        if (item && item[field] && typeof item[field] === 'string') {
+            try {
+                return { ...item, [field]: JSON.parse(item[field]) };
+            } catch (e) {
+                console.error(`Failed to parse JSON for field ${field}:`, e);
+                return item;
+            }
+        }
+        return item;
+    };
+    
+    // Twilio Client
+    const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+        ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+        : null;
 
 
     // --- Nodemailer Transporter ---
@@ -43,7 +59,6 @@ async function main() {
             from: `"Flash Express" <${process.env.EMAIL_USER}>`,
             to: recipient,
             subject: subject,
-            text: message,
             html: `<p>${message.replace(/\n/g, '<br>')}</p>`,
         };
 
@@ -77,7 +92,6 @@ async function main() {
 
         await trx('notifications').insert(notification);
         
-        // Send email asynchronously without blocking the transaction
         sendEmail({ recipient: client.email, subject: `Shipment ${shipment.id} is now ${newStatus}`, message }).then(async sent => {
             if (sent) {
                 await knex('notifications').where({ id: notification.id }).update({ sent: true });
@@ -85,8 +99,108 @@ async function main() {
         }).catch(err => console.error("Async email send failed:", err));
     };
 
+    const processDeliveredShipment = async (trx, shipment) => {
+        const newStatus = 'Delivered';
+        const updatePayload = { 
+            status: newStatus, 
+            deliveryDate: new Date().toISOString() 
+        };
+    
+        await trx('shipments').where({ id: shipment.id }).update(updatePayload);
+        await createNotification(trx, shipment, newStatus);
+    
+        if (!shipment.courierId) {
+            console.warn(`Shipment ${shipment.id} marked 'Delivered' without an assigned courier. Skipping courier transactions.`);
+        } else {
+            const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
+            if (courierStats) {
+                const commissionAmount = shipment.courierCommission || 0;
+                if (commissionAmount > 0) {
+                    await trx('courier_transactions').insert({
+                        id: generateId('TRN'),
+                        courierId: shipment.courierId,
+                        type: 'Commission',
+                        amount: commissionAmount,
+                        description: `Commission for shipment ${shipment.id}`,
+                        shipmentId: shipment.id,
+                        timestamp: new Date().toISOString(),
+                        status: 'Processed'
+                    });
+                }
+                await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: 0 });
+            }
+        }
+    
+        if (shipment.paymentMethod === 'Wallet') {
+            const client = await trx('users').where({ id: shipment.clientId }).first();
+            if (client) {
+                const packageValue = shipment.packageValue || 0;
+                const shippingFee = shipment.clientFlatRateFee || 0;
+                await trx('client_transactions').insert([
+                    { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: packageValue, date: new Date().toISOString(), description: `Credit for delivered shipment ${shipment.id}` },
+                    { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shippingFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}` }
+                ]);
+            }
+        }
+    };
+
 
     // --- API Endpoints ---
+
+    // Role Management
+    app.get('/api/roles', async (req, res) => {
+        try {
+            const roles = await knex('custom_roles').select();
+            const parsedRoles = roles.map(r => parseJsonField(r, 'permissions'));
+            res.json(parsedRoles);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch roles' });
+        }
+    });
+
+    app.post('/api/roles', async (req, res) => {
+        const { name, permissions } = req.body;
+        if (!name || !permissions) {
+            return res.status(400).json({ error: 'Missing role name or permissions' });
+        }
+        try {
+            const newRole = { id: generateId('role'), name, permissions: JSON.stringify(permissions), isSystemRole: false };
+            await knex('custom_roles').insert(newRole);
+            res.status(201).json(newRole);
+        } catch (error) {
+            res.status(500).json({ error: 'Server error creating role' });
+        }
+    });
+
+    app.put('/api/roles/:id', async (req, res) => {
+        const { id } = req.params;
+        const { name, permissions } = req.body;
+        const updatePayload = {};
+        if (name) updatePayload.name = name;
+        if (permissions) updatePayload.permissions = JSON.stringify(permissions);
+
+        try {
+            await knex('custom_roles').where({ id }).update(updatePayload);
+            res.status(200).json({ success: true });
+        } catch (error) {
+            res.status(500).json({ error: 'Server error updating role' });
+        }
+    });
+
+    app.delete('/api/roles/:id', async (req, res) => {
+        const { id } = req.params;
+        try {
+            const role = await knex('custom_roles').where({ id }).first();
+            if (role.isSystemRole) {
+                return res.status(403).json({ error: 'Cannot delete a system role.' });
+            }
+            await knex('custom_roles').where({ id }).del();
+            res.status(200).json({ success: true });
+        } catch (error) {
+            res.status(500).json({ error: 'Server error deleting role' });
+        }
+    });
+    
 
     // User Login
     app.post('/api/login', async (req, res) => {
@@ -107,24 +221,24 @@ async function main() {
     // Fetch all application data
     app.get('/api/data', async (req, res) => {
       try {
-        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications] = await Promise.all([
+        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles] = await Promise.all([
           knex('users').select(),
           knex('shipments').select(),
           knex('client_transactions').select(),
           knex('courier_stats').select(),
           knex('courier_transactions').select(),
           knex('notifications').select(),
+          knex('custom_roles').select(),
         ]);
 
         const safeUsers = users.map(u => {
             const { password, ...user } = u;
-            let parsedUser = parseJsonField(user, 'address');
-            parsedUser = parseJsonField(parsedUser, 'location');
-            return parsedUser;
+            return parseJsonField(user, 'address');
         });
         const parsedShipments = shipments.map(s => parseJsonField(parseJsonField(s, 'fromAddress'), 'toAddress'));
+        const parsedRoles = customRoles.map(r => parseJsonField(r, 'permissions'));
 
-        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications });
+        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles });
       } catch (error) {
         res.status(500).json({ error: 'Failed to fetch application data' });
       }
@@ -132,7 +246,7 @@ async function main() {
 
     // User Management
     app.post('/api/users', async (req, res) => {
-        const { name, email, password, role, zone, address, phone, flatRateFee, taxCardNumber, location } = req.body;
+        const { name, email, password, role, zone, address, phone, flatRateFee, taxCardNumber } = req.body;
         
         if (!name || !email || !password || !role) {
             return res.status(400).json({ error: 'Missing required fields: name, email, password, role' });
@@ -148,7 +262,6 @@ async function main() {
                     role,
                     phone: phone || null,
                     address: address ? JSON.stringify(address) : null,
-                    location: location ? JSON.stringify(location) : null,
                 };
 
                 if (role === 'Client') {
@@ -164,7 +277,7 @@ async function main() {
                     await trx('courier_stats').insert({
                         courierId: insertedUser.id,
                         commissionType: 'flat',
-                        commissionValue: 30, // Default value
+                        commissionValue: 30,
                         consecutiveFailures: 0,
                         isRestricted: false,
                         performanceRating: 5.0,
@@ -186,10 +299,13 @@ async function main() {
 
     app.put('/api/users/:id', async (req, res) => {
         const { id } = req.params;
-        const { address, location, ...userData } = req.body;
+        const { address, ...userData } = req.body;
         if (address) userData.address = JSON.stringify(address);
-        if (location) userData.location = JSON.stringify(location);
-        try { await knex('users').where({ id }).update(userData); res.status(200).json({ success: true }); } 
+        
+        try {
+            await knex('users').where({ id }).update(userData);
+            res.status(200).json({ success: true });
+        } 
         catch (error) { res.status(500).json({ error: 'Server error updating user' }); }
     });
 
@@ -233,94 +349,37 @@ async function main() {
 
     app.put('/api/shipments/:id/status', async (req, res) => {
         const { id } = req.params;
-        const { status, deliveryPhoto, failureReason } = req.body;
+        const { status, failureReason } = req.body;
     
         try {
             await knex.transaction(async (trx) => {
-                // 1. Fetch shipment to ensure it exists and get its current state.
                 const shipment = await trx('shipments').where({ id }).first();
                 if (!shipment) {
                     const err = new Error('Shipment not found');
-                    // @ts-ignore
                     err.statusCode = 404;
                     throw err;
                 }
-    
-                // 2. Prepare and execute the primary update in a single operation.
-                const updatePayload = { status };
-                if (req.body.hasOwnProperty('deliveryPhoto')) {
-                    updatePayload.deliveryPhoto = deliveryPhoto || null;
-                }
-                if (req.body.hasOwnProperty('failureReason')) {
-                    updatePayload.failureReason = failureReason || null;
-                }
+                
+                // The 'Delivered' status is now handled by the verification endpoint
                 if (status === 'Delivered') {
-                    updatePayload.deliveryDate = new Date().toISOString();
+                    const err = new Error("Deliveries must be confirmed via the verification endpoint.");
+                    err.statusCode = 400;
+                    throw err;
                 }
+    
+                const updatePayload = { status };
+                if (req.body.hasOwnProperty('failureReason')) updatePayload.failureReason = failureReason || null;
+                
                 await trx('shipments').where({ id }).update(updatePayload);
     
-                // 3. Handle side effects based on the new status.
                 await createNotification(trx, shipment, status);
     
-                if (status === 'Delivered') {
-                    // Ensure a courier is assigned before proceeding with courier-related logic.
-                    if (!shipment.courierId) {
-                        console.warn(`Shipment ${id} marked 'Delivered' without an assigned courier. Skipping courier transactions.`);
-                    } else {
-                        const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
-                        if (courierStats) {
-                            // Use the commission value snapshotted during assignment for accuracy.
-                            const commissionAmount = shipment.courierCommission || 0;
-                            if (commissionAmount > 0) {
-                                await trx('courier_transactions').insert({
-                                    id: generateId('TRN'),
-                                    courierId: shipment.courierId,
-                                    type: 'Commission',
-                                    amount: commissionAmount,
-                                    description: `Commission for shipment ${id}`,
-                                    shipmentId: id,
-                                    timestamp: new Date().toISOString(),
-                                    status: 'Processed'
-                                });
-                            }
-                            // Reset consecutive failures on a successful delivery.
-                            await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: 0 });
-                        }
-                    }
-    
-                    // Handle client wallet transactions for 'Wallet' payment method.
-                    if (shipment.paymentMethod === 'Wallet') {
-                        const client = await trx('users').where({ id: shipment.clientId }).first();
-                        if (client) {
-                            // Use fallbacks to prevent errors from null/undefined values.
-                            const packageValue = shipment.packageValue || 0;
-                            const shippingFee = shipment.clientFlatRateFee || 0;
-                            await trx('client_transactions').insert([
-                                {
-                                    id: generateId('TRN'), // Use a robust unique ID generator
-                                    userId: client.id,
-                                    type: 'Deposit',
-                                    amount: packageValue,
-                                    date: new Date().toISOString(),
-                                    description: `Credit for delivered shipment ${id}`
-                                },
-                                {
-                                    id: generateId('TRN'),
-                                    userId: client.id,
-                                    type: 'Payment',
-                                    amount: -shippingFee,
-                                    date: new Date().toISOString(),
-                                    description: `Shipping fee for ${id}`
-                                }
-                            ]);
-                        }
-                    }
-                } else if (status === 'Delivery Failed') {
+                if (status === 'Delivery Failed') {
                     if (shipment.courierId) {
                         const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
                         if (courierStats) {
                             const newFailures = (courierStats.consecutiveFailures || 0) + 1;
-                            const failureLimit = 3; // This should ideally be a configurable value.
+                            const failureLimit = 3;
                             const shouldRestrict = newFailures >= failureLimit;
                             await trx('courier_stats').where({ courierId: shipment.courierId }).update({
                                 consecutiveFailures: newFailures,
@@ -334,7 +393,6 @@ async function main() {
             res.status(200).json({ success: true });
         } catch (error) {
             console.error("Error updating shipment status:", error);
-            // @ts-ignore
             const statusCode = error.statusCode || 500;
             const message = error.message || 'Server error while updating status';
             res.status(statusCode).json({ error: message });
@@ -347,33 +405,20 @@ async function main() {
         try {
             await knex.transaction(async (trx) => {
                 const shipment = await trx('shipments').where({ id }).first();
-                if (!shipment) {
-                    return res.status(404).json({ error: 'Shipment not found' });
-                }
-
+                if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
                 const client = await trx('users').where({ id: shipment.clientId }).first();
-                if (!client) {
-                    return res.status(404).json({ error: 'Client not found for shipment' });
-                }
-
+                if (!client) return res.status(404).json({ error: 'Client not found for shipment' });
                 const courierStats = await trx('courier_stats').where({ courierId }).first();
-                if (!courierStats) {
-                     return res.status(404).json({ error: 'Courier financial settings not found.' });
-                }
+                if (!courierStats) return res.status(404).json({ error: 'Courier financial settings not found.' });
 
-                // Calculate courier commission based on their settings
-                const commission = courierStats.commissionType === 'flat'
-                    ? courierStats.commissionValue
-                    : shipment.price * (courierStats.commissionValue / 100);
+                const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
 
-                const updatePayload = {
+                await trx('shipments').where({ id }).update({
                     courierId,
                     status: shipment.status === 'Return Requested' ? 'Return in Progress' : 'In Transit',
                     clientFlatRateFee: client.flatRateFee,
-                    courierCommission: commission // Save calculated commission on assignment
-                };
-
-                await trx('shipments').where({ id }).update(updatePayload);
+                    courierCommission: commission
+                });
             });
             res.status(200).json({ success: true });
         } catch (error) {
@@ -394,6 +439,81 @@ async function main() {
         } catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
+    // --- New Recipient Verification Endpoints ---
+    app.post('/api/shipments/:id/send-delivery-code', async (req, res) => {
+        const { id } = req.params;
+        try {
+            const shipment = await knex('shipments').where({ id }).first();
+            if (!shipment) return res.status(404).json({ error: "Shipment not found." });
+            if (!shipment.recipientPhone) return res.status(400).json({ error: "Recipient phone number not available for this shipment." });
+
+            const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
+            const expires_at = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes expiry
+
+            await knex('delivery_verifications').insert({ shipmentId: id, code, expires_at }).onConflict('shipmentId').merge();
+            
+            const message = `Your Flash Express delivery code for shipment ${id} is: ${code}`;
+            
+            // Log the SMS notification
+            await knex('notifications').insert({
+                id: generateId('NOT'),
+                shipmentId: id,
+                channel: 'SMS',
+                recipient: shipment.recipientPhone,
+                message: 'Delivery verification code sent to recipient.',
+                date: new Date().toISOString(),
+                status: shipment.status,
+                sent: true,
+            });
+
+            if (twilioClient) {
+                await twilioClient.messages.create({ body: message, from: process.env.TWILIO_PHONE_NUMBER, to: shipment.recipientPhone });
+            }
+            console.log(`==== Delivery Verification for ${id} to ${shipment.recipientPhone} ====\nCode: ${code}\n=======================================`);
+            res.json({ success: true, message: 'Delivery verification code sent to recipient.' });
+        } catch (error) {
+            console.error('Delivery code sending error:', error);
+            res.status(500).json({ error: 'Failed to send delivery code.' });
+        }
+    });
+
+    app.post('/api/shipments/:id/verify-delivery', async (req, res) => {
+        const { id } = req.params;
+        const { code } = req.body;
+        if (!code) return res.status(400).json({ error: 'Verification code is required.' });
+
+        try {
+            await knex.transaction(async trx => {
+                const verification = await trx('delivery_verifications').where({ shipmentId: id }).first();
+                if (!verification || new Date() > new Date(verification.expires_at)) {
+                    const err = new Error('Verification code expired or invalid.');
+                    err.statusCode = 400;
+                    throw err;
+                }
+
+                if (verification.code === code) {
+                    const shipment = await trx('shipments').where({ id }).first();
+                    if (!shipment) {
+                        const err = new Error('Shipment not found.');
+                        err.statusCode = 404;
+                        throw err;
+                    }
+                    await processDeliveredShipment(trx, shipment);
+                    await trx('delivery_verifications').where({ shipmentId: id }).del();
+                } else {
+                    const err = new Error('Incorrect verification code.');
+                    err.statusCode = 400;
+                    throw err;
+                }
+            });
+            res.json({ success: true, message: 'Delivery confirmed successfully.' });
+        } catch (error) {
+            console.error('Delivery verification error:', error);
+            const statusCode = error.statusCode || 500;
+            res.status(statusCode).json({ error: error.message || 'Server error verifying delivery.' });
+        }
+    });
+
 
     // Courier Financials
     app.put('/api/couriers/:id/settings', async (req, res) => {
@@ -408,14 +528,8 @@ async function main() {
         const { amount, description, shipmentId } = req.body;
         try { 
             await knex('courier_transactions').insert({ 
-                id: generateId('TRN'), 
-                courierId: id, 
-                type: 'Penalty', 
-                amount: -Math.abs(amount), 
-                description, 
-                shipmentId: shipmentId || null,
-                timestamp: new Date().toISOString(), 
-                status: 'Processed' 
+                id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -Math.abs(amount), description, 
+                shipmentId: shipmentId || null, timestamp: new Date().toISOString(), status: 'Processed' 
             }); 
             res.status(200).json({ success: true }); 
         }
@@ -425,35 +539,20 @@ async function main() {
     app.post('/api/couriers/:id/failed-delivery-penalty', async (req, res) => {
         const { id } = req.params;
         const { shipmentId, description } = req.body;
-        
         try {
-            // Get the shipment to calculate the penalty amount
             const shipment = await knex('shipments').where({ id: shipmentId }).first();
-            if (!shipment) {
-                return res.status(404).json({ error: 'Shipment not found' });
-            }
+            if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
             
-            // Calculate penalty as the total package value
             const penaltyAmount = shipment.packageValue;
             
             await knex('courier_transactions').insert({ 
-                id: generateId('TRN'), 
-                courierId: id, 
-                type: 'Penalty', 
-                amount: -penaltyAmount, 
+                id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -penaltyAmount, 
                 description: description || `Penalty for failed delivery of ${shipmentId} - Package value: ${penaltyAmount} EGP`, 
-                shipmentId: shipmentId,
-                timestamp: new Date().toISOString(), 
-                status: 'Processed' 
+                shipmentId: shipmentId, timestamp: new Date().toISOString(), status: 'Processed' 
             }); 
             
-            res.status(200).json({ 
-                success: true, 
-                penaltyAmount: penaltyAmount,
-                message: `Penalty of ${penaltyAmount} EGP applied for failed delivery`
-            }); 
-        }
-        catch (error) { 
+            res.status(200).json({ success: true, penaltyAmount, message: `Penalty of ${penaltyAmount} EGP applied` }); 
+        } catch (error) { 
             console.error('Error applying failed delivery penalty:', error);
             res.status(500).json({ error: 'Server error applying penalty' }); 
         }
@@ -481,9 +580,8 @@ async function main() {
             
             const messageParts = notification.message.split('\n\n');
             const subject = messageParts[0] || `Update for Shipment ${notification.shipmentId}`;
-            const message = messageParts.slice(1).join('\n\n');
             
-            const emailSent = await sendEmail({ recipient: notification.recipient, subject, message });
+            const emailSent = await sendEmail({ recipient: notification.recipient, subject, message: notification.message });
             
             await knex('notifications').where({ id }).update({ sent: emailSent });
             res.status(200).json({ success: true, sent: emailSent });
@@ -495,15 +593,10 @@ async function main() {
     // Public Shipment Tracking
     app.post('/api/track', async (req, res) => {
         const { trackingId, phone } = req.body;
-
-        if (!trackingId || !phone) {
-            return res.status(400).json({ error: 'Tracking ID and phone number are required.' });
-        }
+        if (!trackingId || !phone) return res.status(400).json({ error: 'Tracking ID and phone number required.' });
 
         try {
             const shipment = await knex('shipments').whereRaw('UPPER(id) = ?', [trackingId.toUpperCase()]).first();
-
-            // Security: check both shipment and phone match before returning anything.
             if (shipment) {
                  const client = await knex('users').where({ id: shipment.clientId }).first();
                  if (shipment.recipientPhone === phone || client?.phone === phone) {
@@ -511,14 +604,11 @@ async function main() {
                     return res.json(parsedShipment);
                  }
             }
-
-            // If we reach here, either shipment not found or phone didn't match.
-            // Return a generic error to prevent fishing for valid tracking IDs.
-            return res.status(404).json({ error: 'Wrong shipment ID or phone number. Please check your details and try again.' });
+            return res.status(404).json({ error: 'Wrong shipment ID or phone number.' });
 
         } catch (error) {
             console.error('Error tracking shipment:', error);
-            res.status(500).json({ error: 'Server error during shipment tracking.' });
+            res.status(500).json({ error: 'Server error during tracking.' });
         }
     });
 

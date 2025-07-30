@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, User, Shipment, ShipmentStatus } from '../types';
-import { ArrowUpCircleIcon, DocumentDownloadIcon, MailIcon, MapIcon, PhoneIcon, UserCircleIcon } from '../components/Icons';
+import { ArrowUpCircleIcon, DocumentDownloadIcon, MailIcon, PhoneIcon, UserCircleIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 import { Modal } from '../components/common/Modal';
 import { ShipmentList } from '../components/specific/ShipmentList';
@@ -200,17 +200,12 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                                         <p className="font-semibold text-slate-800">{selectedClient.phone || 'N/A'}</p>
                                     </div>
                                 </div>
-                                <div className="flex items-start gap-3">
-                                    <MapIcon className="w-6 h-6 text-slate-500 mt-1 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-600">Address</p>
-                                        {selectedClient.address ? (
-                                            <p className="font-semibold text-slate-800">{`${selectedClient.address.street}, ${selectedClient.address.city}`}</p>
-                                        ) : (
-                                            <p className="font-semibold text-slate-800">N/A</p>
-                                        )}
+                                {selectedClient.address && (
+                                     <div className="flex items-start gap-3">
+                                        <p className="text-sm font-medium text-slate-600">Address:</p>
+                                        <p className="font-semibold text-slate-800">{`${selectedClient.address.street}, ${selectedClient.address.city}`}</p>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
 

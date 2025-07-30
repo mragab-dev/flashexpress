@@ -1,7 +1,8 @@
 
+
 import React from 'react';
 import { Shipment, ShipmentStatus } from '../../types';
-import { ClipboardListIcon, UserCircleIcon, TruckIcon, MapIcon, CheckCircleIcon, XCircleIcon } from '../Icons';
+import { ClipboardListIcon, UserCircleIcon, TruckIcon, CheckCircleIcon, XCircleIcon } from '../Icons';
 
 const STATUS_ORDER: ShipmentStatus[] = [
     ShipmentStatus.PENDING_ASSIGNMENT,
@@ -17,7 +18,7 @@ const timelineSteps = [
     { status: ShipmentStatus.ASSIGNED_TO_COURIER, icon: <UserCircleIcon />, title: 'Courier Assigned', description: 'A courier is on their way to pick up the package.' },
     { status: ShipmentStatus.PICKED_UP, icon: <TruckIcon />, title: 'Picked Up', description: 'The courier has collected the package.' },
     { status: ShipmentStatus.IN_TRANSIT, icon: <TruckIcon />, title: 'In Transit', description: 'The package is on its way to the destination city.' },
-    { status: ShipmentStatus.OUT_FOR_DELIVERY, icon: <MapIcon />, title: 'Out for Delivery', description: 'The package is on its final leg of the journey.' },
+    { status: ShipmentStatus.OUT_FOR_DELIVERY, icon: <TruckIcon />, title: 'Out for Delivery', description: 'The package is on its final leg of the journey.' },
     { status: ShipmentStatus.DELIVERED, icon: <CheckCircleIcon />, title: 'Delivered', description: 'The package has been successfully delivered.' },
 ];
 

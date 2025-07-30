@@ -1,66 +1,76 @@
+
+
 import React from 'react';
-import { UserRole } from '../types';
+import { Permission } from '../types';
+import { useAppContext } from '../context/AppContext';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon
+    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon
 } from '../components/Icons';
 
+interface NavItemConfig {
+    name: string;
+    icon: JSX.Element;
+    view: string;
+    permission: Permission;
+}
+
+const ALL_NAV_ITEMS: NavItemConfig[] = [
+    // Common
+    { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard', permission: Permission.VIEW_DASHBOARD },
+    
+    // Client
+    { name: 'My Shipments', icon: <PackageIcon />, view: 'shipments', permission: Permission.VIEW_OWN_SHIPMENTS },
+    { name: 'Create Shipment', icon: <PlusCircleIcon />, view: 'create', permission: Permission.CREATE_SHIPMENTS },
+    { name: 'My Wallet', icon: <WalletIcon />, view: 'wallet', permission: Permission.VIEW_OWN_WALLET },
+    { name: 'My Financials', icon: <ChartBarIcon />, view: 'financials', permission: Permission.VIEW_OWN_FINANCIALS },
+    { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile', permission: Permission.VIEW_PROFILE },
+    
+    // Courier
+    { name: 'My Tasks', icon: <ClipboardListIcon />, view: 'tasks', permission: Permission.VIEW_COURIER_TASKS },
+    { name: 'My Earnings', icon: <CurrencyDollarIcon />, view: 'courier-financials', permission: Permission.VIEW_COURIER_EARNINGS },
+
+    // Admin & Super User
+    { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments', permission: Permission.VIEW_ALL_SHIPMENTS },
+    { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign', permission: Permission.ASSIGN_SHIPMENTS },
+    { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns', permission: Permission.MANAGE_RETURNS},
+    { name: 'User Management', icon: <UsersIcon />, view: 'users', permission: Permission.MANAGE_USERS },
+    { name: 'Role Management', icon: <CogIcon />, view: 'roles', permission: Permission.MANAGE_ROLES },
+    { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics', permission: Permission.VIEW_CLIENT_ANALYTICS },
+    { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance', permission: Permission.VIEW_COURIER_PERFORMANCE },
+    { name: 'Financials', icon: <ChartBarIcon />, view: 'financials', permission: Permission.VIEW_ADMIN_FINANCIALS },
+    { name: 'Admin Financials', icon: <ChartBarIcon />, view: 'admin-financials', permission: Permission.VIEW_ADMIN_FINANCIALS },
+    { name: 'Total Shipments', icon: <PackageIcon />, view: 'total-shipments', permission: Permission.VIEW_TOTAL_SHIPMENTS_OVERVIEW },
+    { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications', permission: Permission.VIEW_NOTIFICATIONS_LOG },
+];
+
 interface SidebarProps {
-    role: UserRole;
     activeView: string;
     setActiveView: (view: string) => void;
     isOpen: boolean;
     setIsOpen: (isOpen: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView, isOpen, setIsOpen }) => {
-    const navItems = {
-        [UserRole.CLIENT]: [
-            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'My Shipments', icon: <PackageIcon />, view: 'shipments' },
-            { name: 'Create Shipment', icon: <PlusCircleIcon />, view: 'create' },
-            { name: 'Wallet', icon: <WalletIcon />, view: 'wallet' },
-            { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
-            { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile' },
-        ],
-        [UserRole.COURIER]: [
-            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'My Tasks', icon: <ClipboardListIcon />, view: 'tasks' },
-            { name: 'My Earnings', icon: <CurrencyDollarIcon />, view: 'courier-financials' },
-        ],
-        [UserRole.ASSIGNING_USER]: [
-            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
-        ],
-        [UserRole.SUPER_USER]: [
-            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
-            { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
-            { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
-            { name: 'User Management', icon: <UsersIcon />, view: 'users' },
-            { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
-            { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
-            { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
-            { name: 'Total Shipments', icon: <PackageIcon />, view: 'total-shipments' },
-            { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
-        ],
-        [UserRole.ADMIN]: [
-            { name: 'Dashboard', icon: <DashboardIcon />, view: 'dashboard' },
-            { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments' },
-            { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign' },
-            { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns'},
-            { name: 'User Management', icon: <UsersIcon />, view: 'users' },
-            { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics' },
-            { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance' },
-            { name: 'Financials', icon: <ChartBarIcon />, view: 'financials' },
-            { name: 'Admin Financials', icon: <ChartBarIcon />, view: 'admin-financials' },
-            { name: 'Total Shipments', icon: <PackageIcon />, view: 'total-shipments' },
-            { name: 'Notifications Log', icon: <BellIcon />, view: 'notifications' },
-        ],
-    };
-    
-    const currentNav = navItems[role] || [];
+const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen, setIsOpen }) => {
+    const { hasPermission } = useAppContext();
+
+    const availableNavItems = ALL_NAV_ITEMS.filter(item => {
+        // Special case to avoid duplicate "Financials" links for admins
+        if (item.view === 'financials' && hasPermission(Permission.VIEW_ADMIN_FINANCIALS)) {
+             // If user can see Admin Financials, don't show the basic "Financials" link
+            const adminFinancialsLink = ALL_NAV_ITEMS.find(i => i.view === 'admin-financials');
+            if (adminFinancialsLink && hasPermission(adminFinancialsLink.permission)) {
+                return false;
+            }
+        }
+        // Special case to avoid duplicate "Shipments" links for clients with full access
+        if (item.view === 'shipments' && item.permission === Permission.VIEW_OWN_SHIPMENTS && hasPermission(Permission.VIEW_ALL_SHIPMENTS)) {
+            return false;
+        }
+
+        return hasPermission(item.permission);
+    });
     
     const handleItemClick = (view: string) => {
         setActiveView(view);
@@ -92,9 +102,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, setActiveView, isOp
                     </button>
                 </div>
                 <nav className="flex-1 p-4 space-y-1.5">
-                    {currentNav.map(item => (
+                    {availableNavItems.map(item => (
                         <button 
-                            key={item.name} 
+                            key={item.view} 
                             onClick={() => handleItemClick(item.view)}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition ${
                                 activeView === item.view 

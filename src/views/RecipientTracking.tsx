@@ -88,8 +88,9 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
                                          <span className="absolute inset-y-0 left-0 flex items-center pl-3">
                                             <PhoneIcon className="h-5 w-5 text-slate-400" />
                                         </span>
-                                        <input id="phoneNumber" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="e.g., 01012345678" required />
+                                        <input id="phoneNumber" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="01xxxxxxxxx" required />
                                     </div>
+                                    <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
                                 </div>
                                 <button type="submit" disabled={isLoading} className="w-full flex justify-center bg-primary-600 text-white font-semibold py-3 px-4 rounded-lg shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition duration-300 disabled:bg-slate-400">
                                     {isLoading ? 'Searching...' : 'Track Now'}

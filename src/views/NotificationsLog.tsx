@@ -1,5 +1,6 @@
 import { useAppContext } from '../context/AppContext';
-import { ReplyIcon } from '../components/Icons';
+import { ReplyIcon, PhoneIcon, MailIcon } from '../components/Icons';
+import { NotificationChannel } from '../types';
 
 const NotificationsLog = () => {
     const { notifications, notificationStatus, resendNotification } = useAppContext();
@@ -16,7 +17,7 @@ const NotificationsLog = () => {
         <div className="bg-white rounded-xl shadow-sm">
              <div className="p-5 border-b border-slate-200">
                 <h2 className="text-xl font-bold text-slate-800">Notifications Log</h2>
-                <p className="text-slate-500 mt-1 text-sm">A log of all automated email notifications and their delivery status.</p>
+                <p className="text-slate-500 mt-1 text-sm">A log of all automated email and SMS notifications and their delivery status.</p>
             </div>
             
             {/* Desktop Table */}
@@ -25,6 +26,7 @@ const NotificationsLog = () => {
                     <thead className="bg-slate-50">
                         <tr>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Date</th>
+                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Channel</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Recipient</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Subject</th>
@@ -39,15 +41,25 @@ const NotificationsLog = () => {
                                 <tr key={n.id}>
                                     <td className="px-6 py-4 text-sm whitespace-nowrap">{new Date(n.date).toLocaleString()}</td>
                                     <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            {n.channel === NotificationChannel.SMS ? (
+                                                <PhoneIcon className="w-5 h-5 text-blue-500" />
+                                            ) : (
+                                                <MailIcon className="w-5 h-5 text-gray-500" />
+                                            )}
+                                            <span className="text-sm">{n.channel}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
                                         <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusDisplay[currentStatus].color}`}>
                                             {statusDisplay[currentStatus].text}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-sm">{n.recipient}</td>
-                                    <td className="px-6 py-4 text-sm">{n.message.split('\n\n')[0]}</td>
+                                    <td className="px-6 py-4 text-sm">{n.channel === NotificationChannel.EMAIL ? n.message.split('\n\n')[0] : n.message}</td>
                                     <td className="px-6 py-4 font-mono text-sm">{n.shipmentId}</td>
                                     <td className="px-6 py-4">
-                                        {currentStatus === 'failed' && (
+                                        {currentStatus === 'failed' && n.channel === NotificationChannel.EMAIL && (
                                             <button onClick={() => resendNotification(n.id)} className="flex items-center gap-2 px-3 py-1 bg-primary-500 text-white text-xs font-semibold rounded-lg hover:bg-primary-600 transition">
                                                 <ReplyIcon className="w-4 h-4 transform -scale-x-100"/>
                                                 Resend
@@ -74,11 +86,18 @@ const NotificationsLog = () => {
                                 </span>
                             </div>
                             <div className="text-sm">
-                                <p className="font-semibold">{n.message.split('\n\n')[0]}</p>
-                                <p className="text-slate-600">To: {n.recipient}</p>
+                                <p className="font-semibold">{n.channel === NotificationChannel.EMAIL ? n.message.split('\n\n')[0] : n.message}</p>
+                                <div className="flex items-center gap-2 text-slate-600">
+                                     {n.channel === NotificationChannel.SMS ? (
+                                        <PhoneIcon className="w-4 h-4 text-blue-500" />
+                                    ) : (
+                                        <MailIcon className="w-4 h-4 text-gray-500" />
+                                    )}
+                                    To: {n.recipient}
+                                </div>
                                 <p className="text-xs text-slate-500 mt-1">{new Date(n.date).toLocaleString()}</p>
                             </div>
-                            {currentStatus === 'failed' && (
+                            {currentStatus === 'failed' && n.channel === NotificationChannel.EMAIL && (
                                 <button onClick={() => resendNotification(n.id)} className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary-500 text-white text-sm font-semibold rounded-lg hover:bg-primary-600 transition">
                                     <ReplyIcon className="w-4 h-4 transform -scale-x-100"/>
                                     Resend Notification

@@ -1,6 +1,10 @@
+
+
+
+
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Shipment, UserRole, ShipmentStatus } from '../types';
+import { Shipment, UserRole, ShipmentStatus, Permission } from '../types';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import Dashboard from '../views/Dashboard';
@@ -15,7 +19,6 @@ import Financials from '../views/Financials';
 import AdminFinancials from '../views/AdminFinancials';
 import NotificationsLog from '../views/NotificationsLog';
 import Profile from '../views/Profile';
-import CourierMapView from '../views/CourierMapView';
 import ClientAnalytics from '../views/ClientAnalytics';
 import CourierFinancials from '../views/CourierFinancials';
 import CourierPerformance from '../views/CourierPerformance';
@@ -24,9 +27,10 @@ import { Modal } from '../components/common/Modal';
 import { ShipmentLabel } from '../components/common/ShipmentLabel';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { PrinterIcon, ReplyIcon, SwitchHorizontalIcon } from '../components/Icons';
+import RoleManagement from '../views/RoleManagement';
 
 const MainLayout: React.FC = () => {
-    const { currentUser, logout, users, updateShipmentStatus, reassignCourier, getCourierName } = useAppContext();
+    const { currentUser, logout, users, updateShipmentStatus, reassignCourier, getCourierName, hasPermission } = useAppContext();
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
     const [labelShipment, setLabelShipment] = useState<Shipment | null>(null);
@@ -79,6 +83,7 @@ const MainLayout: React.FC = () => {
             case 'assign': return <AssignShipments />;
             case 'tasks': return <CourierTasks />;
             case 'users': return <UserManagement />;
+            case 'roles': return <RoleManagement />;
             case 'returns': return <ManageReturns />;
             case 'wallet': return <Wallet />;
             case 'financials': return <Financials />;
@@ -86,7 +91,6 @@ const MainLayout: React.FC = () => {
             case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
-            case 'map': return <CourierMapView />;
             case 'courier-financials': return <CourierFinancials />;
             case 'courier-performance': return <CourierPerformance onSelectShipment={setSelectedShipment} />;
             case 'total-shipments': return <TotalShipments />;
@@ -97,7 +101,6 @@ const MainLayout: React.FC = () => {
     return (
         <div className="flex h-screen bg-slate-100">
             <Sidebar 
-                role={currentUser.role} 
                 activeView={activeView} 
                 setActiveView={setActiveView} 
                 isOpen={isSidebarOpen}
@@ -139,19 +142,14 @@ const MainLayout: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                        {selectedShipment.deliveryPhoto && (
-                            <div>
-                                <strong>Delivery Photo:</strong>
-                                <img src={selectedShipment.deliveryPhoto} alt="Delivery Proof" className="border rounded-lg mt-2 max-w-sm"/>
-                            </div>
-                        )}
+                        
                         {selectedShipment.failureReason && (
                             <div>
                                 <strong>Failure Reason:</strong>
                                 <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mt-2">{selectedShipment.failureReason}</p>
                             </div>
                         )}
-                        {currentUser.role === UserRole.ADMIN && selectedShipment.courierId && ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(selectedShipment.status) && (
+                        {hasPermission(Permission.ASSIGN_SHIPMENTS) && selectedShipment.courierId && ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(selectedShipment.status) && (
                             <div className="mt-4 pt-4 border-t border-slate-200">
                                 {!isReassigning ? (
                                     <button onClick={() => setIsReassigning(true)} className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg hover:bg-yellow-200 transition text-sm">

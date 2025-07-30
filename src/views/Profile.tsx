@@ -1,4 +1,5 @@
 
+
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, Address, Zone } from '../types';
@@ -90,7 +91,10 @@ const Profile = () => {
                          <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
                             {isEditing ? (
-                                <input type="tel" name="phone" value={formData.phone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg"/>
+                                <>
+                                    <input type="tel" name="phone" value={formData.phone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" placeholder="01xxxxxxxxx"/>
+                                    <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
+                                </>
                             ) : (
                                 <p className="text-lg text-slate-800 p-2">{currentUser.phone || 'Not set'}</p>
                             )}

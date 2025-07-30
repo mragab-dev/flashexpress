@@ -1,24 +1,27 @@
-
 import React, { useState, useRef, useCallback } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment, ShipmentStatus, PaymentMethod } from '../types';
 import { BarcodeScanner } from '../components/common/BarcodeScanner';
-import { PhotoCapture } from '../components/common/PhotoCapture';
 import { Modal } from '../components/common/Modal';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { StatCard } from '../components/common/StatCard';
 import { QrcodeIcon, ReplyIcon, WalletIcon, CurrencyDollarIcon, PackageIcon, CheckCircleIcon } from '../components/Icons';
 
 const CourierTasks = () => {
-    const { currentUser, shipments, updateShipmentStatus, addToast } = useAppContext();
-    const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
-    const [isSignatureModalOpen, setSignatureModalOpen] = useState(false);
+    const { currentUser, shipments, updateShipmentStatus, addToast, sendDeliveryVerificationCode, verifyDelivery } = useAppContext();
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
     const [isFailureModalOpen, setFailureModalOpen] = useState(false);
     const [failureShipment, setFailureShipment] = useState<Shipment | null>(null);
     const [failureReason, setFailureReason] = useState('');
     const shipmentTaskRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
+    
+    // State for the new delivery verification modal
+    const [verificationShipment, setVerificationShipment] = useState<Shipment | null>(null);
+    const [verificationStep, setVerificationStep] = useState<'send' | 'verify'>('send');
+    const [verificationCode, setVerificationCode] = useState('');
+    const [isVerificationLoading, setIsVerificationLoading] = useState(false);
+
 
     if (!currentUser) return null;
     
@@ -65,19 +68,6 @@ const CourierTasks = () => {
     const handleUpdateStatus = (shipmentId: string, status: ShipmentStatus) => {
         updateShipmentStatus(shipmentId, status);
     };
-    
-    const handleStartDelivery = (shipment: Shipment) => {
-        setSelectedShipment(shipment);
-        setSignatureModalOpen(true);
-    };
-
-    const handleSavePhoto = (photo: string) => {
-        if(selectedShipment){
-            updateShipmentStatus(selectedShipment.id, ShipmentStatus.DELIVERED, { deliveryPhoto: photo });
-        }
-        setSignatureModalOpen(false);
-        setSelectedShipment(null);
-    };
 
     const handleStartFailure = (shipment: Shipment) => {
         setFailureShipment(shipment);
@@ -93,6 +83,39 @@ const CourierTasks = () => {
             setFailureReason('');
         }
     };
+    
+    // --- Delivery Verification Handlers ---
+    const openVerificationModal = (shipment: Shipment) => {
+        setVerificationShipment(shipment);
+        setVerificationStep('send');
+        setVerificationCode('');
+        setIsVerificationLoading(false);
+    };
+
+    const closeVerificationModal = () => {
+        setVerificationShipment(null);
+    };
+
+    const handleSendCode = async () => {
+        if (!verificationShipment) return;
+        setIsVerificationLoading(true);
+        const success = await sendDeliveryVerificationCode(verificationShipment.id);
+        if (success) {
+            setVerificationStep('verify');
+        }
+        setIsVerificationLoading(false);
+    };
+
+    const handleVerifyAndDeliver = async () => {
+        if (!verificationShipment || verificationCode.length !== 6) return;
+        setIsVerificationLoading(true);
+        const success = await verifyDelivery(verificationShipment.id, verificationCode);
+        if (success) {
+            closeVerificationModal();
+        }
+        setIsVerificationLoading(false);
+    };
+
 
     const handleScanSuccess = useCallback((decodedText: string) => {
         setScannerOpen(false);
@@ -148,8 +171,8 @@ const CourierTasks = () => {
                         )}
                         {task.status === ShipmentStatus.OUT_FOR_DELIVERY && (
                             <>
-                                <button onClick={() => handleStartDelivery(task)} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition w-full md:w-auto">
-                                    Mark as Delivered
+                                <button onClick={() => openVerificationModal(task)} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition w-full md:w-auto">
+                                    Verify & Deliver
                                 </button>
                                 <button onClick={() => handleStartFailure(task)} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition w-full md:w-auto">
                                     Delivery Failed
@@ -277,9 +300,6 @@ const CourierTasks = () => {
                 </div>
             </div>
 
-             <Modal isOpen={isSignatureModalOpen} onClose={() => setSignatureModalOpen(false)} title="Capture Photo for Proof of Delivery">
-                {selectedShipment && <PhotoCapture onSave={handleSavePhoto} />}
-            </Modal>
              <Modal isOpen={isScannerOpen} onClose={() => setScannerOpen(false)} title="Scan Package Barcode">
                 <div className="w-full h-96 flex justify-center items-center">
                    {isScannerOpen && <BarcodeScanner onScanSuccess={handleScanSuccess} />}
@@ -321,6 +341,50 @@ const CourierTasks = () => {
                                 Mark as Failed
                             </button>
                         </div>
+                    </div>
+                )}
+            </Modal>
+            
+            <Modal isOpen={!!verificationShipment} onClose={closeVerificationModal} title="Confirm Delivery with Recipient">
+                {verificationShipment && (
+                    <div className="space-y-4">
+                        <div className="bg-slate-50 p-4 rounded-lg">
+                            <p className="font-semibold">Shipment: {verificationShipment.id}</p>
+                            <p className="text-sm text-slate-600">Recipient: {verificationShipment.recipientName}</p>
+                            <p className="text-sm text-slate-600">Phone: {verificationShipment.recipientPhone}</p>
+                        </div>
+
+                        {verificationStep === 'send' ? (
+                            <div>
+                                <p className="mb-4">Click below to send a 6-digit verification code to the recipient's phone number.</p>
+                                <button
+                                    onClick={handleSendCode}
+                                    disabled={isVerificationLoading}
+                                    className="w-full px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 disabled:bg-slate-400"
+                                >
+                                    {isVerificationLoading ? 'Sending...' : 'Send Code to Recipient'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div>
+                                <p className="mb-2">Enter the 6-digit code received by the recipient.</p>
+                                <input
+                                    type="text"
+                                    value={verificationCode}
+                                    onChange={(e) => setVerificationCode(e.target.value)}
+                                    maxLength={6}
+                                    placeholder="123456"
+                                    className="w-full text-center tracking-[1em] font-mono text-2xl px-4 py-2 border border-slate-300 rounded-lg"
+                                />
+                                <button
+                                    onClick={handleVerifyAndDeliver}
+                                    disabled={isVerificationLoading || verificationCode.length !== 6}
+                                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-slate-400"
+                                >
+                                    {isVerificationLoading ? 'Verifying...' : 'Confirm Delivery'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </Modal>

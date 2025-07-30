@@ -1,6 +1,6 @@
 // The base URL for the API.
-// For production builds (like an APK), it reads from the .env.production file.
-// For local development (`npm run dev`), it's an empty string, so requests are relative
+// In production, this reads from the VITE_API_URL in your .env.production file.
+// In development, it defaults to an empty string, so requests are relative
 // and handled by Vite's proxy.
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
