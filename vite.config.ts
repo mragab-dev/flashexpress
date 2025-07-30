@@ -11,7 +11,7 @@ export default defineConfig({
     // Add the ngrok host to allowedHosts
     // This must match the ngrok URL EXACTLY (without the https:// or http:// part)
     allowedHosts: [
-      'e137ff55dc69.ngrok-free.app', // <-- Your current ngrok host
+      '2f385e248a81.ngrok-free.app', // <-- Your current ngrok host
       'localhost',
       '127.0.0.1'
     ],
@@ -20,7 +20,7 @@ export default defineConfig({
     // This is crucial for live updates to work through the ngrok tunnel.
     hmr: {
       // The HMR host should be the ngrok URL (without the https://)
-      host: 'e137ff55dc69.ngrok-free.app', // <-- Your current ngrok host
+      host: '2f385e248a81.ngrok-free.app ', // <-- Your current ngrok host
       protocol: 'wss', // Use secure WebSocket for HMR over the HTTPS ngrok tunnel
       clientPort: 443 // Default HTTPS port
     },

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission } from '../types';
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
 import { apiFetch } from '../api/client';
+import { io, Socket } from 'socket.io-client';
 
 type NotificationStatus = 'sending' | 'sent' | 'failed';
 
@@ -139,6 +140,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fetchData();
         }
     }, [currentUser, fetchData]);
+    
+    // WebSocket integration for real-time updates
+    useEffect(() => {
+        if (!currentUser) {
+            return;
+        }
+
+        // Use the production API URL if available, otherwise default to local server for development.
+        const socketURL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const socket: Socket = io(socketURL);
+
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket server with ID:', socket.id);
+        });
+
+        socket.on('data_updated', () => {
+            console.log('Received data_updated event. Fetching new data...');
+            addToast('Data updated in real-time.', 'info', 2000); // A short, informative toast
+            fetchData();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from WebSocket server.');
+        });
+        
+        // Cleanup on component unmount or user logout
+        return () => {
+            socket.disconnect();
+        };
+    }, [currentUser, fetchData, addToast]);
 
     useEffect(() => {
         if (currentUser && users.length > 0) {
@@ -165,13 +196,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             await action;
             if(successMessage) addToast(successMessage, 'success');
-            await fetchData();
+            // Data will be re-fetched by the WebSocket event, so no need to call fetchData() here for the acting client.
+            // await fetchData(); 
             return true;
         } catch (error: any) {
             addToast(`${errorMessagePrefix}: ${error.message}`, 'error');
             return false;
         }
-    }, [addToast, fetchData]);
+    }, [addToast]);
 
     // Role Management
     const addRole = useCallback(async (roleData: Omit<CustomRole, 'id'>) => {
@@ -195,9 +227,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             await apiFetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(userData) });
             if (!silent) addToast('User updated successfully.', 'success');
-            await fetchData();
+            // await fetchData(); // Let websocket handle refresh
         } catch (error: any) { if (!silent) addToast(`Update failed: ${error.message}`, 'error'); }
-    }, [addToast, fetchData]);
+    }, [addToast]);
 
     const removeUser = useCallback(async (userId: number) => {
         await executeApiAction(apiFetch(`/api/users/${userId}`, { method: 'DELETE' }), 'User removed successfully.', 'Failed to remove user');
@@ -244,13 +276,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             await apiFetch(`/api/notifications/${notificationId}/resend`, { method: 'POST' });
             addToast('Notification resent successfully.', 'success');
-            await fetchData(); 
+            // await fetchData(); // Let websocket handle refresh
             setNotificationStatus(prev => ({...prev, [notificationId]: 'sent' }));
         } catch (e: any) {
             addToast(e.message, 'error');
             setNotificationStatus(prev => ({...prev, [notificationId]: 'failed' }));
         }
-    }, [addToast, fetchData]);
+    }, [addToast]);
     
     const updateCourierSettings = useCallback(async (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => {
         await executeApiAction(apiFetch(`/api/couriers/${courierId}/settings`, { method: 'PUT', body: JSON.stringify(newSettings) }), "Courier settings updated.", 'Failed to update settings');

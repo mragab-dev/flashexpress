@@ -1,9 +1,10 @@
 // server/db.js
+const path = require('path');
 
 const knex = require('knex')({
   client: 'sqlite3',
   connection: {
-    filename: './flash.sqlite',
+    filename: path.join(__dirname, 'flash.sqlite'),
   },
   useNullAsDefault: true,
 });
