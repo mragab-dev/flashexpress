@@ -24,8 +24,15 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Server error: ${response.statusText}`);
+            // Try to parse error response as JSON, but handle cases where it's not.
+            try {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Server error: ${response.statusText}`);
+            } catch (jsonError) {
+                // If the error response isn't JSON, throw a generic error with the status text.
+                // This prevents the "JSON.parse: unexpected character" error on the client.
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
         }
 
         const contentType = response.headers.get("content-type");
