@@ -15,7 +15,9 @@ const AppContent = () => {
         return <RecipientTracking onBackToApp={() => setIsTrackingView(false)} />;
     }
 
-    if (isLoading) {
+    // Only show the full-page loading screen if we are not yet logged in.
+    // This prevents the main layout from being unmounted during background data refreshes.
+    if (isLoading && !currentUser) {
         return (
             <div className="flex items-center justify-center h-screen bg-slate-100">
                 <div className="text-center">

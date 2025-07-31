@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission } from '../types';
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
@@ -147,9 +148,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
         }
 
-        // Use the production API URL if available, otherwise default to local server for development.
-        const socketURL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        const socket: Socket = io(socketURL);
+        // Options to force a direct WebSocket connection. This is more reliable than
+        // the default "long-polling then upgrade" mechanism, especially when behind
+        // a reverse proxy like ngrok.
+        const socketOptions = {
+            transports: ['websocket'],
+        };
+
+        const socket: Socket = import.meta.env.VITE_API_URL 
+            ? io(import.meta.env.VITE_API_URL, socketOptions) 
+            : io(socketOptions);
 
         socket.on('connect', () => {
             console.log('Connected to WebSocket server with ID:', socket.id);

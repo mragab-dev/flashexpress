@@ -8,7 +8,10 @@ const nodemailer = require('nodemailer');
 const cors =require('cors');
 const path = require('path');
 const twilio = require('twilio');
+const bcrypt = require('bcrypt');
 const { knex, setupDatabase } = require('./db');
+
+const saltRounds = 10; // For bcrypt hashing
 
 // Main async function to set up and start the server
 async function main() {
@@ -25,7 +28,12 @@ async function main() {
         }
     });
     
-    app.use(cors()); // Use CORS middleware
+    // Explicitly configure CORS for better proxy compatibility
+    app.use(cors({
+        origin: '*', // Allow all origins
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    }));
     app.use(express.json({limit: '5mb'})); // To parse JSON request bodies
 
     // Serve static files from the React app
@@ -186,8 +194,8 @@ async function main() {
         try {
             const newRole = { id: generateId('role'), name, permissions: JSON.stringify(permissions), isSystemRole: false };
             await knex('custom_roles').insert(newRole);
-            io.emit('data_updated');
             res.status(201).json(newRole);
+            io.emit('data_updated');
         } catch (error) {
             res.status(500).json({ error: 'Server error creating role' });
         }
@@ -202,8 +210,8 @@ async function main() {
 
         try {
             await knex('custom_roles').where({ id }).update(updatePayload);
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } catch (error) {
             res.status(500).json({ error: 'Server error updating role' });
         }
@@ -217,8 +225,8 @@ async function main() {
                 return res.status(403).json({ error: 'Cannot delete a system role.' });
             }
             await knex('custom_roles').where({ id }).del();
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } catch (error) {
             res.status(500).json({ error: 'Server error deleting role' });
         }
@@ -227,18 +235,24 @@ async function main() {
 
     // User Login
     app.post('/api/login', async (req, res) => {
-      const { email, password } = req.body;
-      try {
-        const user = await knex('users').where({ email: email.toLowerCase(), password }).first();
-        if (user) {
-          const { password, ...userWithoutPassword } = user;
-          res.json(userWithoutPassword);
-        } else {
-          res.status(401).json({ error: 'Invalid credentials' });
+        const { email, password } = req.body;
+        try {
+            const user = await knex('users').where({ email: email.toLowerCase() }).first();
+            if (user) {
+                const match = await bcrypt.compare(password, user.password);
+                if (match) {
+                    const { password, ...userWithoutPassword } = user;
+                    res.json(userWithoutPassword);
+                } else {
+                    res.status(401).json({ error: 'Invalid credentials' });
+                }
+            } else {
+                res.status(401).json({ error: 'Invalid credentials' });
+            }
+        } catch (error) {
+            console.error("Login error:", error);
+            res.status(500).json({ error: 'Server error during login' });
         }
-      } catch (error) {
-        res.status(500).json({ error: 'Server error during login' });
-      }
     });
 
     // Fetch all application data
@@ -278,10 +292,11 @@ async function main() {
         try {
             let newUser = null;
             await knex.transaction(async (trx) => {
+                const hashedPassword = await bcrypt.hash(password, saltRounds);
                 const userPayload = {
                     name,
                     email: email.toLowerCase(),
-                    password,
+                    password: hashedPassword,
                     role,
                     phone: phone || null,
                     address: address ? JSON.stringify(address) : null,
@@ -309,9 +324,9 @@ async function main() {
                 newUser = insertedUser;
             });
             
-            io.emit('data_updated');
             const { password: _, ...userWithoutPassword } = newUser;
             res.status(201).json(userWithoutPassword);
+            io.emit('data_updated');
         } catch (error) {
             console.error('Error creating user:', error);
             if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE constraint failed'))) {
@@ -327,37 +342,59 @@ async function main() {
         if (address) userData.address = JSON.stringify(address);
         
         try {
+            // Do not allow password to be changed via this generic endpoint
+            delete userData.password;
             await knex('users').where({ id }).update(userData);
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } 
         catch (error) { res.status(500).json({ error: 'Server error updating user' }); }
     });
 
     app.delete('/api/users/:id', async (req, res) => {
         const { id } = req.params;
-        try { await knex('users').where({ id }).del(); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('users').where({ id }).del();
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error deleting user' }); }
     });
 
     app.put('/api/users/:id/password', async (req, res) => {
         const { id } = req.params;
         const { password } = req.body;
-        try { await knex('users').where({ id }).update({ password }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        if (!password) {
+            return res.status(400).json({ error: 'Password is required' });
+        }
+        try { 
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+            await knex('users').where({ id }).update({ password: hashedPassword });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error resetting password' }); }
     });
 
     app.put('/api/clients/:id/flatrate', async (req, res) => {
         const { id } = req.params;
         const { flatRateFee } = req.body;
-        try { await knex('users').where({ id, role: 'Client' }).update({ flatRateFee }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('users').where({ id, role: 'Client' }).update({ flatRateFee });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
     app.put('/api/clients/:id/taxcard', async (req, res) => {
         const { id } = req.params;
         const { taxCardNumber } = req.body;
-        try { await knex('users').where({ id, role: 'Client' }).update({ taxCardNumber }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('users').where({ id, role: 'Client' }).update({ taxCardNumber });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
@@ -368,8 +405,8 @@ async function main() {
         try {
             const newShipment = { ...shipmentData, id: generateId('FLS'), status: 'Pending Assignment', creationDate: new Date().toISOString(), fromAddress: JSON.stringify(shipmentData.fromAddress), toAddress: JSON.stringify(shipmentData.toAddress) };
             await knex('shipments').insert(newShipment);
-            io.emit('data_updated');
             res.status(201).json(newShipment);
+            io.emit('data_updated');
         } catch (error) { res.status(500).json({ error: 'Server error creating shipment' }); }
     });
 
@@ -416,8 +453,8 @@ async function main() {
                     }
                 }
             });
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } catch (error) {
             console.error("Error updating shipment status:", error);
             const statusCode = error.statusCode || 500;
@@ -432,11 +469,38 @@ async function main() {
         try {
             await knex.transaction(async (trx) => {
                 const shipment = await trx('shipments').where({ id }).first();
-                if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
+                if (!shipment) {
+                    const err = new Error('Shipment not found');
+                    err.statusCode = 404;
+                    throw err;
+                }
+                
                 const client = await trx('users').where({ id: shipment.clientId }).first();
-                if (!client) return res.status(404).json({ error: 'Client not found for shipment' });
-                const courierStats = await trx('courier_stats').where({ courierId }).first();
-                if (!courierStats) return res.status(404).json({ error: 'Courier financial settings not found.' });
+                if (!client) {
+                    const err = new Error('Client not found for shipment');
+                    err.statusCode = 404;
+                    throw err;
+                }
+
+                let courierStats = await trx('courier_stats').where({ courierId }).first();
+
+                // If courier financial settings don't exist, create them with defaults.
+                // This handles cases where a user might have been created without being assigned the Courier role initially.
+                if (!courierStats) {
+                    console.warn(`Courier stats for courierId ${courierId} not found. Creating default record.`);
+                    const defaultStats = {
+                        courierId: courierId,
+                        commissionType: 'flat',
+                        commissionValue: 30, // Default commission value
+                        consecutiveFailures: 0,
+                        isRestricted: false,
+                        performanceRating: 5.0,
+                    };
+                    await trx('courier_stats').insert(defaultStats);
+                    
+                    // Assign the newly created stats to be used in this transaction
+                    courierStats = defaultStats;
+                }
 
                 const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
 
@@ -447,11 +511,13 @@ async function main() {
                     courierCommission: commission
                 });
             });
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } catch (error) {
             console.error("Error in shipment assignment:", error);
-            res.status(500).json({ error: 'Server error during assignment' });
+            const statusCode = error.statusCode || 500;
+            const message = error.message || 'Server error during assignment';
+            res.status(statusCode).json({ error: message });
         }
     });
 
@@ -463,8 +529,8 @@ async function main() {
             if (clientFlatRateFee !== undefined) payload.clientFlatRateFee = clientFlatRateFee;
             if (courierCommission !== undefined) payload.courierCommission = courierCommission;
             await knex('shipments').where({ id }).update(payload);
-            io.emit('data_updated');
             res.status(200).json({ success: true });
+            io.emit('data_updated');
         } catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
@@ -499,8 +565,9 @@ async function main() {
                 await twilioClient.messages.create({ body: message, from: process.env.TWILIO_PHONE_NUMBER, to: shipment.recipientPhone });
             }
             console.log(`==== Delivery Verification for ${id} to ${shipment.recipientPhone} ====\nCode: ${code}\n=======================================`);
-            io.emit('data_updated');
+            
             res.json({ success: true, message: 'Delivery verification code sent to recipient.' });
+            io.emit('data_updated');
         } catch (error) {
             console.error('Delivery code sending error:', error);
             res.status(500).json({ error: 'Failed to send delivery code.' });
@@ -536,8 +603,8 @@ async function main() {
                     throw err;
                 }
             });
-            io.emit('data_updated');
             res.json({ success: true, message: 'Delivery confirmed successfully.' });
+            io.emit('data_updated');
         } catch (error) {
             console.error('Delivery verification error:', error);
             const statusCode = error.statusCode || 500;
@@ -550,7 +617,11 @@ async function main() {
     app.put('/api/couriers/:id/settings', async (req, res) => {
         const { id } = req.params;
         const { commissionType, commissionValue } = req.body;
-        try { await knex('courier_stats').where({ courierId: id }).update({ commissionType, commissionValue }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('courier_stats').where({ courierId: id }).update({ commissionType, commissionValue });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
@@ -562,8 +633,8 @@ async function main() {
                 id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -Math.abs(amount), description, 
                 shipmentId: shipmentId || null, timestamp: new Date().toISOString(), status: 'Processed' 
             });
-            io.emit('data_updated'); 
-            res.status(200).json({ success: true }); 
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
         }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
@@ -582,8 +653,8 @@ async function main() {
                 description: description || `Penalty for failed delivery of ${shipmentId} - Package value: ${penaltyAmount} EGP`, 
                 shipmentId: shipmentId, timestamp: new Date().toISOString(), status: 'Processed' 
             });
-            io.emit('data_updated'); 
-            res.status(200).json({ success: true, penaltyAmount, message: `Penalty of ${penaltyAmount} EGP applied` }); 
+            res.status(200).json({ success: true, penaltyAmount, message: `Penalty of ${penaltyAmount} EGP applied` });
+            io.emit('data_updated');
         } catch (error) { 
             console.error('Error applying failed delivery penalty:', error);
             res.status(500).json({ error: 'Server error applying penalty' }); 
@@ -592,13 +663,21 @@ async function main() {
 
     app.post('/api/couriers/payouts', async (req, res) => {
         const { courierId, amount } = req.body;
-        try { await knex('courier_transactions').insert({ id: generateId('TRN'), courierId, type: 'Withdrawal Request', amount: -Math.abs(amount), description: 'Payout request from courier', timestamp: new Date().toISOString(), status: 'Pending' }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('courier_transactions').insert({ id: generateId('TRN'), courierId, type: 'Withdrawal Request', amount: -Math.abs(amount), description: 'Payout request from courier', timestamp: new Date().toISOString(), status: 'Pending' });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
     app.put('/api/payouts/:id/process', async (req, res) => {
         const { id } = req.params;
-        try { await knex('courier_transactions').where({ id }).update({ status: 'Processed', type: 'Withdrawal Processed', description: 'Payout processed by admin' }); io.emit('data_updated'); res.status(200).json({ success: true }); }
+        try {
+            await knex('courier_transactions').where({ id }).update({ status: 'Processed', type: 'Withdrawal Processed', description: 'Payout processed by admin' });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
@@ -616,8 +695,8 @@ async function main() {
             const emailSent = await sendEmail({ recipient: notification.recipient, subject, message: notification.message });
             
             await knex('notifications').where({ id }).update({ sent: emailSent });
-            io.emit('data_updated');
             res.status(200).json({ success: true, sent: emailSent });
+            io.emit('data_updated');
         } catch (error) {
             res.status(500).json({ error: 'Server error resending notification' });
         }

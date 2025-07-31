@@ -1,5 +1,7 @@
 // server/db.js
 const path = require('path');
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 const knex = require('knex')({
   client: 'sqlite3',
@@ -62,10 +64,11 @@ async function setupDatabase() {
 
         // Seed admin user
         console.log('Seeding admin user...');
+        const hashedPassword = await bcrypt.hash('password123', saltRounds);
         await knex('users').insert({
           name: 'Admin User',
           email: 'admin@flash.com',
-          password: 'password123',
+          password: hashedPassword,
           role: 'Administrator',
         });
     }
