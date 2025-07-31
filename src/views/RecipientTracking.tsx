@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Shipment } from '../types';
-import { LogoIcon, PhoneIcon } from '../components/Icons';
+import { Shipment, ShipmentStatus, ShipmentPriority } from '../types';
+import { LogoIcon, PhoneIcon, UserCircleIcon, MapPinIcon } from '../components/Icons';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { TrackingTimeline } from '../components/specific/TrackingTimeline';
 import { apiFetch } from '../api/client';
@@ -45,9 +45,26 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
         }
     };
 
+    const getEstimatedDelivery = (shipment: Shipment): string => {
+        if (shipment.status === ShipmentStatus.DELIVERED && shipment.deliveryDate) {
+            return `Delivered on ${new Date(shipment.deliveryDate).toLocaleDateString()}`;
+        }
+        const creationDate = new Date(shipment.creationDate);
+        let deliveryDays = 3;
+        if (shipment.priority === ShipmentPriority.URGENT) deliveryDays = 2;
+        if (shipment.priority === ShipmentPriority.EXPRESS) deliveryDays = 1;
+
+        creationDate.setDate(creationDate.getDate() + deliveryDays);
+        return creationDate.toLocaleDateString(undefined, {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric'
+        });
+    };
+
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            <header className="p-4 border-b border-slate-200 bg-white">
+        <div className="min-h-screen bg-slate-100 flex flex-col">
+            <header className="p-4 border-b border-slate-200 bg-white sticky top-0 z-10">
                 <div className="max-w-6xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <LogoIcon className="w-9 h-9" />
@@ -58,7 +75,7 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
                     </button>
                 </div>
             </header>
-            <main className="flex-grow flex items-center justify-center p-4">
+            <main className="flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8">
                 <div className="w-full max-w-6xl mx-auto">
                     {!shipment ? (
                         <div className="w-full max-w-lg mx-auto bg-white p-8 rounded-xl shadow-lg">
@@ -98,34 +115,72 @@ const RecipientTracking: React.FC<RecipientTrackingProps> = ({ onBackToApp }) =>
                             </form>
                         </div>
                     ) : (
-                        <div className="bg-white p-8 rounded-xl shadow-lg animate-fade-in-up">
-                            <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-200">
+                        <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-lg animate-fade-in-up space-y-8">
+                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pb-6 border-b border-slate-200">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-slate-800">Shipment Details</h2>
-                                    <p className="font-mono text-slate-600">{shipment.id}</p>
+                                    <p className="text-sm font-medium text-slate-500">Tracking ID</p>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 font-mono tracking-tighter">{shipment.id}</h2>
                                 </div>
                                 <ShipmentStatusBadge status={shipment.status} />
                             </div>
-                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                <div className="lg:col-span-1 space-y-4">
-                                     <div>
-                                        <h3 className="text-sm font-semibold text-slate-500 uppercase">From</h3>
-                                        <p className="text-lg font-medium text-slate-800">{shipment.clientName}</p>
-                                        <p className="text-slate-600">{shipment.fromAddress.street}, {shipment.fromAddress.city}</p>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-slate-500 uppercase">To</h3>
-                                        <p className="text-lg font-medium text-slate-800">{shipment.recipientName}</p>
-                                        <p className="text-slate-600">{shipment.toAddress.street}, {shipment.toAddress.city}</p>
-                                    </div>
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-slate-500 uppercase">Last Updated</h3>
-                                        <p className="text-lg font-medium text-slate-800">{new Date(shipment.creationDate).toLocaleString()}</p>
-                                    </div>
+
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                                <div>
+                                    <p className="text-sm font-medium text-slate-500">Origin</p>
+                                    <p className="text-lg font-semibold text-slate-700">{shipment.fromAddress.city}</p>
                                 </div>
-                                <div className="lg:col-span-2">
-                                     <h3 className="text-xl font-bold text-slate-800 mb-4">Tracking History</h3>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-500">Destination</p>
+                                    <p className="text-lg font-semibold text-slate-700">{shipment.toAddress.city}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-500">Sent Date</p>
+                                    <p className="text-lg font-semibold text-slate-700">{new Date(shipment.creationDate).toLocaleDateString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-500">Estimated Delivery</p>
+                                    <p className="text-lg font-semibold text-slate-700">{getEstimatedDelivery(shipment)}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid lg:grid-cols-5 gap-8 pt-8 border-t border-slate-200">
+                                <div className="lg:col-span-3">
+                                     <h3 className="text-xl font-bold text-slate-800 mb-6">Tracking History</h3>
                                     <TrackingTimeline shipment={shipment} />
+                                </div>
+                                 <div className="lg:col-span-2 space-y-6">
+                                    <h3 className="text-xl font-bold text-slate-800">Route Information</h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                                                    <UserCircleIcon className="w-5 h-5 text-slate-500" />
+                                                </div>
+                                                <h4 className="font-semibold text-slate-700">Sender</h4>
+                                            </div>
+                                            <div className="pl-11 mt-1 border-l-2 border-dashed border-slate-300 ml-4 pb-8">
+                                                <div className="pl-4">
+                                                    <p className="text-slate-800">{shipment.clientName}</p>
+                                                    <p className="text-sm text-slate-500">{shipment.fromAddress.street}, {shipment.fromAddress.zone}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="-mt-8">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center border border-primary-200">
+                                                    <MapPinIcon className="w-5 h-5 text-primary-600" />
+                                                </div>
+                                                <h4 className="font-semibold text-slate-700">Recipient</h4>
+                                            </div>
+                                            <div className="pl-11 mt-1 ml-4">
+                                                <div className="pl-4">
+                                                    <p className="text-slate-800">{shipment.recipientName}</p>
+                                                    <p className="text-sm text-slate-500">{shipment.toAddress.street}, {shipment.toAddress.zone}</p>
+                                                    <p className="text-sm text-slate-500">{shipment.recipientPhone}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
