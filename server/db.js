@@ -19,16 +19,41 @@ async function setupDatabase() {
       console.log('Creating "users" table...');
       await knex.schema.createTable('users', (table) => {
         table.increments('id').primary();
+        table.string('publicId').unique();
         table.string('name').notNullable();
         table.string('email').unique().notNullable();
         table.string('password').notNullable();
-        table.string('role').notNullable();
-        table.string('zone');
+        table.json('roles').notNullable(); // Stored as JSON array of strings
+        table.json('zones');
         table.string('phone');
         table.json('address');
         table.decimal('flatRateFee', 10, 2);
         table.string('taxCardNumber');
+        table.json('priorityMultipliers');
+        // For courier referrals
+        table.integer('referrerId').unsigned().references('id').inTable('users');
+        table.decimal('referralCommission', 10, 2);
       });
+    } else {
+      // Add new columns if they don't exist
+      if (!(await knex.schema.hasColumn('users', 'publicId'))) {
+        await knex.schema.alterTable('users', t => t.string('publicId').unique());
+      }
+      if (!(await knex.schema.hasColumn('users', 'roles'))) {
+        await knex.schema.alterTable('users', t => t.json('roles'));
+      }
+      if (!(await knex.schema.hasColumn('users', 'priorityMultipliers'))) {
+        await knex.schema.alterTable('users', t => t.json('priorityMultipliers'));
+      }
+      if (!(await knex.schema.hasColumn('users', 'referrerId'))) {
+        await knex.schema.alterTable('users', t => t.integer('referrerId').unsigned().references('id').inTable('users'));
+      }
+      if (!(await knex.schema.hasColumn('users', 'referralCommission'))) {
+        await knex.schema.alterTable('users', t => t.decimal('referralCommission', 10, 2));
+      }
+       if (!(await knex.schema.hasColumn('users', 'zones'))) {
+        await knex.schema.alterTable('users', t => t.json('zones'));
+      }
     }
 
     const hasCustomRolesTable = await knex.schema.hasTable('custom_roles');
@@ -40,36 +65,48 @@ async function setupDatabase() {
             table.json('permissions').notNullable();
             table.boolean('isSystemRole').defaultTo(false);
         });
+    }
 
-        console.log('Seeding default roles...');
-        const allPermissions = [
-            'manage_users', 'manage_roles', 'create_shipments', 'view_own_shipments', 'view_all_shipments',
-            'assign_shipments', 'manage_returns', 'view_courier_tasks', 'update_shipment_status', 
-            'view_own_wallet', 'view_own_financials', 'view_admin_financials', 'view_client_analytics', 
-            'view_courier_performance', 'manage_courier_payouts', 'view_courier_earnings', 
-            'view_notifications_log', 'view_dashboard', 'view_profile', 'view_total_shipments_overview'
-        ];
-        const clientPermissions = ['create_shipments', 'view_own_shipments', 'view_own_wallet', 'view_own_financials', 'view_dashboard', 'view_profile'];
-        const courierPermissions = ['view_courier_tasks', 'update_shipment_status', 'view_courier_earnings', 'view_dashboard', 'view_profile'];
-        const superUserPermissions = allPermissions.filter(p => p !== 'manage_roles' && p !== 'view_admin_financials');
+    // Always re-seed roles to ensure permissions are up-to-date
+    console.log('Seeding default roles and permissions...');
+    await knex('custom_roles').del(); // Clear old roles
+    const allPermissions = [
+        'manage_users', 'manage_roles', 'create_shipments', 'view_own_shipments', 'view_all_shipments',
+        'assign_shipments', 'view_courier_tasks', 'update_shipment_status', 
+        'view_own_wallet', 'view_own_financials', 'view_admin_financials', 'view_client_analytics', 
+        'view_courier_performance', 'manage_courier_payouts', 'view_courier_earnings', 
+        'view_notifications_log', 'view_dashboard', 'view_profile', 'view_total_shipments_overview',
+        'view_courier_completed_orders', 'manage_inventory', 'manage_assets', 'view_own_assets',
+        'delete_inventory_item', 'delete_asset'
+    ];
+    const clientPermissions = ['create_shipments', 'view_own_shipments', 'view_own_wallet', 'view_own_financials', 'view_dashboard', 'view_profile', 'view_own_assets'];
+    const courierPermissions = ['view_courier_tasks', 'update_shipment_status', 'view_courier_earnings', 'view_dashboard', 'view_profile', 'view_courier_completed_orders', 'view_own_assets'];
+    const superUserPermissions = allPermissions.filter(p => ![
+        'manage_roles', 'view_admin_financials'
+    ].includes(p));
+    const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory'];
 
-        const rolesToSeed = [
-            { id: 'role_admin', name: 'Administrator', permissions: JSON.stringify(allPermissions), isSystemRole: true },
-            { id: 'role_super_user', name: 'Super User', permissions: JSON.stringify(superUserPermissions), isSystemRole: true },
-            { id: 'role_client', name: 'Client', permissions: JSON.stringify(clientPermissions), isSystemRole: true },
-            { id: 'role_courier', name: 'Courier', permissions: JSON.stringify(courierPermissions), isSystemRole: true },
-            { id: 'role_assigning_user', name: 'Assigning User', permissions: JSON.stringify(['assign_shipments', 'view_dashboard']), isSystemRole: true },
-        ];
-        await knex('custom_roles').insert(rolesToSeed);
+    const rolesToSeed = [
+        { id: 'role_admin', name: 'Administrator', permissions: JSON.stringify(allPermissions), isSystemRole: true },
+        { id: 'role_super_user', name: 'Super User', permissions: JSON.stringify(superUserPermissions), isSystemRole: true },
+        { id: 'role_client', name: 'Client', permissions: JSON.stringify(clientPermissions), isSystemRole: true },
+        { id: 'role_courier', name: 'Courier', permissions: JSON.stringify(courierPermissions), isSystemRole: true },
+        { id: 'role_assigning_user', name: 'Assigning User', permissions: JSON.stringify(assigningUserPermissions), isSystemRole: true },
+    ];
+    await knex('custom_roles').insert(rolesToSeed);
 
-        // Seed admin user
+    // Seed admin user
+    const adminExists = await knex('users').where({ email: 'admin@flash.com' }).first();
+    if (!adminExists) {
         console.log('Seeding admin user...');
         const hashedPassword = await bcrypt.hash('password123', saltRounds);
         await knex('users').insert({
+          id: 1, // Explicitly set ID for referral testing
+          publicId: 'AD-1',
           name: 'Admin User',
           email: 'admin@flash.com',
           password: hashedPassword,
-          role: 'Administrator',
+          roles: JSON.stringify(['Administrator']),
         });
     }
 
@@ -98,7 +135,21 @@ async function setupDatabase() {
             table.decimal('clientFlatRateFee', 10, 2);
             table.decimal('courierCommission', 10, 2);
             table.text('failureReason');
+            table.string('failurePhotoPath');
+            table.text('packagingNotes');
+            table.json('packagingLog');
+            table.json('statusHistory');
         });
+    } else {
+       if (!(await knex.schema.hasColumn('shipments', 'packagingNotes'))) {
+         await knex.schema.alterTable('shipments', t => t.text('packagingNotes'));
+       }
+       if (!(await knex.schema.hasColumn('shipments', 'packagingLog'))) {
+         await knex.schema.alterTable('shipments', t => t.json('packagingLog'));
+       }
+       if (!(await knex.schema.hasColumn('shipments', 'statusHistory'))) {
+         await knex.schema.alterTable('shipments', t => t.json('statusHistory'));
+       }
     }
 
     const hasClientTransactionsTable = await knex.schema.hasTable('client_transactions');
@@ -167,46 +218,63 @@ async function setupDatabase() {
             table.string('expires_at').notNullable();
         });
     }
-
-    // Migration for removing phoneVerified from users table if it exists
-    if (await knex.schema.hasTable('users')) {
-      const hasPhoneVerifiedColumn = await knex.schema.hasColumn('users', 'phoneVerified');
-      if (hasPhoneVerifiedColumn) {
-        console.log('Migration: Removing "phoneVerified" column from "users" table.');
-        await knex.schema.alterTable('users', (table) => {
-          table.dropColumn('phoneVerified');
-        });
-      }
-    }
-
-    // Migration for removing deliveryPhoto
-     if (await knex.schema.hasTable('shipments')) {
-        const hasDeliveryPhoto = await knex.schema.hasColumn('shipments', 'deliveryPhoto');
-        if (hasDeliveryPhoto) {
-             console.log('Migration: Removing "deliveryPhoto" column from "shipments" table.');
-            await knex.schema.alterTable('shipments', (table) => {
-                table.dropColumn('deliveryPhoto');
-            });
-        }
-     }
     
-    // Migration for removing location
-    if (await knex.schema.hasTable('users')) {
-        const hasLocation = await knex.schema.hasColumn('users', 'location');
-        if (hasLocation) {
-             console.log('Migration: Removing "location" column from "users" table.');
-            await knex.schema.alterTable('users', (table) => {
-                table.dropColumn('location');
-            });
-        }
-     }
-
-    // Migration for removing sms_verifications table
-    if (await knex.schema.hasTable('sms_verifications')) {
-        console.log('Migration: Dropping "sms_verifications" table.');
-        await knex.schema.dropTable('sms_verifications');
+    // Add failurePhotoPath column if it doesn't exist
+    if (await knex.schema.hasTable('shipments') && !(await knex.schema.hasColumn('shipments', 'failurePhotoPath'))) {
+        console.log('Migration: Adding "failurePhotoPath" column to "shipments" table.');
+        await knex.schema.alterTable('shipments', (table) => {
+          table.string('failurePhotoPath');
+        });
     }
 
+    // --- New Tables for Inventory & Asset Management ---
+    const hasInventoryTable = await knex.schema.hasTable('inventory_items');
+    if (!hasInventoryTable) {
+      console.log('Creating "inventory_items" table...');
+      await knex.schema.createTable('inventory_items', table => {
+        table.string('id').primary();
+        table.string('name').unique().notNullable();
+        table.integer('quantity').notNullable();
+        table.string('unit').notNullable();
+        table.string('lastUpdated').notNullable();
+        table.integer('minStock').defaultTo(10);
+        table.decimal('unitPrice', 10, 2).defaultTo(0);
+      });
+    } else {
+        if (!(await knex.schema.hasColumn('inventory_items', 'minStock'))) {
+            await knex.schema.alterTable('inventory_items', t => t.integer('minStock').defaultTo(10));
+        }
+        if (!(await knex.schema.hasColumn('inventory_items', 'unitPrice'))) {
+            await knex.schema.alterTable('inventory_items', t => t.decimal('unitPrice', 10, 2).defaultTo(0));
+        }
+    }
+
+    // Always re-seed inventory to ensure it's up to date with new items
+    console.log('Seeding inventory items...');
+    await knex('inventory_items').del(); // Clear old items
+    await knex('inventory_items').insert([
+        { id: 'inv_label', name: 'Shipping Label', quantity: 10000, unit: 'labels', lastUpdated: new Date().toISOString(), minStock: 500, unitPrice: 0.50 },
+        { id: 'inv_box_sm', name: 'Small Cardboard Box', quantity: 1000, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 100, unitPrice: 5.00 },
+        { id: 'inv_box_md', name: 'Medium Cardboard Box', quantity: 1000, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 100, unitPrice: 7.50 },
+        { id: 'inv_box_lg', name: 'Large Cardboard Box', quantity: 500, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 50, unitPrice: 10.00 },
+        { id: 'inv_bubble_wrap', name: 'Bubble Wrap Roll', quantity: 100, unit: 'rolls', lastUpdated: new Date().toISOString(), minStock: 10, unitPrice: 50.00 },
+        { id: 'inv_plastic_wrap', name: 'Packaging Plastic', quantity: 200, unit: 'rolls', lastUpdated: new Date().toISOString(), minStock: 20, unitPrice: 30.00 },
+      ]);
+    
+    
+    const hasAssetsTable = await knex.schema.hasTable('assets');
+    if (!hasAssetsTable) {
+      console.log('Creating "assets" table...');
+      await knex.schema.createTable('assets', table => {
+        table.string('id').primary();
+        table.string('type').notNullable();
+        table.string('name').notNullable();
+        table.string('identifier').unique();
+        table.string('status').notNullable();
+        table.integer('assignedToUserId').unsigned().references('id').inTable('users');
+        table.string('assignmentDate');
+      });
+    }
 
     console.log('Database setup complete.');
   } catch (error) {

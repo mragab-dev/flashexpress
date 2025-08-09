@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, User, Shipment, ShipmentStatus } from '../types';
@@ -21,7 +22,7 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
     const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
 
     const clientShipmentCounts = useMemo(() => {
-        const clients = users.filter(u => u.role === UserRole.CLIENT);
+        const clients = users.filter(u => (u.roles || []).includes(UserRole.CLIENT));
         const counts = clients.map(client => ({
             id: client.id,
             name: client.name,

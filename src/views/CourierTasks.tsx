@@ -1,19 +1,26 @@
-import React, { useState, useRef, useCallback } from 'react';
+
+
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Shipment, ShipmentStatus, PaymentMethod } from '../types';
+import { Shipment, ShipmentStatus, PaymentMethod, UserRole } from '../types';
 import { BarcodeScanner } from '../components/common/BarcodeScanner';
 import { Modal } from '../components/common/Modal';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
 import { StatCard } from '../components/common/StatCard';
-import { QrcodeIcon, ReplyIcon, WalletIcon, CurrencyDollarIcon, PackageIcon, CheckCircleIcon } from '../components/Icons';
+import { QrcodeIcon, WalletIcon, CurrencyDollarIcon, PackageIcon, CheckCircleIcon, CameraIcon } from '../components/Icons';
 
-const CourierTasks = () => {
-    const { currentUser, shipments, updateShipmentStatus, addToast, sendDeliveryVerificationCode, verifyDelivery } = useAppContext();
+interface CourierTasksProps {
+    setActiveView: (view: string) => void;
+}
+
+const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
+    const { currentUser, shipments, users, updateShipmentStatus, addToast, sendDeliveryVerificationCode, verifyDelivery } = useAppContext();
     const [isScannerOpen, setScannerOpen] = useState(false);
     const [highlightedTask, setHighlightedTask] = useState<string | null>(null);
     const [isFailureModalOpen, setFailureModalOpen] = useState(false);
     const [failureShipment, setFailureShipment] = useState<Shipment | null>(null);
-    const [failureReason, setFailureReason] = useState('');
+    const [failureReason, setFailureReason] = useState('Recipient Unreachable');
+    const [failurePhoto, setFailurePhoto] = useState<string | null>(null);
     const shipmentTaskRefs = useRef<{[key: string]: HTMLDivElement | null}>({});
     
     // State for the new delivery verification modal
@@ -22,65 +29,125 @@ const CourierTasks = () => {
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerificationLoading, setIsVerificationLoading] = useState(false);
 
+    // Search and filter state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedClientId, setSelectedClientId] = useState<'all' | number>('all');
+    const [selectedDate, setSelectedDate] = useState<string>('');
+    const clients = useMemo(() => users.filter(u => (u.roles || []).includes(UserRole.CLIENT)), [users]);
+    
+    // Camera state
+    const [isCameraActive, setIsCameraActive] = useState(false);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
 
     if (!currentUser) return null;
     
-    // Filter shipments for current courier
-    const myDeliveryTasks = shipments.filter(s => s.courierId === currentUser.id && [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
-    const myReturnTasks = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.RETURN_IN_PROGRESS);
-    const myDeliveredShipments = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.DELIVERED);
+    const myDeliveryTasks = useMemo(() => {
+        let tasks = shipments.filter(s => s.courierId === currentUser.id && ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(s.status));
+        
+        if (searchTerm) {
+            const lowerSearch = searchTerm.toLowerCase();
+            tasks = tasks.filter(s => 
+                s.id.toLowerCase().includes(lowerSearch) ||
+                s.recipientName.toLowerCase().includes(lowerSearch) ||
+                s.toAddress.street.toLowerCase().includes(lowerSearch) ||
+                s.toAddress.zone.toLowerCase().includes(lowerSearch)
+            );
+        }
+
+        if (selectedClientId !== 'all') {
+            tasks = tasks.filter(s => s.clientId === selectedClientId);
+        }
+
+        if (selectedDate) {
+            tasks = tasks.filter(s => s.creationDate.startsWith(selectedDate));
+        }
+
+        return tasks;
+    }, [shipments, currentUser.id, searchTerm, selectedClientId, selectedDate]);
     
     // Calculate financial metrics
     const totalCashToCollect = myDeliveryTasks
         .filter(s => s.paymentMethod === PaymentMethod.COD)
         .reduce((sum, s) => sum + s.price, 0);
     
+    const myDeliveredShipments = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.DELIVERED);
     const totalCommissionEarned = myDeliveredShipments
         .reduce((sum, s) => sum + (s.courierCommission || 0), 0);
     
     const pendingDeliveries = myDeliveryTasks.length;
-    
-    // Calculate daily delivery chart data (last 30 days)
-    const deliveryByDay: { [key: string]: number } = {};
-    const today = new Date();
-    for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(today.getDate() - i);
-        const dateString = date.toISOString().split('T')[0];
-        deliveryByDay[dateString] = 0;
-    }
-
-    myDeliveredShipments.forEach(s => {
-        if(s.deliveryDate) {
-            const dateString = s.deliveryDate.split('T')[0];
-            if(deliveryByDay.hasOwnProperty(dateString)) {
-                deliveryByDay[dateString]++;
-            }
-        }
-    });
-    
-    const chartData = Object.entries(deliveryByDay).map(([date, count]) => ({
-        date: new Date(date).getDate().toString(),
-        count
-    }));
-    const maxDeliveries = Math.max(...chartData.map(d => d.count), 1);
 
     const handleUpdateStatus = (shipmentId: string, status: ShipmentStatus) => {
         updateShipmentStatus(shipmentId, status);
     };
 
+    // --- Camera Logic ---
+    const stopCamera = useCallback(() => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+        setStream(null);
+        setIsCameraActive(false);
+    }, [stream]);
+
+    const startCamera = async () => {
+        stopCamera(); // Ensure any previous stream is stopped
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            if (videoRef.current) {
+                videoRef.current.srcObject = mediaStream;
+            }
+            setStream(mediaStream);
+            setIsCameraActive(true);
+        } catch (err) {
+            console.error("Error accessing camera:", err);
+            addToast("Could not access camera. Please check permissions.", "error");
+        }
+    };
+
+    const capturePhoto = () => {
+        if (videoRef.current && canvasRef.current) {
+            const video = videoRef.current;
+            const canvas = canvasRef.current;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            if (context) {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9); // Use JPEG for smaller size
+                setFailurePhoto(dataUrl);
+                stopCamera();
+            }
+        }
+    };
+
+    const handleRetakePhoto = () => {
+        setFailurePhoto(null);
+        startCamera();
+    };
+    
+    // Cleanup effect when the modal is closed
+    useEffect(() => {
+        if (!isFailureModalOpen) {
+            stopCamera();
+        }
+    }, [isFailureModalOpen, stopCamera]);
+
+
     const handleStartFailure = (shipment: Shipment) => {
         setFailureShipment(shipment);
-        setFailureReason('');
+        setFailureReason('Recipient Unreachable');
+        setFailurePhoto(null);
         setFailureModalOpen(true);
     };
 
     const handleSaveFailure = () => {
-        if(failureShipment && failureReason.trim()){
-            updateShipmentStatus(failureShipment.id, ShipmentStatus.DELIVERY_FAILED, { failureReason: failureReason.trim() });
+        if(failureShipment && failureReason){
+            updateShipmentStatus(failureShipment.id, ShipmentStatus.DELIVERY_FAILED, { failureReason, failurePhoto });
             setFailureModalOpen(false);
             setFailureShipment(null);
-            setFailureReason('');
         }
     };
     
@@ -119,8 +186,7 @@ const CourierTasks = () => {
 
     const handleScanSuccess = useCallback((decodedText: string) => {
         setScannerOpen(false);
-        const allTasks = [...myDeliveryTasks, ...myReturnTasks];
-        const foundTask = allTasks.find(t => t.id === decodedText);
+        const foundTask = myDeliveryTasks.find(t => t.id === decodedText);
 
         if(foundTask) {
             addToast(`Scanned: ${decodedText}. Task is ready.`, 'success');
@@ -133,54 +199,46 @@ const CourierTasks = () => {
         } else {
             addToast(`Scanned code ${decodedText} not found in your current tasks.`, 'error');
         }
-    }, [myDeliveryTasks, myReturnTasks, addToast]);
+    }, [myDeliveryTasks, addToast]);
 
     const nextAction: Record<ShipmentStatus, { label: string; nextStatus: ShipmentStatus } | null> = {
-        [ShipmentStatus.ASSIGNED_TO_COURIER]: null, // Not used anymore - packages go directly to IN_TRANSIT
-        [ShipmentStatus.PICKED_UP]: null, // Not used anymore
+        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Mark Picked Up', nextStatus: ShipmentStatus.PICKED_UP },
+        [ShipmentStatus.PICKED_UP]: { label: 'Mark In Transit', nextStatus: ShipmentStatus.IN_TRANSIT },
         [ShipmentStatus.IN_TRANSIT]: { label: 'Mark Out for Delivery', nextStatus: ShipmentStatus.OUT_FOR_DELIVERY },
         [ShipmentStatus.OUT_FOR_DELIVERY]: null, // Special case with two buttons
-        [ShipmentStatus.PENDING_ASSIGNMENT]: null,
         [ShipmentStatus.DELIVERED]: null,
         [ShipmentStatus.DELIVERY_FAILED]: null,
-        [ShipmentStatus.RETURN_REQUESTED]: null,
-        [ShipmentStatus.RETURN_IN_PROGRESS]: null, // Special case
-        [ShipmentStatus.RETURNED]: null,
+        [ShipmentStatus.WAITING_FOR_PACKAGING]: null,
+        [ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT]: null,
     };
     
-    const TaskCard: React.FC<{task: Shipment, isReturn?: boolean}> = ({ task, isReturn = false }) => (
-         <div className={`bg-white rounded-xl shadow-sm p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isReturn ? 'border-l-4 border-orange-500' : ''}`}>
+    const TaskCard: React.FC<{task: Shipment}> = ({ task }) => (
+         <div className="bg-white rounded-xl shadow-sm p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <p className="font-mono text-sm text-slate-500 flex items-center gap-2">{isReturn && <ReplyIcon className="w-4 h-4 text-orange-600" />} {task.id}</p>
-                <p className="text-lg font-bold text-slate-800">{isReturn ? `Return from: ${task.recipientName}` : `Deliver to: ${task.recipientName}`}</p>
+                <p className="font-mono text-sm text-slate-500">{task.id}</p>
+                <p className="text-lg font-bold text-slate-800">Deliver to: {task.recipientName}</p>
                 <p className="text-slate-600">{task.toAddress.street}, {task.toAddress.zone}</p>
                  <p className="text-sm font-semibold text-slate-700 mt-1">Payment: {task.paymentMethod} ({task.price} EGP)</p>
             </div>
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
                 <div className="flex-grow"><ShipmentStatusBadge status={task.status} /></div>
-                {isReturn ? (
-                    <button onClick={() => handleUpdateStatus(task.id, ShipmentStatus.RETURNED)} className="px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 transition w-full md:w-auto">
-                        Confirm Return Pickup
-                    </button>
-                ) : (
-                    <>
-                        {nextAction[task.status] && (
-                            <button onClick={() => handleUpdateStatus(task.id, nextAction[task.status]!.nextStatus)} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition w-full md:w-auto">
-                               {nextAction[task.status]!.label}
+                <>
+                    {nextAction[task.status] && (
+                        <button onClick={() => handleUpdateStatus(task.id, nextAction[task.status]!.nextStatus)} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition w-full md:w-auto">
+                           {nextAction[task.status]!.label}
+                        </button>
+                    )}
+                    {task.status === ShipmentStatus.OUT_FOR_DELIVERY && (
+                        <>
+                            <button onClick={() => openVerificationModal(task)} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition w-full md:w-auto">
+                                Verify & Deliver
                             </button>
-                        )}
-                        {task.status === ShipmentStatus.OUT_FOR_DELIVERY && (
-                            <>
-                                <button onClick={() => openVerificationModal(task)} className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg hover:bg-green-600 transition w-full md:w-auto">
-                                    Verify & Deliver
-                                </button>
-                                <button onClick={() => handleStartFailure(task)} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition w-full md:w-auto">
-                                    Delivery Failed
-                                </button>
-                            </>
-                        )}
-                    </>
-                )}
+                            <button onClick={() => handleStartFailure(task)} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition w-full md:w-auto">
+                                Delivery Failed
+                            </button>
+                        </>
+                    )}
+                </>
             </div>
         </div>
     );
@@ -213,6 +271,7 @@ const CourierTasks = () => {
                     icon={<CurrencyDollarIcon className="w-7 h-7"/>} 
                     color="#16a34a"
                     subtitle={`From ${myDeliveredShipments.length} deliveries`}
+                    onClick={() => setActiveView('courier-financials')}
                 />
                 <StatCard 
                     title="Pending Deliveries" 
@@ -227,52 +286,39 @@ const CourierTasks = () => {
                     icon={<CheckCircleIcon className="w-7 h-7"/>} 
                     color="#8b5cf6"
                     subtitle="All time completed"
+                    onClick={() => setActiveView('completed-orders')}
                 />
             </div>
 
-            {/* Performance Summary */}
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Performance Summary</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="text-center">
-                        <div className="text-3xl font-bold text-green-600">{myDeliveredShipments.length}</div>
-                        <div className="text-sm text-slate-600">Total Deliveries</div>
-                    </div>
-                    <div className="text-center">
-                        <div className="text-3xl font-bold text-blue-600">{pendingDeliveries}</div>
-                        <div className="text-sm text-slate-600">Pending Deliveries</div>
-                    </div>
-                    <div className="text-center">
-                        <div className="text-3xl font-bold text-orange-600">{myDeliveryTasks.filter(s => s.paymentMethod === PaymentMethod.COD).length}</div>
-                        <div className="text-sm text-slate-600">COD Packages</div>
-                    </div>
-                </div>
+            <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 flex-wrap">
+                <input
+                    type="text"
+                    placeholder="Search by ID, recipient, address..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                />
+                <select
+                    value={selectedClientId}
+                    onChange={(e) => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    className="w-full md:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                >
+                    <option value="all">Filter by Client</option>
+                    {clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                </select>
+                 <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full md:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    aria-label="Filter by creation date"
+                />
             </div>
 
-            {/* Daily Deliveries Chart */}
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <h3 className="text-xl font-bold text-slate-800 mb-4">Daily Deliveries (Last 30 Days)</h3>
-                <div className="h-64 flex items-end gap-2 border-l border-b border-slate-200 pl-4 pb-4">
-                   {chartData.map(({ date, count }) => (
-                       <div key={date} className="flex-1 h-full flex flex-col justify-end items-center group">
-                            <div 
-                                className="w-full bg-primary-400 hover:bg-primary-500 transition-colors rounded-t-md relative"
-                                style={{ height: `${(count / maxDeliveries) * 100}%` }}
-                                title={`Day ${date}: ${count} deliveries`}
-                            >
-                                {count > 0 && (
-                                    <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold">
-                                        {count}
-                                    </div>
-                                )}
-                            </div>
-                            <span className="text-xs text-slate-500 mt-1">{date}</span>
-                       </div>
-                   ))}
-                </div>
-            </div>
              <div className="space-y-4">
-                {myDeliveryTasks.length === 0 && <p className="text-slate-500 bg-white p-4 rounded-lg">You have no active delivery tasks.</p>}
+                {myDeliveryTasks.length === 0 && <p className="text-slate-500 bg-white p-4 rounded-lg">You have no active tasks matching the current filters.</p>}
                 {myDeliveryTasks.map(task => (
                     <div 
                         key={task.id} 
@@ -282,22 +328,6 @@ const CourierTasks = () => {
                         <TaskCard task={task} />
                     </div>
                 ))}
-            </div>
-            
-            <div>
-                 <h2 className="text-2xl font-bold text-slate-800">My Return Tasks</h2>
-                 <div className="space-y-4 mt-4">
-                    {myReturnTasks.length === 0 && <p className="text-slate-500 bg-white p-4 rounded-lg">You have no active return tasks.</p>}
-                    {myReturnTasks.map(task => (
-                        <div 
-                            key={task.id} 
-                            ref={el => { shipmentTaskRefs.current[task.id] = el; }}
-                            className={`rounded-xl transition-all duration-500 ${highlightedTask === task.id ? 'ring-4 ring-primary-400 ring-offset-2' : ''}`}
-                        >
-                            <TaskCard task={task} isReturn />
-                        </div>
-                    ))}
-                </div>
             </div>
 
              <Modal isOpen={isScannerOpen} onClose={() => setScannerOpen(false)} title="Scan Package Barcode">
@@ -317,14 +347,45 @@ const CourierTasks = () => {
                             <label className="block text-sm font-medium text-slate-700 mb-2">
                                 Reason for delivery failure *
                             </label>
-                            <textarea
+                             <select
                                 value={failureReason}
                                 onChange={(e) => setFailureReason(e.target.value)}
-                                placeholder="Please explain why the delivery could not be completed..."
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 resize-none"
-                                rows={3}
-                                required
-                            />
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="Recipient Unreachable">Recipient Unreachable</option>
+                                <option value="Cancelled by Client">Cancelled by Client</option>
+                                <option value="Order Lost">Order Lost</option>
+                                <option value="Damaged Package">Damaged Package</option>
+                            </select>
+                        </div>
+                         <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Evidence Photo (Optional)
+                            </label>
+                            <div className="w-full p-4 bg-slate-100 rounded-lg">
+                                {!isCameraActive && !failurePhoto && (
+                                    <button type="button" onClick={startCamera} className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:bg-slate-200 hover:border-slate-400 transition">
+                                        <CameraIcon className="w-10 h-10 mb-2"/>
+                                        <span className="font-semibold">Take Photo</span>
+                                    </button>
+                                )}
+                                {isCameraActive && (
+                                    <div className="space-y-3">
+                                        <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-lg bg-slate-900 aspect-video object-cover"></video>
+                                        <canvas ref={canvasRef} className="hidden"></canvas>
+                                        <div className="flex gap-3">
+                                            <button type="button" onClick={capturePhoto} className="flex-1 px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700">Capture</button>
+                                            <button type="button" onClick={stopCamera} className="px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+                                {!isCameraActive && failurePhoto && (
+                                    <div className="space-y-3 text-center">
+                                        <img src={failurePhoto} alt="Failure preview" className="rounded-lg max-h-64 mx-auto" />
+                                        <button type="button" onClick={handleRetakePhoto} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-700">Retake Photo</button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex justify-end gap-3">
                             <button 
@@ -335,7 +396,7 @@ const CourierTasks = () => {
                             </button>
                             <button 
                                 onClick={handleSaveFailure}
-                                disabled={!failureReason.trim()}
+                                disabled={!failureReason}
                                 className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-slate-400 disabled:cursor-not-allowed"
                             >
                                 Mark as Failed

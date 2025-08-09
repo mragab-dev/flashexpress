@@ -24,7 +24,7 @@ export default defineConfig({
 
     // Add the ngrok host to allowedHosts
     allowedHosts: [
-      'dadb7c20b595.ngrok-free.app', // <-- PASTE YOUR NGROK HOSTNAME HERE
+      '27c5d5815b2f.ngrok-free.app', // <-- PASTE YOUR NGROK HOSTNAME HERE
       'localhost',
       '127.0.0.1'
     ],
@@ -32,7 +32,7 @@ export default defineConfig({
     // Hot Module Replacement (HMR) configuration for ngrok
     hmr: {
       // The HMR host should also be the ngrok URL
-      host: 'dadb7c20b595.ngrok-free.app', // <-- PASTE YOUR NGROK HOSTNAME HERE, TOO
+      host: '27c5d5815b2f.ngrok-free.app', // <-- PASTE YOUR NGROK HOSTNAME HERE, TOO
       protocol: 'wss', // Use secure WebSocket for HMR over the HTTPS ngrok tunnel
       clientPort: 443 // Default HTTPS port
     },

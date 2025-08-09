@@ -1,11 +1,13 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission } from '../types';
+
+import React, { useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
+import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission, InventoryItem, Asset, PackagingLogEntry } from '../types';
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
 import { apiFetch } from '../api/client';
 import { io, Socket } from 'socket.io-client';
 
 type NotificationStatus = 'sending' | 'sent' | 'failed';
+type ShipmentFilter = (shipment: Shipment) => boolean;
 
 export type AppContextType = {
     currentUser: User | null;
@@ -18,17 +20,18 @@ export type AppContextType = {
     courierStats: CourierStats[];
     courierTransactions: CourierTransaction[];
     customRoles: CustomRole[];
-    financialSettings: FinancialSettings | null;
+    inventoryItems: InventoryItem[];
+    assets: Asset[];
     isLoading: boolean;
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
-    addShipment: (shipment: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => Promise<void>;
-    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { failureReason?: string; }) => Promise<boolean>;
+    addShipment: (shipment: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status' | 'statusHistory' | 'packagingLog'>) => Promise<void>;
+    updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { failureReason?: string; failurePhoto?: string | null; }) => Promise<boolean>;
     updateShipmentFees: (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => Promise<void>;
+    updateShipmentPackaging: (shipmentId: string, packagingLog: PackagingLogEntry[], packagingNotes: string) => Promise<void>;
     assignShipmentToCourier: (shipmentId: string, courierId: number) => Promise<boolean>;
     reassignCourier: (shipmentId: string, newCourierId: number) => Promise<void>;
-    assignReturn: (shipmentId: string, courierId: number) => Promise<boolean>;
-    addUser: (userData: Omit<User, 'id'>) => Promise<void>;
+    addUser: (userData: Omit<User, 'id' | 'publicId'>) => Promise<void>;
     updateUser: (userId: number, userData: Partial<User>, silent?: boolean) => Promise<void>;
     removeUser: (userId: number) => Promise<void>;
     resetPassword: (userId: number, newPassword: string) => Promise<void>;
@@ -54,6 +57,17 @@ export type AppContextType = {
     deleteRole: (roleId: string) => Promise<void>;
     sendDeliveryVerificationCode: (shipmentId: string) => Promise<boolean>;
     verifyDelivery: (shipmentId: string, code: string) => Promise<boolean>;
+    shipmentFilter: ShipmentFilter | null;
+    setShipmentFilter: React.Dispatch<React.SetStateAction<ShipmentFilter | null>>;
+    // Inventory
+    addInventoryItem: (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => Promise<void>;
+    updateInventoryItem: (itemId: string, data: Partial<InventoryItem>) => Promise<void>;
+    deleteInventoryItem: (itemId: string) => Promise<void>;
+    // Assets
+    addAsset: (asset: Omit<Asset, 'id' | 'status'>) => Promise<void>;
+    updateAsset: (assetId: string, data: Partial<Asset>) => Promise<void>;
+    deleteAsset: (assetId: string) => Promise<void>;
+    assignAsset: (assetId: string, userId: number | null) => Promise<void>;
 };
 
 export const AppContext = React.createContext<AppContextType | null>(null);
@@ -75,12 +89,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [rawCourierStats, setRawCourierStats] = useState<CourierStats[]>([]);
     const [courierTransactions, setCourierTransactions] = useState<CourierTransaction[]>([]);
     const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
-    
-    const [financialSettings] = useState<FinancialSettings>({
-        baseCommissionRate: 30, penaltyAmount: 10, consecutiveFailureLimit: 3, performanceThreshold: 2.0,
-    });
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+    const [assets, setAssets] = useState<Asset[]>([]);
+    const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter | null>(null);
     
     const [isLoading, setIsLoading] = useState(false);
+
+    const courierStats = useMemo(() => {
+        return rawCourierStats.map(stat => {
+            const relevantTransactions = courierTransactions.filter(t => t.courierId === stat.courierId);
+            const totalEarnings = relevantTransactions
+                .filter(t => t.type === CourierTransactionType.COMMISSION || t.type === CourierTransactionType.BONUS || t.type === CourierTransactionType.REFERRAL_BONUS)
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const totalDeductions = relevantTransactions
+                .filter(t => t.type === CourierTransactionType.PENALTY || t.type === CourierTransactionType.WITHDRAWAL_PROCESSED)
+                .reduce((sum, t) => sum + t.amount, 0); // amounts are negative
+
+            const pendingWithdrawals = relevantTransactions
+                .filter(t => t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING)
+                .reduce((sum, t) => sum + t.amount, 0); // amounts are negative
+
+            const currentBalance = totalEarnings + totalDeductions;
+            
+            const deliveriesCompleted = shipments.filter(s => s.courierId === stat.courierId && s.status === ShipmentStatus.DELIVERED).length;
+            const deliveriesFailed = shipments.filter(s => s.courierId === stat.courierId && s.status === ShipmentStatus.DELIVERY_FAILED).length;
+
+            return { ...stat, totalEarnings, currentBalance, pendingEarnings: -pendingWithdrawals, deliveriesCompleted, deliveriesFailed };
+        });
+    }, [rawCourierStats, courierTransactions, shipments]);
 
     const addToast = useCallback((message: string, type: Toast['type'], duration?: number) => {
         const id = Date.now();
@@ -91,6 +128,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const removeToast = useCallback((toastId: number) => {
         setToasts(prev => prev.filter(t => t.id !== toastId));
     }, []);
+
+    const logout = useCallback(() => {
+        setCurrentUser(null);
+        // Also clear other states
+        setUsers([]);
+        setShipments([]);
+        setClientTransactions([]);
+        setNotifications([]);
+        setRawCourierStats([]);
+        setCourierTransactions([]);
+        setCustomRoles([]);
+        setInventoryItems([]);
+        setAssets([]);
+        addToast('You have been logged out.', 'info');
+    }, [addToast]);
 
     const fetchData = useCallback(async () => {
         if (!currentUser) return;
@@ -104,25 +156,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setRawCourierStats(data.courierStats || []);
             setCourierTransactions(data.courierTransactions || []);
             setCustomRoles(data.customRoles || []);
+            setInventoryItems(data.inventoryItems || []);
+            setAssets(data.assets || []);
         } catch (error: any) {
             addToast(`Failed to load data: ${error.message}`, 'error');
             logout();
         } finally {
             setIsLoading(false);
         }
-    }, [addToast, currentUser]);
+    }, [addToast, currentUser, logout]);
 
     const login = useCallback(async (email: string, password: string): Promise<boolean> => {
         setIsLoading(true);
         try {
-            const rolesData: CustomRole[] = await apiFetch('/api/roles'); // Fetch roles before login
+            const rolesData: CustomRole[] = await apiFetch('/api/roles');
             setCustomRoles(rolesData);
             
             const user: User = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
             
-            // Augment user with permissions
-            const userRole = rolesData.find(r => r.name === user.role);
-            user.permissions = userRole ? userRole.permissions : [];
+            // Augment user with permissions based on all their roles
+            const safeUserRoles = Array.isArray(user.roles) ? user.roles : [];
+            const allPermissions = safeUserRoles.reduce((acc, roleName) => {
+                const role = rolesData.find(r => r.name === roleName);
+                if (role && Array.isArray(role.permissions)) {
+                    return [...acc, ...role.permissions];
+                }
+                return acc;
+            }, [] as Permission[]);
+            user.permissions = [...new Set(allPermissions)].sort(); // Ensure unique & sorted permissions
 
             setCurrentUser(user);
             addToast(`Welcome back, ${user.name}!`, 'success');
@@ -148,9 +209,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
         }
 
-        // Options to force a direct WebSocket connection. This is more reliable than
-        // the default "long-polling then upgrade" mechanism, especially when behind
-        // a reverse proxy like ngrok.
         const socketOptions = {
             transports: ['websocket'],
         };
@@ -165,7 +223,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         socket.on('data_updated', () => {
             console.log('Received data_updated event. Fetching new data...');
-            addToast('Data updated in real-time.', 'info', 2000); // A short, informative toast
+            addToast('Data updated in real-time.', 'info', 2000);
             fetchData();
         });
 
@@ -173,228 +231,173 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             console.log('Disconnected from WebSocket server.');
         });
         
-        // Cleanup on component unmount or user logout
         return () => {
             socket.disconnect();
         };
     }, [currentUser, fetchData, addToast]);
 
     useEffect(() => {
-        if (currentUser && users.length > 0) {
+        if (currentUser && users.length > 0 && customRoles.length > 0) {
             const updatedUserFromList = users.find(u => u.id === currentUser.id);
             if (updatedUserFromList) {
-                const userRole = customRoles.find(r => r.name === updatedUserFromList.role);
-                const permissions = userRole ? userRole.permissions : [];
-                const updatedUserWithPerms = { ...updatedUserFromList, permissions };
-                if (JSON.stringify(updatedUserWithPerms) !== JSON.stringify(currentUser)) {
-                    setCurrentUser(updatedUserWithPerms);
+                const safeUserRoles = Array.isArray(updatedUserFromList.roles) ? updatedUserFromList.roles : [];
+                const allPermissions = safeUserRoles.reduce((acc, roleName) => {
+                    const role = customRoles.find(r => r.name === roleName);
+                    if (role && Array.isArray(role.permissions)) {
+                        return [...acc, ...role.permissions];
+                    }
+                    return acc;
+                }, [] as Permission[]);
+                
+                const updatedPermissions = [...new Set(allPermissions)].sort();
+                if (JSON.stringify(currentUser.permissions) !== JSON.stringify(updatedPermissions)) {
+                    setCurrentUser(prev => prev ? ({ ...prev, permissions: updatedPermissions }) : null);
                 }
             }
         }
-    }, [users, currentUser, customRoles]);
+    }, [currentUser, users, customRoles]);
+    
+    // --- App Functions ---
+    const hasPermission = useCallback((permission: Permission) => {
+        return currentUser?.permissions?.includes(permission) ?? false;
+    }, [currentUser]);
 
-
-    const logout = useCallback(() => {
-        addToast("You have been logged out.", 'info');
-        setCurrentUser(null);
-        setUsers([]); setShipments([]); setClientTransactions([]); setNotifications([]); setRawCourierStats([]); setCourierTransactions([]); setCustomRoles([]);
-    }, [addToast]);
-
-    const executeApiAction = useCallback(async (action: Promise<any>, successMessage: string, errorMessagePrefix: string) => {
+    const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => {
+        if (!currentUser) return;
+        const newShipment = {
+            ...shipmentData,
+            clientId: currentUser.id,
+            clientName: currentUser.name,
+        };
+        await apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(newShipment) });
+    }, [currentUser]);
+    
+    const updateShipmentStatus = useCallback(async (shipmentId: string, status: ShipmentStatus, details: { failureReason?: string; failurePhoto?: string | null } = {}) => {
         try {
-            await action;
-            if(successMessage) addToast(successMessage, 'success');
-            // Data will be re-fetched by the WebSocket event, so no need to call fetchData() here for the acting client.
-            // await fetchData(); 
+            await apiFetch(`/api/shipments/${shipmentId}/status`, {
+                method: 'PUT',
+                body: JSON.stringify({ status, ...details }),
+            });
+            addToast(`Shipment ${shipmentId} updated to ${status}`, 'success');
             return true;
         } catch (error: any) {
-            addToast(`${errorMessagePrefix}: ${error.message}`, 'error');
+            addToast(`Error: ${error.message}`, 'error');
             return false;
         }
     }, [addToast]);
 
-    // Role Management
-    const addRole = useCallback(async (roleData: Omit<CustomRole, 'id'>) => {
-        await executeApiAction(apiFetch('/api/roles', { method: 'POST', body: JSON.stringify(roleData) }), 'Role created successfully.', 'Failed to create role');
-    }, [executeApiAction]);
+    const sendDeliveryVerificationCode = useCallback(async (shipmentId: string) => {
+        try {
+            await apiFetch(`/api/shipments/${shipmentId}/send-delivery-code`, { method: 'POST' });
+            addToast('Verification code sent to recipient!', 'success');
+            return true;
+        } catch (error: any) {
+            addToast(`Failed to send code: ${error.message}`, 'error');
+            return false;
+        }
+    }, [addToast]);
 
-    const updateRole = useCallback(async (roleId: string, roleData: Partial<CustomRole>) => {
-        await executeApiAction(apiFetch(`/api/roles/${roleId}`, { method: 'PUT', body: JSON.stringify(roleData) }), 'Role updated successfully.', 'Failed to update role');
-    }, [executeApiAction]);
+    const verifyDelivery = useCallback(async (shipmentId: string, code: string) => {
+        try {
+            await apiFetch(`/api/shipments/${shipmentId}/verify-delivery`, {
+                method: 'POST',
+                body: JSON.stringify({ code })
+            });
+            addToast('Delivery confirmed!', 'success');
+            return true;
+        } catch (error: any) {
+            addToast(`Verification failed: ${error.message}`, 'error');
+            return false;
+        }
+    }, [addToast]);
 
-    const deleteRole = useCallback(async (roleId: string) => {
-        await executeApiAction(apiFetch(`/api/roles/${roleId}`, { method: 'DELETE' }), 'Role deleted successfully.', 'Failed to delete role');
-    }, [executeApiAction]);
+    const assignShipmentToCourier = useCallback(async (shipmentId: string, courierId: number) => {
+        try {
+            await apiFetch(`/api/shipments/${shipmentId}/assign`, {
+                method: 'PUT',
+                body: JSON.stringify({ courierId }),
+            });
+            addToast(`Shipment ${shipmentId} assigned successfully`, 'success');
+            return true;
+        } catch (error: any) {
+            addToast(error.message, 'error');
+            return false;
+        }
+    }, [addToast]);
 
-
-    const addUser = useCallback(async (userData: Omit<User, 'id'>) => {
-        await executeApiAction(apiFetch('/api/users', { method: 'POST', body: JSON.stringify(userData) }), `User "${userData.name}" created successfully.`, 'Failed to create user');
-    }, [executeApiAction]);
+    const addUser = useCallback(async (userData: Omit<User, 'id' | 'publicId'>) => {
+        try {
+            await apiFetch('/api/users', {
+                method: 'POST',
+                body: JSON.stringify(userData)
+            });
+            addToast(`User ${userData.name} created successfully.`, 'success');
+        } catch (error: any) {
+            addToast(error.message, 'error');
+        }
+    }, [addToast]);
     
     const updateUser = useCallback(async (userId: number, userData: Partial<User>, silent = false) => {
         try {
-            await apiFetch(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(userData) });
+            await apiFetch(`/api/users/${userId}`, {
+                method: 'PUT',
+                body: JSON.stringify(userData)
+            });
             if (!silent) addToast('User updated successfully.', 'success');
-            // await fetchData(); // Let websocket handle refresh
-        } catch (error: any) { if (!silent) addToast(`Update failed: ${error.message}`, 'error'); }
+        } catch (error: any) {
+            addToast(error.message, 'error');
+        }
     }, [addToast]);
 
     const removeUser = useCallback(async (userId: number) => {
-        await executeApiAction(apiFetch(`/api/users/${userId}`, { method: 'DELETE' }), 'User removed successfully.', 'Failed to remove user');
-    }, [executeApiAction]);
-
-    const resetPassword = useCallback(async (userId: number, password: string) => {
-        await executeApiAction(apiFetch(`/api/users/${userId}/password`, { method: 'PUT', body: JSON.stringify({ password }) }), 'Password reset successfully.', 'Failed to reset password');
-    }, [executeApiAction]);
-    
-    const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => {
-        if (!currentUser) return;
-        const payload = { ...shipmentData, clientId: currentUser.id, clientName: currentUser.name, clientFlatRateFee: currentUser.flatRateFee };
-        await executeApiAction(apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(payload) }), 'Shipment created successfully!', 'Failed to create shipment');
-    }, [currentUser, executeApiAction]);
-
-    const updateShipmentStatus = useCallback((shipmentId: string, status: ShipmentStatus, details?: { failureReason?: string; }) =>
-        executeApiAction(apiFetch(`/api/shipments/${shipmentId}/status`, { method: 'PUT', body: JSON.stringify({ status, ...details }) }), `Shipment ${shipmentId} updated to ${status}.`, 'Failed to update status'),
-        [executeApiAction]);
-
-    const assignShipmentToCourier = useCallback(async (shipmentId: string, courierId: number): Promise<boolean> => {
-        return executeApiAction(apiFetch(`/api/shipments/${shipmentId}/assign`, { method: 'PUT', body: JSON.stringify({ courierId }) }), `Shipment ${shipmentId} assigned.`, 'Assignment failed');
-    }, [executeApiAction]);
-
-    const reassignCourier = useCallback(async (shipmentId: string, newCourierId: number) => {
-        await assignShipmentToCourier(shipmentId, newCourierId);
-    }, [assignShipmentToCourier]);
-
-    const assignReturn = useCallback(async (shipmentId: string, courierId: number): Promise<boolean> => {
         try {
-            await updateShipmentStatus(shipmentId, ShipmentStatus.RETURN_REQUESTED);
-            return await assignShipmentToCourier(shipmentId, courierId);
+            await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
+            addToast('User deleted successfully.', 'success');
         } catch (error: any) {
-            addToast(`Failed to assign return: ${error.message}`, 'error');
-            return false;
-        }
-    }, [updateShipmentStatus, assignShipmentToCourier, addToast]);
-
-    const updateShipmentFees = useCallback(async (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => {
-        await executeApiAction(apiFetch(`/api/shipments/${shipmentId}/fees`, { method: 'PUT', body: JSON.stringify(fees) }), 'Shipment fees updated.', 'Failed to update fees');
-    }, [executeApiAction]);
-    
-    const resendNotification = useCallback(async (notificationId: string) => {
-        setNotificationStatus(prev => ({...prev, [notificationId]: 'sending' }));
-        try {
-            await apiFetch(`/api/notifications/${notificationId}/resend`, { method: 'POST' });
-            addToast('Notification resent successfully.', 'success');
-            // await fetchData(); // Let websocket handle refresh
-            setNotificationStatus(prev => ({...prev, [notificationId]: 'sent' }));
-        } catch (e: any) {
-            addToast(e.message, 'error');
-            setNotificationStatus(prev => ({...prev, [notificationId]: 'failed' }));
+            addToast(error.message, 'error');
         }
     }, [addToast]);
-    
-    const updateCourierSettings = useCallback(async (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => {
-        await executeApiAction(apiFetch(`/api/couriers/${courierId}/settings`, { method: 'PUT', body: JSON.stringify(newSettings) }), "Courier settings updated.", 'Failed to update settings');
-    }, [executeApiAction]);
 
-    const applyManualPenalty = useCallback(async (courierId: number, amount: number, description: string) => {
-        await executeApiAction(apiFetch(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) }), 'Penalty applied successfully.', 'Failed to apply penalty');
-    }, [executeApiAction]);
+    const resetPassword = useCallback(async (userId: number, newPassword: string) => {
+        try {
+            await apiFetch(`/api/users/${userId}/password`, {
+                method: 'PUT',
+                body: JSON.stringify({ password: newPassword })
+            });
+            addToast("Password reset successfully.", 'success');
+        } catch (error: any) {
+            addToast(error.message, 'error');
+        }
+    }, [addToast]);
 
-    const requestCourierPayout = useCallback(async (courierId: number, amount: number) => {
-        await executeApiAction(apiFetch(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount }) }), 'Payout request submitted.', 'Failed to submit payout request');
-    }, [executeApiAction]);
-
-    const processCourierPayout = useCallback(async (transactionId: string) => {
-        await executeApiAction(apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT' }), 'Payout processed successfully.', 'Failed to process payout');
-    }, [executeApiAction]);
-    
-    const updateClientFlatRate = useCallback(async (clientId: number, flatRateFee: number) => {
-        await executeApiAction(apiFetch(`/api/clients/${clientId}/flatrate`, { method: 'PUT', body: JSON.stringify({ flatRateFee }) }), "Client's flat rate updated.", 'Failed to update flat rate');
-    }, [executeApiAction]);
-
-    const updateClientTaxCard = useCallback(async (clientId: number, taxCardNumber: string) => {
-        await executeApiAction(apiFetch(`/api/clients/${clientId}/taxcard`, { method: 'PUT', body: JSON.stringify({ taxCardNumber }) }), "Client's tax card number updated.", 'Failed to update tax card');
-    }, [executeApiAction]);
-    
-    // --- New Delivery Verification Functions ---
-    const sendDeliveryVerificationCode = useCallback(async (shipmentId: string) => {
-        return executeApiAction(
-            apiFetch(`/api/shipments/${shipmentId}/send-delivery-code`, { method: 'POST' }),
-            'Delivery code sent to recipient (check server logs).',
-            'Failed to send delivery code'
-        );
-    }, [executeApiAction]);
-
-    const verifyDelivery = useCallback(async (shipmentId: string, code: string) => {
-        return executeApiAction(
-            apiFetch(`/api/shipments/${shipmentId}/verify-delivery`, { method: 'POST', body: JSON.stringify({ code }) }),
-            'Shipment marked as Delivered!',
-            'Delivery confirmation failed'
-        );
-    }, [executeApiAction]);
-
-
-    const walletBalance = useMemo(() => {
-        if (!currentUser) return 0;
-        const balance = clientTransactions.filter(t => t.userId === currentUser.id).reduce((sum, t) => sum + t.amount, 0);
-        return isNaN(balance) ? 0 : balance;
-    }, [clientTransactions, currentUser]);
-    
-    const currentUserWithBalance = useMemo(() => currentUser ? { ...currentUser, walletBalance } : null, [currentUser, walletBalance]);
-
-    const courierStats = useMemo((): CourierStats[] => {
-        return rawCourierStats.map(statConfig => {
-            const txs = courierTransactions.filter(t => t.courierId === statConfig.courierId);
-            const deliveriesCompleted = shipments.filter(s => s.courierId === statConfig.courierId && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED)).length;
-            const deliveriesFailed = shipments.filter(s => s.courierId === statConfig.courierId && s.status === ShipmentStatus.DELIVERY_FAILED).length;
-            const totalEarnings = txs.filter(t => (t.type === CourierTransactionType.COMMISSION || t.type === CourierTransactionType.BONUS) && t.status === CourierTransactionStatus.PROCESSED).reduce((s, t) => s + t.amount, 0);
-            const pendingEarnings = txs.filter(t => t.type === CourierTransactionType.COMMISSION && t.status === CourierTransactionStatus.PENDING).reduce((s, t) => s + t.amount, 0);
-            const currentBalance = txs.filter(t => t.status === CourierTransactionStatus.PROCESSED).reduce((s, t) => s + t.amount, 0);
-            const lastDeliveryDate = shipments.filter(s => s.courierId === statConfig.courierId && s.deliveryDate).sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime())[0]?.deliveryDate;
-            
-            return {
-                ...statConfig,
-                deliveriesCompleted,
-                deliveriesFailed,
-                totalEarnings,
-                pendingEarnings,
-                currentBalance,
-                lastDeliveryDate,
-            };
-        });
-    }, [rawCourierStats, courierTransactions, shipments]);
-    
-    const canCourierReceiveAssignment = useCallback((courierId: number): boolean => {
-        const stats = courierStats.find(s => s.courierId === courierId);
-        return !stats?.isRestricted;
-    }, [courierStats]);
-    
     const getCourierName = useCallback((courierId?: number) => {
         if (!courierId) return 'Unassigned';
         return users.find(u => u.id === courierId)?.name || 'Unknown Courier';
     }, [users]);
+
+    const reassignCourier = useCallback(async (shipmentId: string, newCourierId: number) => {
+        await assignShipmentToCourier(shipmentId, newCourierId);
+    }, [assignShipmentToCourier]);
     
-    const getTaxCardNumber = useCallback((clientId: number): string => {
-        return users.find(u => u.id === clientId)?.taxCardNumber || '';
-    }, [users]);
+    const canCourierReceiveAssignment = useCallback((courierId: number) => {
+        const stats = courierStats.find(cs => cs.courierId === courierId);
+        return !stats?.isRestricted;
+    }, [courierStats]);
     
-    const hasPermission = useCallback((permission: Permission): boolean => {
-        return currentUser?.permissions?.includes(permission) || false;
-    }, [currentUser]);
-    
-    const getAdminFinancials = useCallback((): AdminFinancials => {
+    const getAdminFinancials = useCallback(() => {
         const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
-        const undeliveredShipments = shipments.filter(s => ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(s.status));
-        const failedShipments = shipments.filter(s => [ShipmentStatus.DELIVERY_FAILED, ShipmentStatus.RETURNED].includes(s.status));
-    
+        const undeliveredShipments = shipments.filter(s => ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(s.status));
+        const failedShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERY_FAILED);
+
         const totalCollectedMoney = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
         const undeliveredPackagesValue = undeliveredShipments.reduce((sum, s) => sum + s.price, 0);
-        const failedDeliveriesValue = failedShipments.reduce((sum, s) => sum + s.price, 0);
+        const failedDeliveriesValue = failedShipments.reduce((sum, s) => sum + s.packageValue, 0);
+        
         const totalFees = shipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
-        const totalCommission = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
         const totalRevenue = deliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
+        const totalCommission = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
         const netRevenue = totalRevenue - totalCommission;
-    
+        
         return {
             totalCollectedMoney,
             undeliveredPackagesValue,
@@ -403,53 +406,187 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             totalFees,
             totalCommission,
             netRevenue,
+            grossRevenue: totalRevenue, // legacy
+            totalClientFees: totalRevenue, // legacy
+            totalCourierPayouts: totalCommission, // legacy
             totalOrders: deliveredShipments.length,
-            // Legacy properties
-            grossRevenue: totalCollectedMoney,
-            totalClientFees: totalFees,
-            totalCourierPayouts: totalCommission,
-            taxCarNumber: '', // This seems deprecated, should be per-client
+            taxCarNumber: '',
         };
     }, [shipments]);
-
+    
     const getClientFinancials = useCallback((): ClientFinancialSummary[] => {
-        const clients = users.filter(u => u.role === 'Client');
+        const clients = users.filter(u => u.roles.includes(UserRole.CLIENT));
         return clients.map(client => {
             const clientShipments = shipments.filter(s => s.clientId === client.id);
+            const totalOrders = clientShipments.length;
+            const orderSum = clientShipments.reduce((sum, s) => sum + s.price, 0);
             return {
                 clientId: client.id,
                 clientName: client.name,
-                totalOrders: clientShipments.length,
-                orderSum: clientShipments.reduce((sum, s) => sum + s.price, 0),
+                totalOrders,
+                orderSum,
                 flatRateFee: client.flatRateFee || 0,
             };
         });
     }, [users, shipments]);
+
+    // ... other functions
+    const updateShipmentFees = async (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => {
+        await apiFetch(`/api/shipments/${shipmentId}/fees`, { method: 'PUT', body: JSON.stringify(fees) });
+    };
+
+    const updateShipmentPackaging = async (shipmentId: string, packagingLog: PackagingLogEntry[], packagingNotes: string) => {
+        await apiFetch(`/api/shipments/${shipmentId}/packaging`, { method: 'PUT', body: JSON.stringify({ packagingLog, packagingNotes }) });
+    };
+
+    const resendNotification = async (notificationId: string) => {
+        setNotificationStatus(prev => ({ ...prev, [notificationId]: 'sending' }));
+        try {
+            await apiFetch(`/api/notifications/${notificationId}/resend`, { method: 'POST' });
+            setNotificationStatus(prev => ({ ...prev, [notificationId]: 'sent' }));
+        } catch (error) {
+            setNotificationStatus(prev => ({ ...prev, [notificationId]: 'failed' }));
+        }
+    };
+
+    const updateCourierSettings = async (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => {
+        await apiFetch(`/api/couriers/${courierId}/settings`, { method: 'PUT', body: JSON.stringify(newSettings) });
+    };
+
+    const applyManualPenalty = async (courierId: number, amount: number, description: string) => {
+        await apiFetch(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) });
+    };
+
+    const processCourierPayout = async (transactionId: string) => {
+        await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT' });
+    };
     
-    const calculateCommission = useCallback((shipment: Shipment, courier: CourierStats): number => {
+    const requestCourierPayout = async (courierId: number, amount: number) => {
+        await apiFetch(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount }) });
+    };
+
+    const updateClientFlatRate = async (clientId: number, flatRateFee: number) => {
+        await apiFetch(`/api/clients/${clientId}/flatrate`, { method: 'PUT', body: JSON.stringify({ flatRateFee }) });
+    };
+    
+    const updateClientTaxCard = async (clientId: number, taxCardNumber: string) => {
+        await apiFetch(`/api/clients/${clientId}/taxcard`, { method: 'PUT', body: JSON.stringify({ taxCardNumber }) });
+    };
+
+    const getTaxCardNumber = (clientId: number): string => {
+        return users.find(u => u.id === clientId)?.taxCardNumber || '';
+    };
+
+    const calculateCommission = (shipment: Shipment, courier: CourierStats) => {
         if (courier.commissionType === CommissionType.FLAT) {
             return courier.commissionValue;
         }
         return shipment.price * (courier.commissionValue / 100);
-    }, []);
-    
-    const calculatePriorityPrice = useCallback((baseRate: number, priority: ShipmentPriority, client: User): number => {
-        const multipliers = client.priorityMultipliers || {
-            [ShipmentPriority.STANDARD]: 1.0,
-            [ShipmentPriority.URGENT]: 1.5,
-            [ShipmentPriority.EXPRESS]: 2.0,
-        };
-        return baseRate * (multipliers[priority] || 1.0);
-    }, []);
+    };
 
-    const value = {
-        currentUser: currentUserWithBalance, users, shipments, clientTransactions, toasts, notifications, notificationStatus,
-        courierStats, courierTransactions, customRoles, financialSettings, isLoading,
-        login, logout, addShipment, updateShipmentStatus, updateShipmentFees, assignShipmentToCourier, reassignCourier, assignReturn,
-        addUser, updateUser, removeUser, resetPassword, addToast, removeToast, resendNotification, canCourierReceiveAssignment,
-        updateCourierSettings, applyManualPenalty, processCourierPayout, requestCourierPayout, updateClientFlatRate, updateClientTaxCard,
-        getAdminFinancials, getClientFinancials, hasPermission, calculateCommission, calculatePriorityPrice, getCourierName, getTaxCardNumber,
-        addRole, updateRole, deleteRole, sendDeliveryVerificationCode, verifyDelivery
+    const calculatePriorityPrice = (baseRate: number, priority: ShipmentPriority, client: User) => {
+        const multipliers = client.priorityMultipliers || { [ShipmentPriority.STANDARD]: 1.0, [ShipmentPriority.URGENT]: 1.5, [ShipmentPriority.EXPRESS]: 2.0 };
+        return baseRate * (multipliers[priority] || 1.0);
+    };
+
+    const addRole = async (role: Omit<CustomRole, 'id'>) => {
+        await apiFetch('/api/roles', { method: 'POST', body: JSON.stringify(role) });
+    };
+
+    const updateRole = async (roleId: string, roleData: Partial<CustomRole>) => {
+        await apiFetch(`/api/roles/${roleId}`, { method: 'PUT', body: JSON.stringify(roleData) });
+    };
+
+    const deleteRole = async (roleId: string) => {
+        await apiFetch(`/api/roles/${roleId}`, { method: 'DELETE' });
+    };
+
+    // Inventory
+    const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
+        await apiFetch('/api/inventory', { method: 'POST', body: JSON.stringify(item) });
+    };
+    const updateInventoryItem = async (itemId: string, data: Partial<InventoryItem>) => {
+        await apiFetch(`/api/inventory/${itemId}`, { method: 'PUT', body: JSON.stringify(data) });
+    };
+    const deleteInventoryItem = async (itemId: string) => {
+        await apiFetch(`/api/inventory/${itemId}`, { method: 'DELETE' });
+    };
+
+    // Assets
+    const addAsset = async (asset: Omit<Asset, 'id' | 'status'>) => {
+        await apiFetch('/api/assets', { method: 'POST', body: JSON.stringify(asset) });
+    };
+    const updateAsset = async (assetId: string, data: Partial<Asset>) => {
+        await apiFetch(`/api/assets/${assetId}`, { method: 'PUT', body: JSON.stringify(data) });
+    };
+    const deleteAsset = async (assetId: string) => {
+        await apiFetch(`/api/assets/${assetId}`, { method: 'DELETE' });
+    };
+    const assignAsset = async (assetId: string, userId: number | null) => {
+        if (userId) {
+            await apiFetch(`/api/assets/${assetId}/assign`, { method: 'POST', body: JSON.stringify({ userId }) });
+        } else {
+            await apiFetch(`/api/assets/${assetId}/unassign`, { method: 'POST' });
+        }
+    };
+
+    const value: AppContextType = {
+        currentUser,
+        users,
+        shipments,
+        clientTransactions,
+        toasts,
+        notifications,
+        notificationStatus,
+        courierStats,
+        courierTransactions,
+        customRoles,
+        inventoryItems,
+        assets,
+        isLoading,
+        login,
+        logout,
+        addShipment,
+        updateShipmentStatus,
+        updateShipmentFees,
+        updateShipmentPackaging,
+        assignShipmentToCourier,
+        reassignCourier,
+        addUser,
+        updateUser,
+        removeUser,
+        resetPassword,
+        addToast,
+        removeToast,
+        resendNotification,
+        canCourierReceiveAssignment,
+        updateCourierSettings,
+        applyManualPenalty,
+        processCourierPayout,
+        requestCourierPayout,
+        updateClientFlatRate,
+        updateClientTaxCard,
+        getTaxCardNumber,
+        getAdminFinancials,
+        getClientFinancials,
+        hasPermission,
+        calculateCommission,
+        calculatePriorityPrice,
+        getCourierName,
+        addRole,
+        updateRole,
+        deleteRole,
+        sendDeliveryVerificationCode,
+        verifyDelivery,
+        shipmentFilter,
+        setShipmentFilter,
+        addInventoryItem,
+        updateInventoryItem,
+        deleteInventoryItem,
+        addAsset,
+        updateAsset,
+        deleteAsset,
+        assignAsset,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType, ShipmentStatus, Shipment } from '../types';
@@ -33,12 +35,12 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
     const handleCountClick = (courierId: number, courierName: string, type: 'delivered' | 'pending') => {
         let filteredShipments: Shipment[] = [];
         if (type === 'delivered') {
-            filteredShipments = shipments.filter(s => s.courierId === courierId && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED));
+            filteredShipments = shipments.filter(s => s.courierId === courierId && s.status === ShipmentStatus.DELIVERED);
             setModalTitle(`Delivered Shipments for ${courierName}`);
         } else {
             filteredShipments = shipments.filter(s => 
                 s.courierId === courierId && 
-                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURN_IN_PROGRESS].includes(s.status)
+                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
             );
             setModalTitle(`Pending Shipments for ${courierName}`);
         }
@@ -51,18 +53,18 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
     };
 
 
-    const courierData = users.filter(u => u.role === 'Courier').map(user => {
+    const courierData = users.filter(u => (u.roles || []).includes('Courier')).map(user => {
         const stats = courierStats.find(cs => cs.courierId === user.id);
         const pendingPayouts = courierTransactions.filter(t => t.courierId === user.id && t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
         
         const pendingCount = shipments.filter(s => 
             s.courierId === user.id && 
-            [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURN_IN_PROGRESS].includes(s.status)
+            [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
         ).length;
 
         // New metrics
         const totalAssigned = shipments.filter(s => s.courierId === user.id).length;
-        const totalCompleted = shipments.filter(s => s.courierId === user.id && (s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.RETURNED)).length;
+        const totalCompleted = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERED).length;
         const totalFailed = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERY_FAILED).length;
 
         return {

@@ -1,13 +1,10 @@
 
 
-
-
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, UserRole, Zone, ShipmentPriority, Permission } from '../types';
+import { User, UserRole, ZONES, ShipmentPriority, Permission, CustomRole } from '../types';
 import { Modal } from '../components/common/Modal';
-import { PlusCircleIcon, PencilIcon, KeyIcon, TrashIcon, DocumentDownloadIcon, WalletIcon, PhoneIcon } from '../components/Icons';
+import { PlusCircleIcon, PencilIcon, KeyIcon, TrashIcon, DocumentDownloadIcon, WalletIcon, PhoneIcon, UserCircleIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 
 const UserManagement = () => {
@@ -26,6 +23,23 @@ const UserManagement = () => {
         [ShipmentPriority.EXPRESS]: 2.0,
     });
     
+    // Search and filter state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterRole, setFilterRole] = useState('all');
+
+    const filteredUsers = useMemo(() => {
+        return users.filter(user => {
+            const matchesSearch = searchTerm.trim() === '' ||
+                user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                user.publicId.toLowerCase().includes(searchTerm.toLowerCase());
+
+            const matchesRole = filterRole === 'all' || (user.roles || []).includes(filterRole);
+            
+            return matchesSearch && matchesRole;
+        });
+    }, [users, searchTerm, filterRole]);
+    
 
     if (!currentUser || !hasPermission(Permission.MANAGE_USERS)) {
         return (
@@ -38,10 +52,10 @@ const UserManagement = () => {
         );
     }
 
-    const getAvailableRoles = () => {
-        if (currentUser?.role === UserRole.ADMIN) {
+    const getAvailableRoles = (): CustomRole[] => {
+        if (currentUser?.roles?.includes(UserRole.ADMIN)) {
             return customRoles;
-        } else if (currentUser?.role === UserRole.SUPER_USER) {
+        } else if (currentUser?.roles?.includes(UserRole.SUPER_USER)) {
             return customRoles.filter(role => role.name !== UserRole.ADMIN);
         }
         return [];
@@ -50,13 +64,13 @@ const UserManagement = () => {
     const availableRoles = getAvailableRoles();
     
     const openModal = (modalMode: 'add' | 'edit' | 'reset' | 'delete' | 'taxCard' | 'priorityPricing', user?: User) => {
-        if ((modalMode === 'taxCard' || modalMode === 'priorityPricing') && currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_USER) {
+        if ((modalMode === 'taxCard' || modalMode === 'priorityPricing') && !currentUser?.roles?.includes(UserRole.ADMIN) && !currentUser?.roles?.includes(UserRole.SUPER_USER)) {
             addToast('Only administrators and super users can manage client settings', 'error');
             return;
         }
         
-        const isEditingAdmin = user?.role === UserRole.ADMIN;
-        const isSuperUser = currentUser?.role === UserRole.SUPER_USER;
+        const isEditingAdmin = user?.roles?.includes(UserRole.ADMIN);
+        const isSuperUser = currentUser?.roles?.includes(UserRole.SUPER_USER);
         if ((modalMode === 'edit' || modalMode === 'delete' || modalMode === 'reset') && isEditingAdmin && isSuperUser) {
             addToast('Super users cannot modify administrator accounts', 'error');
             return;
@@ -66,8 +80,8 @@ const UserManagement = () => {
         setSelectedUser(user || null);
         const clientRole = customRoles.find(r => r.name === UserRole.CLIENT);
         setFormData(user ? { ...user } : { 
-            role: clientRole?.name || '', 
-            zone: Zone.CAIRO_DOWNTOWN, 
+            roles: clientRole ? [clientRole.name] : [], 
+            zones: [], 
             flatRateFee: 75.0,
             priorityMultipliers: {
                 [ShipmentPriority.STANDARD]: 1.0,
@@ -95,17 +109,38 @@ const UserManagement = () => {
         setFormData({});
     };
     
-
-
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleRoleChange = (roleName: string, isChecked: boolean) => {
+        setFormData(prev => {
+            const currentRoles = prev.roles || [];
+            if (isChecked) {
+                return { ...prev, roles: [...currentRoles, roleName] };
+            } else {
+                return { ...prev, roles: currentRoles.filter(r => r !== roleName) };
+            }
+        });
+    };
+    
+    const handleZoneChange = (zoneName: string, isChecked: boolean) => {
+        setFormData(prev => {
+            const currentZones = prev.zones || [];
+            if (isChecked) {
+                return { ...prev, zones: [...currentZones, zoneName] };
+            } else {
+                return { ...prev, zones: currentZones.filter(z => z !== zoneName) };
+            }
+        });
+    };
+
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (mode === 'add') {
-            addUser(formData as Omit<User, 'id'>);
+            addUser(formData as Omit<User, 'id' | 'publicId'>);
         } else if (mode === 'edit' && selectedUser) {
             updateUser(selectedUser.id, formData);
         } else if (mode === 'reset' && selectedUser && formData.password) {
@@ -124,7 +159,7 @@ const UserManagement = () => {
     const handleTaxCardUpdate = () => {
         if (!selectedUser) return;
         
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_USER) {
+        if (!currentUser?.roles?.includes(UserRole.ADMIN) && !currentUser?.roles?.includes(UserRole.SUPER_USER)) {
             addToast('Only administrators and super users can manage tax card numbers', 'error');
             closeModal();
             return;
@@ -144,7 +179,7 @@ const UserManagement = () => {
     const handlePriorityPricingUpdate = () => {
         if (!selectedUser) return;
         
-        if (currentUser?.role !== UserRole.ADMIN && currentUser?.role !== UserRole.SUPER_USER) {
+        if (!currentUser?.roles?.includes(UserRole.ADMIN) && !currentUser?.roles?.includes(UserRole.SUPER_USER)) {
             addToast('Only administrators and super users can manage priority pricing', 'error');
             closeModal();
             return;
@@ -169,13 +204,13 @@ const UserManagement = () => {
     };
     
     const handleExport = () => {
-        const headers = ['ID', 'Name', 'Email', 'Role', 'Zone', 'Wallet Balance (EGP)'];
-        const data = users.map(user => [
-            user.id,
+        const headers = ['Public ID', 'Name', 'Email', 'Roles', 'Zones', 'Wallet Balance (EGP)'];
+        const data = filteredUsers.map(user => [
+            user.publicId,
             user.name,
             user.email,
-            user.role,
-            user.zone || 'N/A',
+            (user.roles || []).join(', '),
+            user.zones?.join(', ') || 'N/A',
             user.walletBalance != null ? user.walletBalance.toFixed(2) : 'N/A'
         ]);
         exportToCsv(headers, data, 'User_List_Export');
@@ -191,59 +226,6 @@ const UserManagement = () => {
                         <button onClick={handleDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Delete User</button>
                     </div>
                 </div>
-            )
-        }
-        
-        if (mode === 'priorityPricing' && selectedUser) {
-            return (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <p>Setting priority pricing multipliers for client <strong>{selectedUser.name}</strong>.</p>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Standard Priority Multiplier</label>
-                            <input type="number" step="0.1" min="0.1" value={tempPriorityMultipliers[ShipmentPriority.STANDARD]} onChange={(e) => setTempPriorityMultipliers(prev => ({ ...prev, [ShipmentPriority.STANDARD]: parseFloat(e.target.value) || 1.0 }))} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
-                            <p className="text-sm text-slate-500 mt-1">Base rate multiplier (typically 1.0 for standard delivery)</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Urgent Priority Multiplier</label>
-                            <input type="number" step="0.1" min="0.1" value={tempPriorityMultipliers[ShipmentPriority.URGENT]} onChange={(e) => setTempPriorityMultipliers(prev => ({ ...prev, [ShipmentPriority.URGENT]: parseFloat(e.target.value) || 1.5 }))} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
-                            <p className="text-sm text-slate-500 mt-1">Multiplier for urgent deliveries (typically 1.5x base rate)</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Express Priority Multiplier</label>
-                            <input type="number" step="0.1" min="0.1" value={tempPriorityMultipliers[ShipmentPriority.EXPRESS]} onChange={(e) => setTempPriorityMultipliers(prev => ({ ...prev, [ShipmentPriority.EXPRESS]: parseFloat(e.target.value) || 2.0 }))} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
-                            <p className="text-sm text-slate-500 mt-1">Multiplier for express deliveries (typically 2.0x base rate)</p>
-                        </div>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                        <h4 className="font-semibold text-slate-800 mb-2">Price Preview</h4>
-                        <p className="text-sm text-slate-600">Base rate: {selectedUser.flatRateFee?.toFixed(2) || '0.00'} EGP</p>
-                        <p className="text-sm text-slate-600">Standard: {((selectedUser.flatRateFee || 0) * tempPriorityMultipliers[ShipmentPriority.STANDARD]).toFixed(2)} EGP</p>
-                        <p className="text-sm text-slate-600">Urgent: {((selectedUser.flatRateFee || 0) * tempPriorityMultipliers[ShipmentPriority.URGENT]).toFixed(2)} EGP</p>
-                        <p className="text-sm text-slate-600">Express: {((selectedUser.flatRateFee || 0) * tempPriorityMultipliers[ShipmentPriority.EXPRESS]).toFixed(2)} EGP</p>
-                    </div>
-                    <div className="flex justify-end gap-4 pt-4">
-                        <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
-                        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Update Priority Pricing</button>
-                    </div>
-                </form>
-            )
-        }
-        
-        if (mode === 'taxCard' && selectedUser) {
-            return (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <p>Setting tax card number for client <strong>{selectedUser.name}</strong>.</p>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Tax Card Number (XXX-XXX-XXX format)</label>
-                        <input type="text" value={tempTaxCardNumber} onChange={(e) => setTempTaxCardNumber(e.target.value)} placeholder="123-456-789" pattern="\d{3}-\d{3}-\d{3}" className="w-full px-4 py-2 border border-slate-300 rounded-lg font-mono" />
-                        <p className="text-sm text-slate-500 mt-1">Leave empty to remove the tax card number. Only administrators and super users can modify this value.</p>
-                    </div>
-                    <div className="flex justify-end gap-4 pt-4">
-                        <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
-                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold">Update Tax Card</button>
-                    </div>
-                </form>
             )
         }
         
@@ -264,6 +246,8 @@ const UserManagement = () => {
         }
 
         if (mode === 'add' || mode === 'edit') {
+            const isCourier = (formData.roles || []).includes(UserRole.COURIER);
+            const isClient = (formData.roles || []).includes(UserRole.CLIENT);
             return (
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -277,7 +261,6 @@ const UserManagement = () => {
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
                         <input type="tel" name="phone" value={formData.phone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" placeholder="01xxxxxxxxx" />
-                        <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
                     </div>
                     {mode === 'add' && (
                         <div>
@@ -285,31 +268,69 @@ const UserManagement = () => {
                            <input type="password" name="password" onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
                        </div>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                           <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                           <select name="role" value={formData.role || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" disabled={mode === 'edit' && selectedUser?.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER}>
-                               {availableRoles.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-                           </select>
-                           {mode === 'edit' && selectedUser?.role === UserRole.ADMIN && currentUser?.role === UserRole.SUPER_USER && (
-                               <p className="text-sm text-slate-500 mt-1">Super users cannot change admin roles.</p>
-                           )}
-                       </div>
-                        {formData.role === UserRole.COURIER && (
-                             <div>
-                               <label className="block text-sm font-medium text-slate-700 mb-1">Zone</label>
-                               <select name="zone" value={formData.zone || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
-                                   {Object.values(Zone).map(z => <option key={z} value={z}>{z}</option>)}
-                               </select>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Roles</label>
+                        <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg">
+                            {availableRoles.map(r => (
+                                <label key={r.id} className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={(formData.roles || []).includes(r.name)} onChange={e => handleRoleChange(r.name, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                                    <span>{r.name}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    {isCourier && (
+                         <div className="p-4 border border-blue-200 bg-blue-50 rounded-lg space-y-4">
+                            <h4 className="font-semibold text-blue-800">Courier Settings</h4>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Assigned Zones</label>
+                                <div className="max-h-48 overflow-y-auto space-y-2 p-2 bg-white rounded">
+                                    {Object.entries(ZONES.GreaterCairo).map(([city, zoneList]) => (
+                                        <div key={city}>
+                                            <h5 className="font-semibold text-slate-600 mt-2 px-1">{city}</h5>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 p-1">
+                                                {zoneList.map(zone => (
+                                                    <label key={zone} className="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                                                        <input type="checkbox" checked={(formData.zones || []).includes(zone)} onChange={e => handleZoneChange(zone, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
+                                                        <span>{zone}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                            </div>
-                        )}
-                        {formData.role === UserRole.CLIENT && (
+                           {mode === 'add' && (
+                               <div>
+                                   <label className="block text-sm font-medium text-slate-700 mb-1">Referred By (Optional)</label>
+                                   <select name="referrerId" value={formData.referrerId || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg">
+                                       <option value="">No Referrer</option>
+                                       {users.filter(u => (u.roles || []).includes(UserRole.COURIER)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                   </select>
+                               </div>
+                           )}
+                         </div>
+                    )}
+                    {isClient && (
+                         <div className="p-4 border border-green-200 bg-green-50 rounded-lg space-y-4">
+                            <h4 className="font-semibold text-green-800">Client Settings</h4>
                              <div>
                                <label className="block text-sm font-medium text-slate-700 mb-1">Flat Rate Fee (EGP)</label>
                                <input type="number" step="0.01" min="0" name="flatRateFee" value={formData.flatRateFee ?? ''} onChange={(e) => setFormData(prev => ({ ...prev, flatRateFee: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
                            </div>
-                        )}
-                    </div>
+                         </div>
+                    )}
+                    {(formData.roles?.includes(UserRole.ADMIN) || currentUser.roles?.includes(UserRole.ADMIN)) && formData.referrerId && (
+                         <div className="p-4 border border-purple-200 bg-purple-50 rounded-lg space-y-4">
+                            <h4 className="font-semibold text-purple-800">Referral Settings (for Referrer)</h4>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Referral Commission (EGP per delivery)</label>
+                                <input type="number" step="0.01" min="0" name="referralCommission" value={formData.referralCommission ?? ''} onChange={(e) => setFormData(prev => ({...prev, referralCommission: parseFloat(e.target.value) || 0 }))} className="w-full px-4 py-2 border border-slate-300 rounded-lg" />
+                                <p className="text-xs text-slate-500 mt-1">This commission is paid to the referring courier for each successful delivery made by this new courier.</p>
+                            </div>
+                         </div>
+                    )}
+
                     <div className="flex justify-end gap-4 pt-4">
                         <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
                         <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg font-semibold">{mode === 'add' ? 'Create User' : 'Save Changes'}</button>
@@ -339,41 +360,69 @@ const UserManagement = () => {
                     </button>
                 </div>
             </div>
+
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row gap-4">
+                <input 
+                    type="text"
+                    placeholder="Search by name, email, or ID..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg"
+                />
+                 <select
+                    value={filterRole}
+                    onChange={e => setFilterRole(e.target.value)}
+                    className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg bg-white"
+                >
+                    <option value="all">Filter by Role</option>
+                    {customRoles.map(role => (
+                        <option key={role.id} value={role.name}>{role.name}</option>
+                    ))}
+                </select>
+            </div>
             
              <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead className="bg-slate-50">
                         <tr>
-                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Role</th>
+                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">User</th>
+                            <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Roles</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider hidden md:table-cell">Details</th>
                             <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {users.map(user => (
+                        {filteredUsers.map(user => (
                             <tr key={user.id}>
                                 <td className="px-6 py-4">
-                                    <p className="font-semibold text-slate-800">{user.name}</p>
-                                    <p className="text-sm text-slate-500">{user.email}</p>
-                                     {user.phone && (
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <PhoneIcon className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                                            <span className="text-sm text-slate-600">{user.phone}</span>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
+                                            <UserCircleIcon className="w-6 h-6 text-slate-500"/>
                                         </div>
-                                    )}
+                                        <div>
+                                            <p className="font-semibold text-slate-800">{user.name}</p>
+                                            <p className="text-sm text-slate-500">{user.email}</p>
+                                            <p className="font-mono text-xs text-slate-400 mt-1">{user.publicId}</p>
+                                        </div>
+                                    </div>
                                 </td>
-                                <td className="px-6 py-4"><span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{user.role}</span></td>
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-wrap gap-1">
+                                        {(user.roles || []).map(role => (
+                                            <span key={role} className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">{role}</span>
+                                        ))}
+                                    </div>
+                                </td>
                                 <td className="px-6 py-4 text-sm text-slate-600 hidden md:table-cell">
-                                    {user.role === UserRole.COURIER && `Zone: ${user.zone}`}
-                                    {user.role === UserRole.CLIENT && `Fee: ${user.flatRateFee?.toFixed(2)} EGP`}
+                                    {(user.roles || []).includes(UserRole.COURIER) && `Zones: ${user.zones?.join(', ') || 'N/A'}`}
+                                    {(user.roles || []).includes(UserRole.CLIENT) && `Fee: ${user.flatRateFee?.toFixed(2)} EGP`}
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-2">
                                         <button onClick={() => openModal('edit', user)} title="Edit User" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
                                         <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
                                         <button onClick={() => openModal('delete', user)} title="Delete User" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
-                                         {user.role === UserRole.CLIENT && <button onClick={() => openModal('priorityPricing', user)} title="Set Priority Pricing" className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md"><WalletIcon className="w-5 h-5"/></button>}
+                                         {(user.roles || []).includes(UserRole.CLIENT) && <button onClick={() => openModal('priorityPricing', user)} title="Set Priority Pricing" className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md"><WalletIcon className="w-5 h-5"/></button>}
                                     </div>
                                 </td>
                             </tr>
@@ -381,7 +430,7 @@ const UserManagement = () => {
                     </tbody>
                 </table>
             </div>
-             <Modal isOpen={!!mode} onClose={closeModal} title={mode === 'add' ? 'Create New User' : `Manage ${selectedUser?.name}`}>
+             <Modal isOpen={!!mode} onClose={closeModal} title={mode === 'add' ? 'Create New User' : `Manage ${selectedUser?.name}`} size="2xl">
                 {renderModalContent()}
             </Modal>
             

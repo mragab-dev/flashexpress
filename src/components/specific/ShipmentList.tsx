@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shipment, ShipmentStatus } from '../../types';
 import { ShipmentStatusBadge } from '../common/ShipmentStatusBadge';
-import { PencilIcon } from '../Icons';
+import { PencilIcon, ClockIcon } from '../Icons';
 
 interface ShipmentListProps {
     shipments: Shipment[]; 
@@ -24,9 +24,15 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
 }) => {
     const [editingCell, setEditingCell] = useState<{ shipmentId: string; field: 'clientFee' | 'courierCommission' } | null>(null);
     const [editValue, setEditValue] = useState<string>('');
+    const [now, setNow] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 60000); // Update every minute
+        return () => clearInterval(timer);
+    }, []);
 
     const isEditable = (status: ShipmentStatus) => {
-        return ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(status);
+        return ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(status);
     };
 
     const startEditing = (shipment: Shipment, field: 'clientFee' | 'courierCommission') => {
@@ -52,13 +58,31 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
         setEditValue('');
     };
 
+    const getDaysInPhase = (shipment: Shipment): string => {
+        if (shipment.status === ShipmentStatus.DELIVERED || !shipment.statusHistory || shipment.statusHistory.length === 0) {
+            return '-';
+        }
+        const lastStatusUpdate = new Date(shipment.statusHistory[shipment.statusHistory.length - 1].timestamp);
+        const diff = now.getTime() - lastStatusUpdate.getTime();
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        if (days > 0) return `${days}d ${hours}h`;
+        return `${hours}h`;
+    };
+
+    const isOverdue = (shipment: Shipment): boolean => {
+        if (shipment.status === ShipmentStatus.DELIVERED) return false;
+        const diff = now.getTime() - new Date(shipment.creationDate).getTime();
+        return diff > 3 * 24 * 60 * 60 * 1000;
+    };
+
     const renderFeeCell = (shipment: Shipment, field: 'clientFee' | 'courierCommission') => {
-        const isEditing = editingCell?.shipmentId === shipment.id && editingCell?.field === field;
+        const isEditingThisCell = editingCell?.shipmentId === shipment.id && editingCell?.field === field;
         const value = field === 'clientFee' ? shipment.clientFlatRateFee : shipment.courierCommission;
         const valueText = typeof value === 'number' ? `${value.toFixed(2)} EGP` : 'N/A';
         const canEdit = showEditableFees && isEditable(shipment.status) && updateShipmentFees;
 
-        if (isEditing) {
+        if (isEditingThisCell) {
             return (
                 <input
                     type="number"
@@ -99,6 +123,7 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                         <th className="px-6 py-3 text-sm font-semibold text-slate-600">Recipient</th>
                         <th className="px-6 py-3 text-sm font-semibold text-slate-600">Date</th>
                         <th className="px-6 py-3 text-sm font-semibold text-slate-600">Status</th>
+                        <th className="px-6 py-3 text-sm font-semibold text-slate-600">Days in Phase</th>
                         <th className="px-6 py-3 text-sm font-semibold text-slate-600">Price</th>
                         {showClientFee && <th className="px-6 py-3 text-sm font-semibold text-slate-600">Client Fee</th>}
                         {showCourierCommission && <th className="px-6 py-3 text-sm font-semibold text-slate-600">Courier Commission</th>}
@@ -110,6 +135,7 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                     {shipments.map(s => {
                         const clientFee = s.clientFlatRateFee;
                         const courierCommission = s.courierCommission;
+                        const isShipmentOverdue = isOverdue(s);
 
                         let netProfit = 0;
                         let netProfitText = 'N/A';
@@ -124,7 +150,13 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                                 <td className="px-6 py-4 text-slate-800 font-medium">{s.clientName}</td>
                                 <td className="px-6 py-4 text-slate-800 font-medium">{s.recipientName}</td>
                                 <td className="px-6 py-4 text-slate-600">{new Date(s.creationDate).toLocaleDateString()}</td>
-                                <td className="px-6 py-4"><ShipmentStatusBadge status={s.status} /></td>
+                                <td className="px-6 py-4">
+                                    <div className="flex flex-col gap-1 items-start">
+                                        <ShipmentStatusBadge status={s.status} />
+                                        {isShipmentOverdue && <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800 flex items-center gap-1"><ClockIcon className="w-3 h-3" /> Overdue</span>}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 text-slate-600 text-sm">{getDaysInPhase(s)}</td>
                                 <td className="px-6 py-4 font-semibold text-slate-800">{s.price.toFixed(2)} EGP</td>
                                 {showClientFee && <td className="px-6 py-4 font-semibold text-orange-600">{renderFeeCell(s, 'clientFee')}</td>}
                                 {showCourierCommission && <td className="px-6 py-4 font-semibold text-indigo-600">{renderFeeCell(s, 'courierCommission')}</td>}
@@ -173,6 +205,10 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
                             <div className="responsive-card-item">
                                 <div className="responsive-card-label">Date</div>
                                 <div className="responsive-card-value">{new Date(s.creationDate).toLocaleDateString()}</div>
+                            </div>
+                             <div className="responsive-card-item">
+                                <div className="responsive-card-label">Days in Phase</div>
+                                <div className="responsive-card-value">{getDaysInPhase(s)}</div>
                             </div>
                             <div className="responsive-card-item">
                                 <div className="responsive-card-label">Price</div>

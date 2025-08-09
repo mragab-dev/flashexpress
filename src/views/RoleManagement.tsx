@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Permission, CustomRole } from '../types';
@@ -76,7 +77,7 @@ const RoleManagement = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {customRoles.map(role => {
-                    const userCount = users.filter(u => u.role === role.name).length;
+                    const userCount = users.filter(u => (u.roles || []).includes(role.name)).length;
                     return (
                         <div key={role.id} className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                             <div className="p-5">

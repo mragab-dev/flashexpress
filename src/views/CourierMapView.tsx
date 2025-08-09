@@ -1,4 +1,5 @@
 
+
 import { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole } from '../types';
@@ -13,7 +14,7 @@ const CourierMapView = () => {
     const { users } = useAppContext();
     const mapRef = useRef<HTMLDivElement>(null);
     const [isMapReady, setIsMapReady] = useState(false);
-    const couriersWithLocation = users.filter(u => u.role === UserRole.COURIER && u.location);
+    const couriersWithLocation = users.filter(u => u.roles.includes(UserRole.COURIER) && u.location);
 
     useEffect(() => {
         const checkGoogleMaps = () => {
@@ -51,7 +52,7 @@ const CourierMapView = () => {
                 infoWindow.setContent(`
                     <div class="font-sans">
                         <div class="font-bold text-md">${courier.name}</div>
-                        <div class="text-sm text-slate-600">Zone: ${courier.zone}</div>
+                        <div class="text-sm text-slate-600">Zone: ${courier.zones?.join(', ')}</div>
                     </div>
                 `);
                 infoWindow.open(map, marker);

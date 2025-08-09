@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Address, PaymentMethod, Zone, ShipmentPriority, Shipment } from '../types';
+import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment } from '../types';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
 import Papa from 'papaparse';
 
@@ -13,7 +13,7 @@ const CreateShipment = () => {
     // State for Single Shipment
     const [recipientName, setRecipientName] = useState('');
     const [recipientPhone, setRecipientPhone] = useState('');
-    const [toAddress, setToAddress] = useState<Address>({ street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' });
+    const [toAddress, setToAddress] = useState<Address>({ street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' });
     const [packageDescription, setPackageDescription] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.COD);
     const [priority, setPriority] = useState<ShipmentPriority>(ShipmentPriority.STANDARD);
@@ -28,7 +28,15 @@ const CreateShipment = () => {
     const baseFee = currentUser?.flatRateFee || 0;
     const priorityAdjustedFee = currentUser ? calculatePriorityPrice(baseFee, priority, currentUser) : baseFee;
     const numericPackageValue = parseFloat(packageValue) || 0;
-    const totalPrice = numericPackageValue + priorityAdjustedFee;
+    
+    const totalPrice = useMemo(() => {
+        if (paymentMethod === PaymentMethod.INSTAPAY) {
+            return -priorityAdjustedFee;
+        }
+        // For COD
+        return numericPackageValue + priorityAdjustedFee;
+    }, [paymentMethod, priorityAdjustedFee, numericPackageValue]);
+
 
     const handleSingleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,7 +47,7 @@ const CreateShipment = () => {
             clientName: currentUser.name,
             recipientName,
             recipientPhone,
-            fromAddress: currentUser.address || { street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' },
+            fromAddress: currentUser.address || { street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' },
             toAddress,
             packageDescription,
             isLargeOrder: false,
@@ -56,18 +64,20 @@ const CreateShipment = () => {
         // Reset form
         setRecipientName('');
         setRecipientPhone('');
-        setToAddress({ street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' });
+        setToAddress({ street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' });
         setPackageDescription('');
         setPaymentMethod(PaymentMethod.COD);
         setPriority(ShipmentPriority.STANDARD);
         setPackageValue('');
     };
 
-    const getAvailableZones = (city: string) => {
-        return Object.values(Zone).filter(z => z.startsWith(city));
+    const handleZoneChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedZone = e.target.value;
+        const parentGroup = e.target.options[e.target.selectedIndex]?.parentElement?.getAttribute('label');
+        setToAddress(prev => ({ ...prev, zone: selectedZone, city: parentGroup || 'Other' }));
     };
-    
-    const availableZones = getAvailableZones(toAddress.city);
+
+    const allZones = Object.values(ZONES.GreaterCairo.Cairo).concat(Object.values(ZONES.GreaterCairo.Giza));
 
     // --- Bulk Upload Logic ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,7 +105,7 @@ const CreateShipment = () => {
                     toAddress: {
                         street: row['Recipient Street'],
                         city: row['City'] || 'Cairo',
-                        zone: row['Zone'] as Zone,
+                        zone: row['Zone'],
                         details: row['Address Details'] || '',
                     },
                     packageDescription: row['Package Description'],
@@ -115,10 +125,12 @@ const CreateShipment = () => {
             if (!shipment.recipientName) errors.push('Recipient Name is required.');
             if (!shipment.recipientPhone) errors.push('Recipient Phone is required.');
             if (!shipment.toAddress.street) errors.push('Recipient Street is required.');
-            if (!Object.values(Zone).includes(shipment.toAddress.zone)) errors.push('Invalid Zone.');
-            if (!Object.values(PaymentMethod).includes(shipment.paymentMethod)) errors.push('Invalid Payment Method.');
+            if (!allZones.includes(shipment.toAddress.zone)) errors.push('Invalid Zone.');
+            if (!Object.values(PaymentMethod).filter(m => m !== PaymentMethod.WALLET).includes(shipment.paymentMethod)) errors.push('Invalid Payment Method.');
             if (!Object.values(ShipmentPriority).includes(shipment.priority)) errors.push('Invalid Priority.');
-            if (isNaN(shipment.packageValue) || shipment.packageValue <= 0) errors.push('Invalid Package Value.');
+            if (isNaN(shipment.packageValue) || (shipment.paymentMethod === PaymentMethod.COD && shipment.packageValue <= 0)) {
+                errors.push('Invalid Package Value for COD.');
+            }
             
             return { isValid: errors.length === 0, errors };
         });
@@ -141,18 +153,19 @@ const CreateShipment = () => {
         validShipments.forEach(shipment => {
              // Calculate priority-adjusted fee for each shipment
              const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, currentUser);
-             const totalPrice = shipment.packageValue + priorityAdjustedFee;
-
-            if (shipment.paymentMethod === PaymentMethod.WALLET && (currentUser?.walletBalance ?? 0) < totalPrice) {
-                 addToast(`Skipping shipment for ${shipment.recipientName} due to insufficient wallet balance.`, 'error');
-                 return;
+             
+             let calculatedPrice;
+             if (shipment.paymentMethod === PaymentMethod.INSTAPAY) {
+                 calculatedPrice = -priorityAdjustedFee;
+             } else { // COD
+                 calculatedPrice = (shipment.packageValue || 0) + priorityAdjustedFee;
              }
             
             addShipment({
                 ...shipment,
                 fromAddress: currentUser.address!,
                  isLargeOrder: false,
-                 price: totalPrice,
+                 price: calculatedPrice,
                  clientFlatRateFee: priorityAdjustedFee, // Use priority-adjusted fee
             });
         });
@@ -175,6 +188,10 @@ const CreateShipment = () => {
         const standardFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.STANDARD, currentUser) : baseFee;
         const urgentFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.URGENT, currentUser) : baseFee * 1.5;
         const expressFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.EXPRESS, currentUser) : baseFee * 2.0;
+
+        const paymentMethodOptions = Object.values(PaymentMethod)
+            .filter(method => method !== PaymentMethod.WALLET)
+            .join(' or ');
         
         const templateData = [
             headers,
@@ -183,43 +200,27 @@ const CreateShipment = () => {
                 'Enter recipient full name',
                 'Enter phone with country code',
                 'Enter full street address',
-                'Cairo, Giza, Alexandria, or Other',
+                'Cairo or Giza',
                 'Select from available zones',
                 'Additional address details',
                 'Describe package contents',
-                `${Object.values(PaymentMethod).join(' or ')}`,
+                paymentMethodOptions,
                 `Standard (${standardFee.toFixed(2)} EGP), Urgent (${urgentFee.toFixed(2)} EGP), Express (${expressFee.toFixed(2)} EGP)`,
-                'Package value in EGP'
+                'Package value in EGP (optional for InstaPay)'
             ],
             // Example row
             [
                 'Ahmed Mohamed',
                 '01012345678',
-                '123 Tahrir Square',
+                '123 Tahrir St',
                 'Cairo',
-                'Cairo - Downtown (El Alfy)',
+                'Nasr City',
                 'Apartment 5, Floor 3',
                 'Electronics - Mobile Phone',
                 'COD',
                 'Standard',
                 '500.00'
             ],
-            // Separator row
-            ['=== AVAILABLE OPTIONS ===', '', '', '', '', '', '', '', '', ''],
-            // Available cities
-            ['CITIES:', Object.values(['Cairo', 'Giza', 'Alexandria', 'Other']).join(', '), '', '', '', '', '', '', '', ''],
-            // Available zones (first 10 as example)
-            ['ZONES (sample):', Object.values(Zone).slice(0, 10).join(', '), '...and more', '', '', '', '', '', '', ''],
-            // Available payment methods
-            ['PAYMENT METHODS:', Object.values(PaymentMethod).join(', '), '', '', '', '', '', '', '', ''],
-            // Priority pricing explanation
-            [
-                'PRIORITY PRICING:',
-                `Standard: ${standardFee.toFixed(2)} EGP (base rate)`,
-                `Urgent: ${urgentFee.toFixed(2)} EGP (${((urgentFee/baseFee)).toFixed(1)}x base)`,
-                `Express: ${expressFee.toFixed(2)} EGP (${((expressFee/baseFee)).toFixed(1)}x base)`,
-                '', '', '', '', '', ''
-            ]
         ];
         
         const csv = Papa.unparse(templateData);
@@ -279,19 +280,25 @@ const CreateShipment = () => {
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">City</label>
-                            <select value={toAddress.city} onChange={e => setToAddress(p => ({...p, city: e.target.value as 'Cairo' | 'Giza' | 'Alexandria' | 'Other', zone: getAvailableZones(e.target.value)[0]}))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               <option value="Cairo">Cairo</option>
-                               <option value="Giza">Giza</option>
-                               <option value="Alexandria">Alexandria</option>
-                               <option value="Other">Other Governorates</option>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Zone (Greater Cairo)</label>
+                            <select value={toAddress.zone} onChange={handleZoneChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
+                               <optgroup label="Cairo">
+                                   {ZONES.GreaterCairo.Cairo.map(z => <option key={z} value={z}>{z}</option>)}
+                               </optgroup>
+                               <optgroup label="Giza">
+                                   {ZONES.GreaterCairo.Giza.map(z => <option key={z} value={z}>{z}</option>)}
+                               </optgroup>
                             </select>
                         </div>
-                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Zone</label>
-                            <select value={toAddress.zone} onChange={e => setToAddress(p => ({...p, zone: e.target.value as Zone}))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
-                            </select>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Address Details</label>
+                            <input
+                                type="text"
+                                value={toAddress.details}
+                                onChange={(e) => setToAddress((prev) => ({ ...prev, details: e.target.value }))}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="Apt, suite, floor, etc."
+                            />
                         </div>
                      </div>
                      {/* Package Info */}
@@ -318,14 +325,25 @@ const CreateShipment = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Price of Package Contents (EGP)</label>
-                            <input type="number" value={packageValue} onChange={e => setPackageValue(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required placeholder="e.g. 500" min="0.01" step="0.01" />
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                pattern="^\d*(\.\d{0,2})?$"
+                                value={packageValue}
+                                onChange={e => setPackageValue(e.target.value.replace(/[^0-9.]/g, ''))}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="e.g. 500 (Optional for InstaPay)"
+                                required={paymentMethod === PaymentMethod.COD}
+                            />
                         </div>
                     </div>
                      {/* Payment Method */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
                         <div className="flex gap-4">
-                           {Object.values(PaymentMethod).map(method => (
+                           {Object.values(PaymentMethod)
+                                .filter(method => method !== PaymentMethod.WALLET)
+                                .map(method => (
                                <button type="button" key={method} onClick={() => setPaymentMethod(method)} className={`px-4 py-2 rounded-lg border-2 transition font-semibold ${paymentMethod === method ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-slate-700 border-slate-300 hover:border-primary-500'}`}>
                                    {method}
                                </button>
@@ -334,10 +352,20 @@ const CreateShipment = () => {
                     </div>
 
                     <div className="p-4 bg-slate-50 rounded-lg text-right">
-                        <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
-                        <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                        <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
-                        {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
+                        {paymentMethod === PaymentMethod.INSTAPAY ? (
+                             <>
+                                <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
+                                <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{Math.abs(totalPrice).toFixed(2)} EGP</span></div>
+                                <p className="text-xs text-slate-500 mt-1">You must transfer this amount to cover the shipping fee.</p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
+                                <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
+                                <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
+                                {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
+                            </>
+                        )}
                     </div>
 
                     <div className="text-right pt-2">

@@ -6,7 +6,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    ReplyIcon, UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon
+    UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon, CheckCircleIcon, ArchiveBoxIcon, TagIcon, SwitchHorizontalIcon
 } from '../components/Icons';
 
 interface NavItemConfig {
@@ -25,18 +25,25 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
     { name: 'Create Shipment', icon: <PlusCircleIcon />, view: 'create', permission: Permission.CREATE_SHIPMENTS },
     { name: 'My Wallet', icon: <WalletIcon />, view: 'wallet', permission: Permission.VIEW_OWN_WALLET },
     { name: 'My Financials', icon: <ChartBarIcon />, view: 'financials', permission: Permission.VIEW_OWN_FINANCIALS },
-    { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile', permission: Permission.VIEW_PROFILE },
     
     // Courier
     { name: 'My Tasks', icon: <ClipboardListIcon />, view: 'tasks', permission: Permission.VIEW_COURIER_TASKS },
+    { name: 'Completed Orders', icon: <CheckCircleIcon />, view: 'completed-orders', permission: Permission.VIEW_COURIER_COMPLETED_ORDERS },
     { name: 'My Earnings', icon: <CurrencyDollarIcon />, view: 'courier-financials', permission: Permission.VIEW_COURIER_EARNINGS },
 
-    // Admin & Super User
+    // User General
+    { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile', permission: Permission.VIEW_PROFILE },
+    { name: 'My Assets', icon: <TagIcon />, view: 'my-assets', permission: Permission.VIEW_OWN_ASSETS },
+
+    // Management
     { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments', permission: Permission.VIEW_ALL_SHIPMENTS },
-    { name: 'Assign Shipments', icon: <TruckIcon />, view: 'assign', permission: Permission.ASSIGN_SHIPMENTS },
-    { name: 'Manage Returns', icon: <ReplyIcon/>, view: 'returns', permission: Permission.MANAGE_RETURNS},
+    { name: 'Packaging & Assignment', icon: <ArchiveBoxIcon />, view: 'packaging-and-assignment', permission: Permission.ASSIGN_SHIPMENTS },
     { name: 'User Management', icon: <UsersIcon />, view: 'users', permission: Permission.MANAGE_USERS },
     { name: 'Role Management', icon: <CogIcon />, view: 'roles', permission: Permission.MANAGE_ROLES },
+    { name: 'Inventory', icon: <ArchiveBoxIcon />, view: 'inventory', permission: Permission.MANAGE_INVENTORY },
+    { name: 'Asset Management', icon: <TagIcon />, view: 'asset-management', permission: Permission.MANAGE_ASSETS },
+    
+    // Analytics & Logs
     { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics', permission: Permission.VIEW_CLIENT_ANALYTICS },
     { name: 'Courier Performance', icon: <CurrencyDollarIcon />, view: 'courier-performance', permission: Permission.VIEW_COURIER_PERFORMANCE },
     { name: 'Financials', icon: <ChartBarIcon />, view: 'financials', permission: Permission.VIEW_ADMIN_FINANCIALS },
@@ -104,7 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen, se
                 <nav className="flex-1 p-4 space-y-1.5">
                     {availableNavItems.map(item => (
                         <button 
-                            key={item.view} 
+                            key={item.view + item.name} 
                             onClick={() => handleItemClick(item.view)}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition ${
                                 activeView === item.view 

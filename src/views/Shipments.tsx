@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, Shipment, ShipmentStatus } from '../types';
@@ -18,16 +19,16 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
     const [selectedDate, setSelectedDate] = useState<string>('');
     
-    const clients = users.filter(u => u.role === UserRole.CLIENT);
+    const clients = users.filter(u => (u.roles || []).includes(UserRole.CLIENT));
 
     if (!currentUser) return null;
 
-    const isAdminOrSuperUser = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUPER_USER;
+    const isAdminOrSuperUser = (currentUser.roles || []).includes(UserRole.ADMIN) || (currentUser.roles || []).includes(UserRole.SUPER_USER);
 
     const visibleShipments = useMemo(() => {
         let baseShipments = shipments;
 
-        if (currentUser.role === UserRole.CLIENT) {
+        if ((currentUser.roles || []).includes(UserRole.CLIENT) && !isAdminOrSuperUser) {
             baseShipments = shipments.filter(s => s.clientId === currentUser.id);
         }
 
@@ -40,7 +41,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         }
         
         // 2. Admin-specific filters
-        if (currentUser.role === UserRole.ADMIN) {
+        if (isAdminOrSuperUser) {
             // Client filter
             if (selectedClientId !== 'all') {
                 filtered = filtered.filter(s => s.clientId === selectedClientId);
@@ -56,7 +57,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         }
         
         return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
-    }, [currentUser, shipments, selectedDate, searchTerm, selectedClientId, selectedStatus]);
+    }, [currentUser, shipments, selectedDate, searchTerm, selectedClientId, selectedStatus, isAdminOrSuperUser]);
 
     const handleExport = () => {
         if (!currentUser) return;
@@ -91,7 +92,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                 ];
             });
             exportToCsv(headers, body, 'All_Shipments_Report');
-        } else if (currentUser.role === UserRole.CLIENT) {
+        } else if ((currentUser.roles || []).includes(UserRole.CLIENT)) {
             const headers = ['ID', 'Recipient', 'Date', 'Status', 'Price (EGP)'];
             const body = shipmentsToExport.map(s => [
                 s.id,
@@ -108,13 +109,13 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
         <>
             <div className="flex justify-between items-center mb-4">
                  <h2 className="text-2xl font-bold text-slate-800">
-                   {currentUser.role === UserRole.CLIENT ? 'My Shipments' : 'All Shipments'}
+                   {(currentUser.roles || []).includes(UserRole.CLIENT) && !isAdminOrSuperUser ? 'My Shipments' : 'All Shipments'}
                </h2>
             </div>
             
-            {(currentUser.role === UserRole.CLIENT || currentUser.role === UserRole.ADMIN) && (
+            {((currentUser.roles || []).includes(UserRole.CLIENT) || isAdminOrSuperUser) && (
                  <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center flex-wrap">
-                    {currentUser.role === UserRole.ADMIN && (
+                    {isAdminOrSuperUser && (
                         <>
                              <div className="flex-grow w-full lg:w-auto">
                                 <input 

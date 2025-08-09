@@ -1,8 +1,7 @@
 
-
 import { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, Address, Zone } from '../types';
+import { User, Address, ZONES } from '../types';
 import { PencilIcon } from '../components/Icons';
 
 const Profile = () => {
@@ -10,12 +9,20 @@ const Profile = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<Partial<User>>({});
 
+    const getAvailableZones = (city: string): string[] => {
+        if (city === 'Cairo') return ZONES.GreaterCairo.Cairo;
+        if (city === 'Giza') return ZONES.GreaterCairo.Giza;
+        if (city === 'Alexandria') return ZONES.Alexandria;
+        if (city === 'Other') return ZONES.Other;
+        return [];
+    };
+    
     useEffect(() => {
         if (currentUser) {
             setFormData({
                 name: currentUser.name,
                 phone: currentUser.phone || '',
-                address: currentUser.address || { street: '', city: 'Cairo', zone: Zone.CAIRO_DOWNTOWN, details: '' }
+                address: currentUser.address || { street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' }
             });
         }
     }, [currentUser]);
@@ -29,9 +36,10 @@ const Profile = () => {
             let newAddress = { ...formData.address!, [field]: value };
 
             if (field === 'city') {
-                const newCity = value as Address['city'];
-                const firstZoneForCity = Object.values(Zone).find(z => z.toLowerCase().startsWith(newCity.toLowerCase()));
-                newAddress.zone = firstZoneForCity || newAddress.zone;
+                const newCity = value as string;
+                const availableZonesForNewCity = getAvailableZones(newCity);
+                const firstZoneForCity = availableZonesForNewCity.length > 0 ? availableZonesForNewCity[0] : '';
+                newAddress.zone = firstZoneForCity;
             }
 
             setFormData(prev => ({ ...prev, address: newAddress }));
@@ -45,10 +53,6 @@ const Profile = () => {
         setIsEditing(false);
     };
 
-    const getAvailableZones = (city: string) => {
-        return Object.values(Zone).filter(z => z.startsWith(city));
-    };
-    
     const availableZones = getAvailableZones(formData.address?.city || 'Cairo');
 
     return (
@@ -101,7 +105,7 @@ const Profile = () => {
                         </div>
                          <div>
                              <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                             <p className="text-lg text-slate-500 p-2 bg-slate-50 rounded-lg">{currentUser.role}</p>
+                             <p className="text-lg text-slate-500 p-2 bg-slate-50 rounded-lg">{(currentUser.roles || []).join(' & ')}</p>
                         </div>
                      </div>
                 </div>

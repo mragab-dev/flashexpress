@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useAppContext } from '../context/AppContext';
@@ -27,6 +28,8 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const safeRoles = Array.isArray(user.roles) ? user.roles : [];
+
     return (
         <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 p-4 flex justify-between items-center z-20 sticky top-0">
             <div className="flex items-center gap-4">
@@ -34,11 +37,11 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick
                     <MenuIcon className="w-6 h-6" />
                 </button>
                 <div className="text-lg font-bold text-slate-800">
-                    {user.role} Portal
+                    {safeRoles.join(' & ')} Portal
                 </div>
             </div>
              <div className="flex items-center gap-2 sm:gap-4">
-                {user.role === UserRole.ADMIN && (
+                {safeRoles.includes(UserRole.ADMIN) && (
                     <div className="relative" ref={dropdownRef}>
                         <button onClick={() => setDropdownOpen(prev => !prev)} className="p-2 rounded-full hover:bg-slate-100 transition relative">
                             <BellIcon className="w-6 h-6 text-slate-600"/>

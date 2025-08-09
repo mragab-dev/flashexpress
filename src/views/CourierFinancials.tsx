@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { CourierStats, CourierTransaction, CourierTransactionStatus, CourierTransactionType } from '../types';
@@ -105,8 +106,8 @@ const CourierFinancials = () => {
     const myTransactions = courierTransactions.filter(ct => ct.courierId === currentUser.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     const handleRequestPayout = () => {
-        if (!myStats || myStats.pendingEarnings <= 0) return;
-        requestCourierPayout(currentUser.id, myStats.pendingEarnings);
+        if (!myStats || myStats.currentBalance <= 0) return;
+        requestCourierPayout(currentUser.id, myStats.currentBalance);
         setPayoutModalOpen(false);
     };
 
@@ -123,10 +124,10 @@ const CourierFinancials = () => {
                 </div>
                 <button 
                     onClick={() => setPayoutModalOpen(true)}
-                    disabled={myStats.pendingEarnings <= 0}
+                    disabled={myStats.currentBalance <= 0}
                     className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
                 >
-                    Request Payout ({myStats.pendingEarnings.toFixed(2)} EGP)
+                    Request Payout ({myStats.currentBalance.toFixed(2)} EGP)
                 </button>
             </div>
             
@@ -135,8 +136,8 @@ const CourierFinancials = () => {
 
             <Modal isOpen={isPayoutModalOpen} onClose={() => setPayoutModalOpen(false)} title="Confirm Payout Request">
                 <div>
-                    <p className="text-lg">You are about to request a payout for all your pending earnings of <strong className="text-green-600">{myStats.pendingEarnings.toFixed(2)} EGP</strong>.</p>
-                    <p className="text-sm text-slate-600 mt-2">Once confirmed, an administrator will process your request. The funds will then be deducted from your pending balance and transferred to you.</p>
+                    <p className="text-lg">You are about to request a payout for your entire current balance of <strong className="text-green-600">{myStats.currentBalance.toFixed(2)} EGP</strong>.</p>
+                    <p className="text-sm text-slate-600 mt-2">Once confirmed, an administrator will process your request. The funds will then be deducted from your balance and transferred to you.</p>
                     <div className="flex justify-end gap-4 mt-6">
                         <button onClick={() => setPayoutModalOpen(false)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
                         <button onClick={handleRequestPayout} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Confirm Request</button>

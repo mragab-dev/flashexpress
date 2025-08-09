@@ -1,7 +1,5 @@
 
 
-
-
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment, UserRole, ShipmentStatus, Permission } from '../types';
@@ -10,10 +8,9 @@ import Header from './Header';
 import Dashboard from '../views/Dashboard';
 import ShipmentsView from '../views/Shipments';
 import CreateShipment from '../views/CreateShipment';
-import AssignShipments from '../views/AssignShipments';
+import PackagingAndAssignment from '../views/PackagingAndAssignment';
 import CourierTasks from '../views/CourierTasks';
 import UserManagement from '../views/UserManagement';
-import ManageReturns from '../views/ManageReturns';
 import Wallet from '../views/Wallet';
 import Financials from '../views/Financials';
 import AdminFinancials from '../views/AdminFinancials';
@@ -26,15 +23,18 @@ import TotalShipments from '../views/TotalShipments';
 import { Modal } from '../components/common/Modal';
 import { ShipmentLabel } from '../components/common/ShipmentLabel';
 import { ShipmentStatusBadge } from '../components/common/ShipmentStatusBadge';
-import { PrinterIcon, ReplyIcon, SwitchHorizontalIcon } from '../components/Icons';
+import { PrinterIcon, SwitchHorizontalIcon } from '../components/Icons';
 import RoleManagement from '../views/RoleManagement';
+import CourierCompleted from '../views/CourierCompleted';
+import InventoryManagement from '../views/InventoryManagement';
+import AssetManagement from '../views/AssetManagement';
+import MyAssets from '../views/MyAssets';
 
 const MainLayout: React.FC = () => {
-    const { currentUser, logout, users, updateShipmentStatus, reassignCourier, getCourierName, hasPermission } = useAppContext();
+    const { currentUser, logout, users, reassignCourier, getCourierName, hasPermission } = useAppContext();
     const [activeView, setActiveView] = useState('dashboard');
     const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
     const [labelShipment, setLabelShipment] = useState<Shipment | null>(null);
-    const [returnShipment, setReturnShipment] = useState<Shipment | null>(null);
     
     const [isReassigning, setIsReassigning] = useState(false);
     const [newCourierId, setNewCourierId] = useState<number | null>(null);
@@ -52,7 +52,7 @@ const MainLayout: React.FC = () => {
             handleModalClose();
         }
     };
-
+    
     useEffect(() => {
         if(labelShipment){
             document.body.classList.add('printing-label');
@@ -67,33 +67,29 @@ const MainLayout: React.FC = () => {
     const handlePrint = () => {
         window.print();
     }
-    
-    const handleRequestReturn = () => {
-        if(returnShipment) {
-            updateShipmentStatus(returnShipment.id, ShipmentStatus.RETURN_REQUESTED);
-        }
-        setReturnShipment(null);
-    };
 
     const renderActiveView = () => {
         switch (activeView) {
             case 'dashboard': return <Dashboard setActiveView={setActiveView} />;
             case 'shipments': return <ShipmentsView onSelectShipment={setSelectedShipment} />;
             case 'create': return <CreateShipment />;
-            case 'assign': return <AssignShipments />;
-            case 'tasks': return <CourierTasks />;
+            case 'packaging-and-assignment': return <PackagingAndAssignment />;
+            case 'tasks': return <CourierTasks setActiveView={setActiveView} />;
+            case 'completed-orders': return <CourierCompleted onSelectShipment={setSelectedShipment} />;
             case 'users': return <UserManagement />;
             case 'roles': return <RoleManagement />;
-            case 'returns': return <ManageReturns />;
             case 'wallet': return <Wallet />;
             case 'financials': return <Financials />;
-            case 'admin-financials': return <AdminFinancials />;
+            case 'admin-financials': return <AdminFinancials setActiveView={setActiveView} />;
             case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
             case 'courier-financials': return <CourierFinancials />;
             case 'courier-performance': return <CourierPerformance onSelectShipment={setSelectedShipment} />;
             case 'total-shipments': return <TotalShipments />;
+            case 'inventory': return <InventoryManagement />;
+            case 'asset-management': return <AssetManagement />;
+            case 'my-assets': return <MyAssets />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }
@@ -128,20 +124,28 @@ const MainLayout: React.FC = () => {
                                 <p className="text-sm text-slate-600"><strong>Courier:</strong> {getCourierName(selectedShipment.courierId)}</p>
                             </div>
                             <div className="flex flex-col gap-2 items-end flex-shrink-0">
-                                {(currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.CLIENT) && (
+                                {hasPermission(Permission.CREATE_SHIPMENTS) && (
                                     <button onClick={() => setLabelShipment(selectedShipment)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition w-full justify-center text-sm">
                                         <PrinterIcon className="w-5 h-5"/>
                                         Print Label
                                     </button>
                                 )}
-                                {currentUser.role === UserRole.CLIENT && selectedShipment.status === ShipmentStatus.DELIVERED && (
-                                     <button onClick={() => setReturnShipment(selectedShipment)} className="flex items-center gap-2 px-3 py-2 bg-orange-100 text-orange-800 font-semibold rounded-lg hover:bg-orange-200 transition w-full justify-center text-sm">
-                                        <ReplyIcon className="w-5 h-5"/>
-                                        Request Return
-                                    </button>
-                                )}
                             </div>
                         </div>
+
+                        {selectedShipment.packagingLog && selectedShipment.packagingLog.length > 0 && (
+                            <div className="pt-4 border-t">
+                                <h4 className="font-semibold text-slate-700">Packaging Info</h4>
+                                <ul className="list-disc list-inside text-sm text-slate-600">
+                                    {selectedShipment.packagingLog.map(log => (
+                                        <li key={log.inventoryItemId}>{log.quantityUsed}x {log.itemName}</li>
+                                    ))}
+                                </ul>
+                                {selectedShipment.packagingNotes && (
+                                     <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-2 rounded-md"><strong>Notes:</strong> {selectedShipment.packagingNotes}</p>
+                                )}
+                            </div>
+                        )}
                         
                         {selectedShipment.failureReason && (
                             <div>
@@ -149,7 +153,7 @@ const MainLayout: React.FC = () => {
                                 <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mt-2">{selectedShipment.failureReason}</p>
                             </div>
                         )}
-                        {hasPermission(Permission.ASSIGN_SHIPMENTS) && selectedShipment.courierId && ![ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.DELIVERY_FAILED].includes(selectedShipment.status) && (
+                        {hasPermission(Permission.ASSIGN_SHIPMENTS) && selectedShipment.courierId && ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(selectedShipment.status) && (
                             <div className="mt-4 pt-4 border-t border-slate-200">
                                 {!isReassigning ? (
                                     <button onClick={() => setIsReassigning(true)} className="flex items-center gap-2 px-3 py-2 bg-yellow-100 text-yellow-800 font-semibold rounded-lg hover:bg-yellow-200 transition text-sm">
@@ -166,8 +170,8 @@ const MainLayout: React.FC = () => {
                                                 className="flex-grow px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
                                             >
                                                 <option value="" disabled>Available Couriers...</option>
-                                                {users.filter(u => u.role === UserRole.COURIER).map(c => (
-                                                    <option key={c.id} value={c.id}>{c.name} ({c.zone})</option>
+                                                {users.filter(u => u.roles.includes(UserRole.COURIER)).map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name} ({c.zones?.join(', ')})</option>
                                                 ))}
                                             </select>
                                             <button onClick={handleReassignConfirm} disabled={!newCourierId} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition disabled:bg-slate-400">Save</button>
@@ -192,17 +196,6 @@ const MainLayout: React.FC = () => {
                                 <PrinterIcon className="w-5 h-5"/>
                                 Print
                            </button>
-                        </div>
-                    </div>
-                 )}
-            </Modal>
-             <Modal isOpen={!!returnShipment} onClose={() => setReturnShipment(null)} title="Confirm Return Request" size="md">
-                 {returnShipment && (
-                    <div>
-                        <p>Are you sure you want to request a return for shipment <strong>{returnShipment.id}</strong>? A courier will be assigned to pick up the item from <strong>{returnShipment.recipientName}</strong>.</p>
-                        <div className="flex justify-end gap-4 mt-6">
-                            <button onClick={() => setReturnShipment(null)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
-                            <button onClick={handleRequestReturn} className="px-4 py-2 bg-orange-500 text-white rounded-lg font-semibold">Confirm Request</button>
                         </div>
                     </div>
                  )}

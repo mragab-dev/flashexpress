@@ -1,3 +1,5 @@
+
+
 import { useAppContext } from '../context/AppContext';
 import { ShipmentStatus, PaymentMethod, UserRole, ClientTransaction } from '../types';
 import { exportToCsv } from '../utils/pdf';
@@ -9,20 +11,21 @@ const Financials = () => {
     
     // This view is for non-admin users to see basic financial information
     // Admin users should use the AdminFinancials view for complete access
-    
+    if (!currentUser) return null;
+
     const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED && s.deliveryDate);
+    const isClient = (currentUser.roles || []).includes(UserRole.CLIENT);
     
     // For clients, only show their own shipments
-    const filteredShipments = currentUser?.role === UserRole.CLIENT 
+    const filteredShipments = isClient 
         ? deliveredShipments.filter(s => s.clientId === currentUser.id)
         : deliveredShipments;
     
     const totalRevenue = filteredShipments.reduce((sum, s) => sum + s.price, 0);
     const totalDelivered = filteredShipments.length;
-    const netProfit = filteredShipments.reduce((sum, s) => sum + s.packageValue, 0);
     const totalCOD = filteredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0);
     
-    const taxCardNumber = currentUser?.role === UserRole.CLIENT && currentUser.id 
+    const taxCardNumber = isClient && currentUser.id 
         ? getTaxCardNumber(currentUser.id) 
         : '';
 
@@ -70,9 +73,9 @@ const Financials = () => {
         <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <div>
-                     <h1 className="text-3xl font-bold text-slate-800">Financial Reports</h1>
+                     <h1 className="text-3xl font-bold text-slate-800">My Financials</h1>
                      <p className="text-slate-500 mt-1">
-                         {currentUser?.role === UserRole.CLIENT 
+                         {isClient 
                              ? 'Your order history and financial summary.' 
                              : 'An overview of the company\'s financial performance.'}
                      </p>
@@ -84,7 +87,7 @@ const Financials = () => {
             </div>
 
             {/* Tax Card Number for Clients */}
-            {currentUser?.role === UserRole.CLIENT && taxCardNumber && (
+            {isClient && taxCardNumber && (
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
                     <h3 className="text-lg font-semibold text-blue-900 mb-2">Tax Information</h3>
                     <p className="text-blue-800">
@@ -94,11 +97,10 @@ const Financials = () => {
             )}
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Total Revenue" value={`${totalRevenue.toFixed(2)} EGP`} icon={<ChartBarIcon className="w-7 h-7"/>} color="#16a34a" />
                 <StatCard title="Shipments Delivered" value={totalDelivered} icon={<CheckCircleIcon className="w-7 h-7"/>} color="#3b82f6" />
                 <StatCard title="COD to Collect" value={`${totalCOD.toFixed(2)} EGP`} icon={<WalletIcon className="w-7 h-7"/>} color="#f97316"/>
-                <StatCard title="Net Profit" value={`${netProfit.toFixed(2)} EGP`} icon={<CurrencyDollarIcon className="w-7 h-7"/>} color="#8b5cf6"/>
             </div>
 
             {/* Revenue Chart */}
