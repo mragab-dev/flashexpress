@@ -1,16 +1,22 @@
+// src/views/CreateShipment.tsx
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment } from '../types';
+import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, User, Permission, UserRole } from '../types';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
 import Papa from 'papaparse';
 
 type BulkShipment = Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'fromAddress' | 'status' | 'creationDate' | 'isLargeOrder' | 'price' | 'clientFlatRateFee' | 'courierCommission'>;
 
 const CreateShipment = () => {
-    const { currentUser, addShipment, addToast, calculatePriorityPrice } = useAppContext();
+    const { currentUser, users, addShipment, addToast, calculatePriorityPrice, hasPermission } = useAppContext();
     const [activeTab, setActiveTab] = useState('single');
+
+    const canCreateForOthers = hasPermission(Permission.CREATE_SHIPMENTS_FOR_OTHERS);
+    const clients = useMemo(() => users.filter(u => u.roles.includes(UserRole.CLIENT)), [users]);
     
     // State for Single Shipment
+    const [selectedClientId, setSelectedClientId] = useState<string>(canCreateForOthers ? '' : String(currentUser?.id));
     const [recipientName, setRecipientName] = useState('');
     const [recipientPhone, setRecipientPhone] = useState('');
     const [toAddress, setToAddress] = useState<Address>({ street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' });
@@ -24,30 +30,42 @@ const CreateShipment = () => {
     const [parsedData, setParsedData] = useState<BulkShipment[]>([]);
     const [verificationResults, setVerificationResults] = useState<{ isValid: boolean, errors: string[] }[]>([]);
 
-    // Calculate priority-adjusted shipping fee
-    const baseFee = currentUser?.flatRateFee || 0;
-    const priorityAdjustedFee = currentUser ? calculatePriorityPrice(baseFee, priority, currentUser) : baseFee;
+    const clientForShipment = useMemo(() => {
+        if (canCreateForOthers) {
+            return clients.find(c => c.id === parseInt(selectedClientId));
+        }
+        return currentUser;
+    }, [canCreateForOthers, selectedClientId, clients, currentUser]);
+
+    const baseFee = clientForShipment?.flatRateFee || 0;
+    const priorityAdjustedFee = clientForShipment ? calculatePriorityPrice(baseFee, priority, clientForShipment) : baseFee;
     const numericPackageValue = parseFloat(packageValue) || 0;
     
     const totalPrice = useMemo(() => {
         if (paymentMethod === PaymentMethod.INSTAPAY) {
             return -priorityAdjustedFee;
         }
-        // For COD
         return numericPackageValue + priorityAdjustedFee;
     }, [paymentMethod, priorityAdjustedFee, numericPackageValue]);
 
 
     const handleSingleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!currentUser) return;
+        if (!clientForShipment) {
+            addToast(canCreateForOthers ? 'Please select a client.' : 'User not found.', 'error');
+            return;
+        }
+        if (!clientForShipment.address || !clientForShipment.address.street) {
+             addToast(`${clientForShipment.name} does not have a complete default address in their profile.`, 'error');
+            return;
+        }
 
         const shipment: Omit<Shipment, 'id' | 'status' | 'creationDate'> = {
-            clientId: currentUser.id,
-            clientName: currentUser.name,
+            clientId: clientForShipment.id,
+            clientName: clientForShipment.name,
             recipientName,
             recipientPhone,
-            fromAddress: currentUser.address || { street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' },
+            fromAddress: clientForShipment.address,
             toAddress,
             packageDescription,
             isLargeOrder: false,
@@ -55,13 +73,14 @@ const CreateShipment = () => {
             paymentMethod,
             priority,
             packageValue: numericPackageValue,
-            clientFlatRateFee: priorityAdjustedFee, // Use priority-adjusted fee
+            clientFlatRateFee: priorityAdjustedFee,
         };
 
         addShipment(shipment);
         addToast('Shipment created successfully!', 'success');
         
         // Reset form
+        if (canCreateForOthers) setSelectedClientId('');
         setRecipientName('');
         setRecipientPhone('');
         setToAddress({ street: '', city: 'Cairo', zone: ZONES.GreaterCairo.Cairo[0], details: '' });
@@ -151,8 +170,7 @@ const CreateShipment = () => {
         }
         
         validShipments.forEach(shipment => {
-             // Calculate priority-adjusted fee for each shipment
-             const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, currentUser);
+             const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, currentUser as User);
              
              let calculatedPrice;
              if (shipment.paymentMethod === PaymentMethod.INSTAPAY) {
@@ -163,10 +181,12 @@ const CreateShipment = () => {
             
             addShipment({
                 ...shipment,
-                fromAddress: currentUser.address!,
                  isLargeOrder: false,
                  price: calculatedPrice,
-                 clientFlatRateFee: priorityAdjustedFee, // Use priority-adjusted fee
+                 clientFlatRateFee: priorityAdjustedFee,
+                 clientId: currentUser.id,
+                 clientName: currentUser.name,
+                 fromAddress: currentUser.address!,
             });
         });
         
@@ -183,7 +203,6 @@ const CreateShipment = () => {
             'Package Description', 'Payment Method', 'Priority', 'Package Value'
         ];
         
-        // Get current user's priority pricing for the template
         const baseFee = currentUser?.flatRateFee || 75;
         const standardFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.STANDARD, currentUser) : baseFee;
         const urgentFee = currentUser ? calculatePriorityPrice(baseFee, ShipmentPriority.URGENT, currentUser) : baseFee * 1.5;
@@ -195,7 +214,6 @@ const CreateShipment = () => {
         
         const templateData = [
             headers,
-            // Instructions row
             [
                 'Enter recipient full name',
                 'Enter phone with country code',
@@ -208,7 +226,6 @@ const CreateShipment = () => {
                 `Standard (${standardFee.toFixed(2)} EGP), Urgent (${urgentFee.toFixed(2)} EGP), Express (${expressFee.toFixed(2)} EGP)`,
                 'Package value in EGP (optional for InstaPay)'
             ],
-            // Example row
             [
                 'Ahmed Mohamed',
                 '01012345678',
@@ -254,6 +271,17 @@ const CreateShipment = () => {
 
             {activeTab === 'single' && (
                 <form onSubmit={handleSingleSubmit} className="space-y-6">
+                    {canCreateForOthers && (
+                         <div className="p-4 bg-slate-50 rounded-lg">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Create Shipment For Client</label>
+                            <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required>
+                                <option value="" disabled>Select a client...</option>
+                                {clients.map(client => (
+                                    <option key={client.id} value={client.id}>{client.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     {/* Recipient Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -262,7 +290,7 @@ const CreateShipment = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Phone</label>
-                            <input type="tel" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="01xxxxxxxxx" required />
+                            <input type="text" inputMode="numeric" pattern="[0-9]*" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="01xxxxxxxxx" required />
                             <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
                         </div>
                     </div>
@@ -310,18 +338,10 @@ const CreateShipment = () => {
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Package Priority</label>
                             <select value={priority} onChange={e => setPriority(e.target.value as ShipmentPriority)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               {Object.values(ShipmentPriority).map(p => {
-                                   const priorityFee = currentUser ? calculatePriorityPrice(baseFee, p, currentUser) : baseFee;
-                                   return (
-                                       <option key={p} value={p}>
-                                           {p} - {priorityFee.toFixed(2)} EGP
-                                       </option>
-                                   );
-                               })}
+                               {Object.values(ShipmentPriority).map(p => (
+                                   <option key={p} value={p}>{p}</option>
+                               ))}
                             </select>
-                            <p className="text-xs text-slate-500 mt-1">
-                                Base fee: {baseFee.toFixed(2)} EGP • Selected: {priorityAdjustedFee.toFixed(2)} EGP
-                            </p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Price of Package Contents (EGP)</label>
@@ -350,26 +370,46 @@ const CreateShipment = () => {
                            ))}
                         </div>
                     </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                        {/* Shipping Fees Breakdown */}
+                        <div className="p-4 bg-slate-50 rounded-lg">
+                            <h4 className="font-semibold text-slate-800 mb-2">Shipping Fees</h4>
+                            <div className="space-y-2 text-sm">
+                                {Object.values(ShipmentPriority).map(p => {
+                                    const fee = clientForShipment ? calculatePriorityPrice(baseFee, p, clientForShipment) : 0;
+                                    return (
+                                        <div key={p} className={`flex justify-between p-2 rounded-md transition-colors ${priority === p ? 'bg-primary-100' : ''}`}>
+                                            <span className={`font-medium ${priority === p ? 'text-primary-700' : 'text-slate-600'}`}>{p}</span>
+                                            <span className={`font-bold ${priority === p ? 'text-primary-700' : 'text-slate-800'}`}>{fee.toFixed(2)} EGP</span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
 
-                    <div className="p-4 bg-slate-50 rounded-lg text-right">
-                        {paymentMethod === PaymentMethod.INSTAPAY ? (
-                             <>
-                                <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{Math.abs(totalPrice).toFixed(2)} EGP</span></div>
-                                <p className="text-xs text-slate-500 mt-1">You must transfer this amount to cover the shipping fee.</p>
-                            </>
-                        ) : (
-                            <>
-                                <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
-                                <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
-                                {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
-                            </>
-                        )}
+                        {/* Total Price Summary */}
+                        <div className="p-4 bg-slate-100 rounded-lg text-right">
+                            <h4 className="font-semibold text-slate-800 mb-2">Total Calculation</h4>
+                            {paymentMethod === PaymentMethod.INSTAPAY ? (
+                                 <>
+                                    <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
+                                    <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{Math.abs(totalPrice).toFixed(2)} EGP</span></div>
+                                    <p className="text-xs text-slate-500 mt-1">You must transfer this amount to cover the shipping fee.</p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
+                                    <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
+                                    <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
+                                    {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     <div className="text-right pt-2">
-                        <button type="submit" className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition">
+                        <button type="submit" disabled={!clientForShipment} className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition disabled:bg-slate-400">
                            <PlusCircleIcon className="w-5 h-5 mr-2" />
                             Create Shipment
                         </button>

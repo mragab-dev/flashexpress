@@ -1,29 +1,90 @@
+// src/views/Wallet.tsx
+
 
 
 import { useAppContext } from '../context/AppContext';
-import { TransactionType } from '../types';
+import { TransactionType, ClientTransaction, ClientTransactionStatus } from '../types';
 import { StatCard } from '../components/common/StatCard';
-import { WalletIcon } from '../components/Icons';
+import { WalletIcon, ClockIcon } from '../components/Icons';
+import { Modal } from '../components/common/Modal';
+import { useState } from 'react';
 
 const Wallet = () => {
-    const { currentUser, clientTransactions } = useAppContext();
+    const { currentUser, clientTransactions, requestClientPayout, addToast } = useAppContext();
+    const [isPayoutModalOpen, setPayoutModalOpen] = useState(false);
+    const [payoutAmount, setPayoutAmount] = useState('');
 
     if (!currentUser) return null;
 
     const myTransactions = clientTransactions.filter(t => t.userId === currentUser.id);
+    const pendingPayouts = myTransactions.filter(t => t.type === TransactionType.WITHDRAWAL_REQUEST && t.status === 'Pending');
+    const pendingAmount = pendingPayouts.reduce((sum, t) => sum + t.amount, 0);
+
+    const availableBalance = currentUser.walletBalance || 0;
+    
+    const handleRequestPayout = () => {
+        const amount = parseFloat(payoutAmount);
+        if (isNaN(amount) || amount <= 0) {
+            addToast('Please enter a valid positive amount.', 'error');
+            return;
+        }
+        if (amount > availableBalance) {
+            addToast('Payout amount cannot exceed your available balance.', 'error');
+            return;
+        }
+        
+        requestClientPayout(currentUser.id, amount);
+        addToast('Payout requested successfully!', 'success');
+        setPayoutModalOpen(false);
+        setPayoutAmount('');
+    };
+
+    const getStatusStyles = (status?: ClientTransactionStatus): string => {
+        switch (status) {
+            case 'Pending': return 'bg-yellow-100 text-yellow-800';
+            case 'Processed': return 'bg-green-100 text-green-800';
+            case 'Failed': return 'bg-red-100 text-red-800';
+            default: return 'bg-slate-100 text-slate-800';
+        }
+    };
+    
+    const getTypeStyles = (type: TransactionType): string => {
+        switch (type) {
+            case TransactionType.DEPOSIT: return 'bg-green-100 text-green-800';
+            case TransactionType.PAYMENT: return 'bg-red-100 text-red-800';
+            case TransactionType.WITHDRAWAL_REQUEST: return 'bg-blue-100 text-blue-800';
+            case TransactionType.WITHDRAWAL_PROCESSED: return 'bg-purple-100 text-purple-800';
+            default: return 'bg-slate-100 text-slate-800';
+        }
+    };
 
     return (
         <div className="space-y-8">
-             <div>
-                 <h1 className="text-3xl font-bold text-slate-800">My Wallet</h1>
-                 <p className="text-slate-500 mt-1">Your wallet is credited with the value of your delivered packages. You can use this balance to pay for future shipping fees.</p>
+             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                 <div>
+                     <h1 className="text-3xl font-bold text-slate-800">My Wallet</h1>
+                     <p className="text-slate-500 mt-1">Your wallet is credited with the value of your delivered packages. You can use this balance to pay for future shipping fees.</p>
+                 </div>
+                 <button 
+                    onClick={() => setPayoutModalOpen(true)}
+                    disabled={availableBalance <= 0}
+                    className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
+                >
+                    Request Payout
+                </button>
             </div>
-             <div className="max-w-md">
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <StatCard 
-                    title="Current Balance" 
-                    value={`${(currentUser.walletBalance ?? 0).toFixed(2)} EGP`} 
+                    title="Available Balance" 
+                    value={`${availableBalance.toFixed(2)} EGP`} 
                     icon={<WalletIcon className="w-7 h-7"/>} 
                     color="#22c55e" 
+                />
+                 <StatCard 
+                    title="Pending Payouts" 
+                    value={`${(-pendingAmount).toFixed(2)} EGP`} 
+                    icon={<ClockIcon className="w-7 h-7"/>} 
+                    color="#3b82f6" 
                 />
             </div>
 
@@ -47,14 +108,19 @@ const Wallet = () => {
                                    <td className="px-6 py-4 text-slate-600">{new Date(t.date).toLocaleString()}</td>
                                    <td className="px-6 py-4 text-slate-800">{t.description}</td>
                                    <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                            t.type === TransactionType.DEPOSIT ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                        }`}>
-                                            {t.type}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getTypeStyles(t.type)}`}>
+                                                {t.type}
+                                            </span>
+                                            {t.status && (
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusStyles(t.status)}`}>
+                                                    {t.status}
+                                                </span>
+                                            )}
+                                        </div>
                                    </td>
                                    <td className={`px-6 py-4 font-semibold text-right ${
-                                       t.type === TransactionType.DEPOSIT ? 'text-green-600' : 'text-red-600'
+                                       t.amount >= 0 ? 'text-green-600' : 'text-red-600'
                                    }`}>
                                        {t.amount.toFixed(2)} EGP
                                    </td>
@@ -67,6 +133,33 @@ const Wallet = () => {
                     </table>
                 </div>
             </div>
+            
+            <Modal isOpen={isPayoutModalOpen} onClose={() => setPayoutModalOpen(false)} title="Request a Payout">
+                <div className="space-y-4">
+                    <p>Your current available balance is <strong className="text-green-600">{availableBalance.toFixed(2)} EGP</strong>.</p>
+                    <div>
+                        <label htmlFor="payout-amount" className="block text-sm font-medium text-slate-700 mb-1">
+                            Amount to withdraw (EGP)
+                        </label>
+                        <input
+                            id="payout-amount"
+                            type="number"
+                            value={payoutAmount}
+                            onChange={e => setPayoutAmount(e.target.value)}
+                            placeholder={`Max ${availableBalance.toFixed(2)}`}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                            min="0.01"
+                            step="0.01"
+                            max={availableBalance}
+                        />
+                    </div>
+                    <p className="text-xs text-slate-500">An administrator will review and process your request. Once processed, the funds will be transferred to you.</p>
+                    <div className="flex justify-end gap-4 mt-6">
+                        <button onClick={() => setPayoutModalOpen(false)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
+                        <button onClick={handleRequestPayout} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Confirm Request</button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };

@@ -1,16 +1,16 @@
 
 
 import { useAppContext } from '../context/AppContext';
-import { UserRole, ShipmentStatus, PaymentMethod } from '../types';
+import { UserRole, ShipmentStatus, PaymentMethod, Permission } from '../types';
 import { StatCard } from '../components/common/StatCard';
-import { PackageIcon, TruckIcon, WalletIcon, ClipboardListIcon, UsersIcon, ChartBarIcon, CurrencyDollarIcon, CheckCircleIcon } from '../components/Icons';
+import { PackageIcon, TruckIcon, WalletIcon, ClipboardListIcon, UsersIcon, ChartBarIcon, CurrencyDollarIcon, CheckCircleIcon, SwitchHorizontalIcon, UserCircleIcon, ArchiveBoxIcon } from '../components/Icons';
 
 interface DashboardProps {
     setActiveView: (view: string) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
-    const { currentUser, shipments, users, courierStats } = useAppContext();
+    const { currentUser, shipments, users, courierStats, hasPermission } = useAppContext();
     
     if (!currentUser) return null;
     
@@ -119,6 +119,69 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
         </div>
     );
 
+    const renderAssigningUserDashboard = () => (
+        <div className="space-y-6">
+            {/* Main KPIs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <StatCard 
+                    title="All Shipments"
+                    value={shipments.length} 
+                    icon={<PackageIcon className="w-7 h-7"/>} 
+                    color="#3b82f6" 
+                    onClick={() => setActiveView('shipments')}
+                />
+                <StatCard 
+                    title="Processing" 
+                    value={shipments.filter(s => [ShipmentStatus.WAITING_FOR_PACKAGING, ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT].includes(s.status)).length} 
+                    icon={<ClipboardListIcon className="w-7 h-7"/>} 
+                    color="#f59e0b" 
+                    onClick={() => setActiveView('packaging-and-assignment')}
+                />
+                <StatCard 
+                    title="In Transit" 
+                    value={shipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)).length} 
+                    icon={<TruckIcon className="w-7 h-7"/>} 
+                    color="#06b6d4" 
+                    onClick={() => setActiveView('shipments')}
+                />
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+                <h2 className="text-xl font-bold text-slate-800 mb-4">Quick Actions</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {hasPermission(Permission.ASSIGN_SHIPMENTS) && (
+                        <button 
+                            onClick={() => setActiveView('packaging-and-assignment')} 
+                            className="p-4 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+                        >
+                            <SwitchHorizontalIcon className="w-8 h-8 text-blue-600 mx-auto mb-2"/>
+                            <span className="text-sm font-semibold text-blue-800">Manage Assignments</span>
+                        </button>
+                    )}
+                    {hasPermission(Permission.MANAGE_INVENTORY) && (
+                        <button 
+                            onClick={() => setActiveView('inventory')} 
+                            className="p-4 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+                        >
+                            <ArchiveBoxIcon className="w-8 h-8 text-green-600 mx-auto mb-2"/>
+                            <span className="text-sm font-semibold text-green-800">Manage Inventory</span>
+                        </button>
+                    )}
+                    {hasPermission(Permission.VIEW_PROFILE) && (
+                         <button 
+                            onClick={() => setActiveView('profile')} 
+                            className="p-4 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 transition-colors"
+                        >
+                            <UserCircleIcon className="w-8 h-8 text-purple-600 mx-auto mb-2"/>
+                            <span className="text-sm font-semibold text-purple-800">My Profile</span>
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
     const renderDashboardByRole = () => {
         const roles = currentUser?.roles || [];
 
@@ -128,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
         } else if (roles.includes(UserRole.SUPER_USER)) {
             return renderSuperUserDashboard();
         } else if (roles.includes(UserRole.ASSIGNING_USER)) {
-            return renderSuperUserDashboard(); // Assigner gets a similar view to super user
+            return renderAssigningUserDashboard();
         } else if (roles.includes(UserRole.COURIER)) {
             return renderCourierDashboard();
         } else if (roles.includes(UserRole.CLIENT)) {

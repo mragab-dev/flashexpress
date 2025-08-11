@@ -1,3 +1,5 @@
+// src/views/CourierTasks.tsx
+
 
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
@@ -74,8 +76,9 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
         .reduce((sum, s) => sum + s.price, 0);
     
     const myDeliveredShipments = shipments.filter(s => s.courierId === currentUser.id && s.status === ShipmentStatus.DELIVERED);
-    const totalCommissionEarned = myDeliveredShipments
-        .reduce((sum, s) => sum + (s.courierCommission || 0), 0);
+    const totalCODCollected = myDeliveredShipments
+        .filter(s => s.paymentMethod === PaymentMethod.COD)
+        .reduce((sum, s) => sum + s.price, 0);
     
     const pendingDeliveries = myDeliveryTasks.length;
 
@@ -201,15 +204,10 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
         }
     }, [myDeliveryTasks, addToast]);
 
-    const nextAction: Record<ShipmentStatus, { label: string; nextStatus: ShipmentStatus } | null> = {
-        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Mark Picked Up', nextStatus: ShipmentStatus.PICKED_UP },
-        [ShipmentStatus.PICKED_UP]: { label: 'Mark In Transit', nextStatus: ShipmentStatus.IN_TRANSIT },
+    const nextAction: Record<string, { label: string; nextStatus: ShipmentStatus } | null> = {
+        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Mark In Transit', nextStatus: ShipmentStatus.IN_TRANSIT },
         [ShipmentStatus.IN_TRANSIT]: { label: 'Mark Out for Delivery', nextStatus: ShipmentStatus.OUT_FOR_DELIVERY },
         [ShipmentStatus.OUT_FOR_DELIVERY]: null, // Special case with two buttons
-        [ShipmentStatus.DELIVERED]: null,
-        [ShipmentStatus.DELIVERY_FAILED]: null,
-        [ShipmentStatus.WAITING_FOR_PACKAGING]: null,
-        [ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT]: null,
     };
     
     const TaskCard: React.FC<{task: Shipment}> = ({ task }) => (
@@ -218,7 +216,7 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                 <p className="font-mono text-sm text-slate-500">{task.id}</p>
                 <p className="text-lg font-bold text-slate-800">Deliver to: {task.recipientName}</p>
                 <p className="text-slate-600">{task.toAddress.street}, {task.toAddress.zone}</p>
-                 <p className="text-sm font-semibold text-slate-700 mt-1">Payment: {task.paymentMethod} ({task.price} EGP)</p>
+                 <p className="text-sm font-semibold text-slate-700 mt-1">Payment: {task.paymentMethod} ({task.price > 0 ? `${task.price.toFixed(2)} EGP` : 'Pre-Paid'})</p>
             </div>
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
                 <div className="flex-grow"><ShipmentStatusBadge status={task.status} /></div>
@@ -266,12 +264,12 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                     subtitle={`${myDeliveryTasks.filter(s => s.paymentMethod === PaymentMethod.COD).length} COD packages`}
                 />
                 <StatCard 
-                    title="Commission Earned" 
-                    value={`${totalCommissionEarned.toFixed(2)} EGP`} 
+                    title="Total COD Collected" 
+                    value={`${totalCODCollected.toFixed(2)} EGP`} 
                     icon={<CurrencyDollarIcon className="w-7 h-7"/>} 
                     color="#16a34a"
-                    subtitle={`From ${myDeliveredShipments.length} deliveries`}
-                    onClick={() => setActiveView('courier-financials')}
+                    subtitle={`From ${myDeliveredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).length} completed deliveries`}
+                    onClick={() => setActiveView('completed-orders')}
                 />
                 <StatCard 
                     title="Pending Deliveries" 

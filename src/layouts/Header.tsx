@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { useAppContext } from '../context/AppContext';
-import { BellIcon, LogoutIcon, MenuIcon } from '../components/Icons';
+import { BellIcon, LogoutIcon, MenuIcon, PackageIcon, WalletIcon } from '../components/Icons';
 
 interface HeaderProps {
     onLogout: () => void; 
@@ -12,13 +11,17 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick }) => {
-    const { notifications, notificationStatus } = useAppContext();
+    const { inAppNotifications, markNotificationAsRead } = useAppContext();
     const [isDropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-
-    const problemNotifications = notifications.filter(n => notificationStatus[n.id] === 'failed');
     
-     useEffect(() => {
+    const myNotifications = inAppNotifications
+        .filter(n => n.userId === user.id)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    const unreadCount = myNotifications.filter(n => !n.isRead).length;
+    
+    useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
                 setDropdownOpen(false);
@@ -27,6 +30,15 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleNotificationClick = (notificationId: string, link?: string) => {
+        markNotificationAsRead(notificationId);
+        if (link) {
+            const view = link.startsWith('/') ? link.substring(1) : link;
+            onNavigate(view);
+        }
+        setDropdownOpen(false);
+    };
 
     const safeRoles = Array.isArray(user.roles) ? user.roles : [];
 
@@ -41,43 +53,46 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user, onNavigate, onMenuClick
                 </div>
             </div>
              <div className="flex items-center gap-2 sm:gap-4">
-                {safeRoles.includes(UserRole.ADMIN) && (
-                    <div className="relative" ref={dropdownRef}>
-                        <button onClick={() => setDropdownOpen(prev => !prev)} className="p-2 rounded-full hover:bg-slate-100 transition relative">
-                            <BellIcon className="w-6 h-6 text-slate-600"/>
-                            {problemNotifications.length > 0 && (
-                                <span className="absolute top-0 right-0 flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                </span>
-                            )}
-                        </button>
-                         {isDropdownOpen && (
-                             <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
-                                 <div className="p-3 font-semibold text-slate-800 border-b border-slate-200">
-                                     Notifications ({problemNotifications.length} failed)
-                                 </div>
-                                 <div className="max-h-80 overflow-y-auto">
-                                     {problemNotifications.length > 0 ? (
-                                         problemNotifications.map(n => (
-                                             <div key={n.id} className="p-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0">
-                                                 <p className="text-sm font-medium text-red-800">Failed to send to {n.recipient}</p>
-                                                 <p className="text-sm text-slate-600 truncate">{n.message.split('\n\n')[0]}</p>
-                                             </div>
-                                         ))
-                                     ) : (
-                                         <p className="text-sm text-slate-500 p-4 text-center">No delivery failures.</p>
-                                     )}
-                                 </div>
-                                  <div className="p-2 bg-slate-50 border-t border-slate-200">
-                                     <button onClick={() => { setDropdownOpen(false); onNavigate('notifications'); }} className="w-full text-center text-sm font-semibold text-primary-600 hover:text-primary-800 py-1">
-                                         View Full Log
-                                     </button>
-                                 </div>
-                             </div>
+                 <div className="relative" ref={dropdownRef}>
+                    <button onClick={() => setDropdownOpen(prev => !prev)} className="p-2 rounded-full hover:bg-slate-100 transition relative">
+                        <BellIcon className="w-6 h-6 text-slate-600"/>
+                        {unreadCount > 0 && (
+                            <span className="absolute top-0 right-0 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
                         )}
-                    </div>
-                )}
+                    </button>
+                     {isDropdownOpen && (
+                         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden">
+                             <div className="p-3 font-semibold text-slate-800 border-b border-slate-200">
+                                 Notifications
+                             </div>
+                             <div className="max-h-96 overflow-y-auto">
+                                 {myNotifications.length > 0 ? (
+                                     myNotifications.map(n => (
+                                         <button 
+                                            key={n.id} 
+                                            onClick={() => handleNotificationClick(n.id, n.link)}
+                                            className={`w-full text-left p-3 border-b border-slate-100 last:border-b-0 ${!n.isRead ? 'bg-primary-50' : 'hover:bg-slate-50'}`}
+                                        >
+                                             <div className="flex items-start gap-3">
+                                                <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${!n.isRead ? 'bg-primary-500' : 'bg-transparent'}`}></div>
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-slate-700">{n.message}</p>
+                                                    <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                                                </div>
+                                             </div>
+                                         </button>
+                                     ))
+                                 ) : (
+                                     <p className="text-sm text-slate-500 p-4 text-center">No notifications yet.</p>
+                                 )}
+                             </div>
+                         </div>
+                    )}
+                </div>
+
                 <div className="flex items-center gap-3">
                     <div className="text-right hidden sm:block">
                         <p className="font-semibold text-slate-800">{user.name}</p>

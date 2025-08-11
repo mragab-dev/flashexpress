@@ -1,31 +1,58 @@
+// src/views/TotalShipments.tsx
 
 
-import React, { useMemo } from 'react';
+
+import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { ShipmentStatus, Permission } from '../types';
+import { Shipment, ShipmentStatus, Permission, UserRole } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { PackageIcon, CheckCircleIcon, ClockIcon, XCircleIcon, TruckIcon, DocumentDownloadIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 import { ShipmentList } from '../components/specific/ShipmentList';
 
 const TotalShipments = () => {
-    const { shipments, hasPermission, shipmentFilter, setShipmentFilter } = useAppContext();
+    const { shipments: allShipments, users, hasPermission, shipmentFilter, setShipmentFilter: setContextFilter } = useAppContext();
+    
+    // Local filter state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedClientId, setSelectedClientId] = useState<'all' | number>('all');
+    const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
+    const [selectedDate, setSelectedDate] = useState<string>('');
+    const clients = users.filter(u => u.roles.includes(UserRole.CLIENT));
     
     if (!hasPermission(Permission.VIEW_TOTAL_SHIPMENTS_OVERVIEW)) {
         return <div className="text-center py-8">Access denied. You do not have permission to view this page.</div>;
     }
 
     const visibleShipments = useMemo(() => {
-        if (!shipmentFilter) return shipments;
-        return shipments.filter(shipmentFilter);
-    }, [shipments, shipmentFilter]);
+        let baseShipments = shipmentFilter ? allShipments.filter(shipmentFilter) : allShipments;
+        
+        let filtered = baseShipments;
+        // Apply local filters
+        if (selectedDate) {
+            filtered = filtered.filter(s => s.creationDate.startsWith(selectedDate));
+        }
+        if (searchTerm.trim()) {
+            const lowerCaseSearch = searchTerm.trim().toLowerCase();
+            filtered = filtered.filter(s => 
+                s.id.toLowerCase().includes(lowerCaseSearch) ||
+                s.recipientName.toLowerCase().includes(lowerCaseSearch)
+            );
+        }
+        if (selectedStatus !== 'all') {
+            filtered = filtered.filter(s => s.status === selectedStatus);
+        }
+        if (selectedClientId !== 'all') {
+            filtered = filtered.filter(s => s.clientId === selectedClientId);
+        }
+        return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
+    }, [allShipments, shipmentFilter, selectedDate, searchTerm, selectedClientId, selectedStatus]);
 
     // Calculate shipment statistics based on visible shipments
     const totalShipments = visibleShipments.length;
     const deliveredShipments = visibleShipments.filter(s => s.status === ShipmentStatus.DELIVERED);
     const inTransitShipments = visibleShipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
     const pendingShipments = visibleShipments.filter(s => s.status === ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT);
-    const failedShipments = visibleShipments.filter(s => s.status === ShipmentStatus.DELIVERY_FAILED);
     const deliveryRate = totalShipments > 0 ? (deliveredShipments.length / totalShipments * 100) : 0;
     
     const handleExport = () => {
@@ -57,7 +84,7 @@ const TotalShipments = () => {
                 </div>
                 <div className="flex items-center gap-4">
                     {shipmentFilter && (
-                         <button onClick={() => setShipmentFilter(null)} className="flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300 transition">
+                         <button onClick={() => setContextFilter(null)} className="flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300 transition">
                             <XCircleIcon className="w-5 h-5"/>
                             Clear Filter
                         </button>
@@ -99,8 +126,62 @@ const TotalShipments = () => {
                 />
             </div>
             
-            {/* Full Shipment List */}
-             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+             <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center flex-wrap">
+                <div className="flex-grow w-full lg:w-auto">
+                    <input 
+                        type="text"
+                        placeholder="Search by ID or Recipient..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    />
+                </div>
+                <div className="flex-grow w-full lg:w-auto">
+                    <select
+                        value={selectedClientId}
+                        onChange={e => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                    >
+                        <option value="all">All Clients</option>
+                        {clients.map(client => (
+                            <option key={client.id} value={client.id}>{client.name}</option>
+                        ))}
+                    </select>
+                </div>
+                 <div className="flex-grow w-full lg:w-auto">
+                    <select
+                        value={selectedStatus}
+                        onChange={e => setSelectedStatus(e.target.value as 'all' | ShipmentStatus)}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                    >
+                        <option value="all">All Statuses</option>
+                        {Object.values(ShipmentStatus).map(status => (
+                            <option key={status} value={status}>{status}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                <div className="flex items-center gap-2 w-full lg:w-auto">
+                    <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        aria-label="Filter by creation date"
+                    />
+                    {selectedDate && (
+                        <button
+                            onClick={() => setSelectedDate('')}
+                            className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
+                            aria-label="Clear date filter"
+                        >
+                            Clear
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
                 <ShipmentList shipments={visibleShipments} showClientFee showCourierCommission showNetProfit />
             </div>
         </div>

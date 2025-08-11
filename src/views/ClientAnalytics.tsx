@@ -1,8 +1,10 @@
+// src/views/ClientAnalytics.tsx
+
 
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { UserRole, User, Shipment, ShipmentStatus } from '../types';
-import { ArrowUpCircleIcon, DocumentDownloadIcon, MailIcon, PhoneIcon, UserCircleIcon } from '../components/Icons';
+import { UserRole, User, Shipment, ShipmentStatus, TransactionType } from '../types';
+import { ArrowUpCircleIcon, DocumentDownloadIcon, MailIcon, PhoneIcon, UserCircleIcon, WalletIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 import { Modal } from '../components/common/Modal';
 import { ShipmentList } from '../components/specific/ShipmentList';
@@ -12,257 +14,245 @@ interface ClientAnalyticsProps {
 }
 
 const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) => {
-    const { users, shipments } = useAppContext();
+    const { users, shipments, clientTransactions, hasPermission, processClientPayout, addToast } = useAppContext();
+    const [mainTab, setMainTab] = useState<'summary' | 'payouts'>('summary');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [selectedClient, setSelectedClient] = useState<User | null>(null);
+
+    // State for filtering
+    const [summaryFilter, setSummaryFilter] = useState('');
+    const [payoutsFilter, setPayoutsFilter] = useState('');
 
     // State for filtering shipments within the modal
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
 
-    const clientShipmentCounts = useMemo(() => {
+    const clientData = useMemo(() => {
         const clients = users.filter(u => (u.roles || []).includes(UserRole.CLIENT));
-        const counts = clients.map(client => ({
-            id: client.id,
-            name: client.name,
-            shipmentCount: shipments.filter(s => s.clientId === client.id).length,
-            flatRateFee: client.flatRateFee || 0
-        }));
+        let data = clients.map(client => {
+            const clientShipments = shipments.filter(s => s.clientId === client.id);
+            const payoutRequests = clientTransactions.filter(t => t.userId === client.id && t.type === TransactionType.WITHDRAWAL_REQUEST && t.status === 'Pending');
+            return {
+                id: client.id,
+                name: client.name,
+                shipmentCount: clientShipments.length,
+                flatRateFee: client.flatRateFee || 0,
+                payoutRequestCount: payoutRequests.length,
+            };
+        });
 
-        return counts.sort((a, b) => {
+        if (summaryFilter.trim()) {
+            data = data.filter(client => client.name.toLowerCase().includes(summaryFilter.toLowerCase().trim()));
+        }
+
+        return data.sort((a, b) => {
             if (sortOrder === 'asc') {
                 return a.shipmentCount - b.shipmentCount;
             } else {
                 return b.shipmentCount - a.shipmentCount;
             }
         });
-    }, [users, shipments, sortOrder]);
+    }, [users, shipments, clientTransactions, sortOrder, summaryFilter]);
 
-    const filteredClientShipments = useMemo(() => {
+    const payoutRequests = useMemo(() => {
+        return clientTransactions
+            .filter(t => t.type === TransactionType.WITHDRAWAL_REQUEST && t.status === 'Pending')
+            .map(transaction => {
+                const client = users.find(u => u.id === transaction.userId);
+                return { ...transaction, clientName: client?.name || 'Unknown Client', clientEmail: client?.email || 'N/A' };
+            })
+            .filter(payout => {
+                if (!payoutsFilter.trim()) return true;
+                return payout.clientName.toLowerCase().includes(payoutsFilter.toLowerCase().trim());
+            })
+            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [clientTransactions, users, payoutsFilter]);
+    
+    const modalShipments = useMemo(() => {
         if (!selectedClient) return [];
         let filtered = shipments.filter(s => s.clientId === selectedClient.id);
 
-        // 1. Date filter
         if (selectedDate) {
             filtered = filtered.filter(s => s.creationDate.startsWith(selectedDate));
         }
-        // 2. Search filter
-        if (searchTerm.trim() !== '') {
-            filtered = filtered.filter(s => s.id.toLowerCase().includes(searchTerm.trim().toLowerCase()));
+        if (searchTerm.trim()) {
+            const lowerCaseSearch = searchTerm.trim().toLowerCase();
+            filtered = filtered.filter(s => s.id.toLowerCase().includes(lowerCaseSearch) || s.recipientName.toLowerCase().includes(lowerCaseSearch));
         }
-        // 3. Status filter
         if (selectedStatus !== 'all') {
             filtered = filtered.filter(s => s.status === selectedStatus);
         }
-
         return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
-    }, [selectedClient, shipments, selectedDate, searchTerm, selectedStatus]);
+    }, [shipments, selectedClient, selectedDate, searchTerm, selectedStatus]);
     
-    const handleCloseModal = () => {
-        setSelectedClient(null);
-        setSearchTerm('');
-        setSelectedStatus('all');
-        setSelectedDate('');
-    };
-    
-    const handleSelectShipment = (shipment: Shipment) => {
-        onSelectShipment(shipment);
-        handleCloseModal();
-    };
-
-    const handleSelectClient = (clientData: { id: number; }) => {
-        const clientDetails = users.find(u => u.id === clientData.id);
-        if (clientDetails) {
-            setSelectedClient(clientDetails);
+    const handleViewShipments = (clientId: number) => {
+        const client = users.find(u => u.id === clientId);
+        if (client) {
+            setSelectedClient(client);
         }
     };
 
-    const toggleSortOrder = () => {
-        setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    };
+    const handleProcessPayout = (id: string) => {
+        processClientPayout(id);
+        addToast("Payout processed successfully", "success");
+    }
 
-    const handleExport = () => {
-        const headers = ['Client Name', 'Number of Shipments', 'Flat Rate Fee (EGP)'];
-        const data = clientShipmentCounts.map(client => [
-            client.name,
-            client.shipmentCount,
-            client.flatRateFee.toFixed(2)
+    const handleExportSummary = () => {
+        const headers = ['Client Name', 'Total Shipments', 'Flat Rate (EGP)', 'Pending Payouts'];
+        const data = clientData.map(c => [
+            c.name,
+            c.shipmentCount,
+            c.flatRateFee.toFixed(2),
+            c.payoutRequestCount,
         ]);
-        exportToCsv(headers, data, 'Client_Shipment_Analytics');
+        exportToCsv(headers, data, 'Client_Analytics_Summary');
     };
 
+    const handleExportPayouts = () => {
+        const headers = ['Date', 'Client Name', 'Client Email', 'Amount (EGP)', 'Description'];
+        const data = payoutRequests.map(p => [
+            new Date(p.date).toLocaleString(),
+            p.clientName,
+            p.clientEmail,
+            Math.abs(p.amount).toFixed(2),
+            p.description,
+        ]);
+        exportToCsv(headers, data, 'Pending_Client_Payouts');
+    };
+    
     return (
-        <>
-            <div className="bg-white rounded-xl shadow-sm">
-                <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-800">Client Shipment Analytics</h2>
-                        <p className="text-slate-500 mt-1 text-sm">A summary of shipment volumes per client.</p>
-                    </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button
-                            onClick={handleExport}
-                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
-                        >
-                            <DocumentDownloadIcon className="w-5 h-5"/>
-                            <span className="hidden sm:inline">Export</span>
-                        </button>
-                        <button
-                            onClick={toggleSortOrder}
-                            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition"
-                            aria-label={`Sort by ${sortOrder === 'asc' ? 'highest first' : 'lowest first'}`}
-                        >
-                            <ArrowUpCircleIcon className={`w-5 h-5 transition-transform duration-300 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
-                            <span className="hidden sm:inline">Sort</span>
-                        </button>
-                    </div>
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-800">Client Analytics</h1>
+                    <p className="text-slate-500 mt-1">Overview of client shipment volumes and pending payouts.</p>
                 </div>
-
-                {/* Desktop Table */}
-                <div className="overflow-x-auto hidden lg:block">
-                    <table className="w-full text-left">
-                        <thead className="bg-slate-50">
-                            <tr>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Client Name</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider text-right">Number of Shipments</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider text-right">Flat Rate Fee (EGP)</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                            {clientShipmentCounts.map(client => (
-                                <tr key={client.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => handleSelectClient(client)}>
-                                    <td className="px-6 py-4 font-semibold text-slate-800 flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                                            {client.name.charAt(0)}
-                                        </div>
-                                        {client.name}
-                                    </td>
-                                    <td className="px-6 py-4 font-semibold text-slate-800 text-right font-mono text-lg">{client.shipmentCount}</td>
-                                    <td className="px-6 py-4 font-semibold text-orange-600 text-right font-mono text-lg">{client.flatRateFee.toFixed(2)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                 {/* Mobile Cards */}
-                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
-                    {clientShipmentCounts.map(client => (
-                        <div key={client.id} className="responsive-card" onClick={() => handleSelectClient(client)}>
-                            <div className="responsive-card-header">
-                                <span className="font-semibold text-slate-800">{client.name}</span>
-                            </div>
-                            <div className="responsive-card-item">
-                                <span className="responsive-card-label">Shipments</span>
-                                <span className="responsive-card-value">{client.shipmentCount}</span>
-                            </div>
-                            <div className="responsive-card-item">
-                                <span className="responsive-card-label">Flat Rate Fee</span>
-                                <span className="responsive-card-value font-semibold text-orange-600">{client.flatRateFee.toFixed(2)} EGP</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {clientShipmentCounts.length === 0 && (
-                    <div className="text-center py-16 text-slate-500">
-                        <p className="font-semibold">No Client Data</p>
-                        <p className="text-sm">No clients have been added to the system yet.</p>
-                    </div>
-                )}
+                 <button 
+                    onClick={mainTab === 'summary' ? handleExportSummary : handleExportPayouts}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                 >
+                    <DocumentDownloadIcon className="w-5 h-5"/>
+                    Export CSV
+                </button>
             </div>
-
-            {selectedClient && (
-                <Modal isOpen={!!selectedClient} onClose={handleCloseModal} title={`Client Details: ${selectedClient.name}`} size="4xl">
-                    <div className="space-y-6">
-                        {/* Client Info Section */}
-                        <div className="p-6 bg-slate-50 rounded-xl">
-                            <h3 className="text-lg font-bold text-slate-800 mb-4">Contact Information</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-                                <div className="flex items-start gap-3">
-                                    <UserCircleIcon className="w-6 h-6 text-slate-500 mt-1 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-600">Name</p>
-                                        <p className="font-semibold text-slate-800">{selectedClient.name}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <MailIcon className="w-6 h-6 text-slate-500 mt-1 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-600">Email</p>
-                                        <p className="font-semibold text-slate-800">{selectedClient.email}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3">
-                                    <PhoneIcon className="w-6 h-6 text-slate-500 mt-1 flex-shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-600">Phone</p>
-                                        <p className="font-semibold text-slate-800">{selectedClient.phone || 'N/A'}</p>
-                                    </div>
-                                </div>
-                                {selectedClient.address && (
-                                     <div className="flex items-start gap-3">
-                                        <p className="text-sm font-medium text-slate-600">Address:</p>
-                                        <p className="font-semibold text-slate-800">{`${selectedClient.address.street}, ${selectedClient.address.city}`}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Shipment History Section */}
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">Shipment History ({filteredClientShipments.length})</h3>
-                             <div className="mb-4 bg-slate-100 p-3 rounded-lg flex flex-col sm:flex-row gap-3 items-center">
-                                <input
-                                    type="text"
-                                    placeholder="Search by Shipment ID..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full sm:w-auto flex-grow px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 text-sm"
-                                />
-                                <select
-                                    value={selectedStatus}
-                                    onChange={(e) => setSelectedStatus(e.target.value as 'all' | ShipmentStatus)}
-                                    className="w-full sm:w-auto px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white text-sm"
-                                >
-                                    <option value="all">All Statuses</option>
-                                    {Object.values(ShipmentStatus).map(status => (
-                                        <option key={status} value={status}>{status}</option>
-                                    ))}
-                                </select>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                    <input
-                                        type="date"
-                                        value={selectedDate}
-                                        onChange={(e) => setSelectedDate(e.target.value)}
-                                        className="w-full sm:w-auto px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white text-sm"
-                                        aria-label="Filter by date"
-                                    />
-                                    {selectedDate && (
-                                        <button 
-                                            onClick={() => setSelectedDate('')} 
-                                            className="px-3 py-1.5 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
-                                            aria-label="Clear date filter"
-                                        >
-                                            Clear
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-200">
-                                <div className="max-h-96 overflow-y-auto">
-                                    <ShipmentList 
-                                        shipments={filteredClientShipments} 
-                                        onSelect={handleSelectShipment}
-                                    />
-                                </div>
-                            </div>
-                        </div>
+            
+             <div className="border-b border-slate-200">
+                <nav className="-mb-px flex space-x-6">
+                    <button onClick={() => setMainTab('summary')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${mainTab === 'summary' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                        Client Summary
+                    </button>
+                    <button onClick={() => setMainTab('payouts')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${mainTab === 'payouts' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                        Pending Payouts
+                        {payoutRequests.length > 0 && <span className="ml-2 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded-full">{payoutRequests.length}</span>}
+                    </button>
+                </nav>
+            </div>
+            
+            {mainTab === 'summary' && (
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200">
+                        <input
+                            type="text"
+                            placeholder="Filter clients by name..."
+                            value={summaryFilter}
+                            onChange={e => setSummaryFilter(e.target.value)}
+                            className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        />
                     </div>
-                </Modal>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Client</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase flex items-center gap-1 cursor-pointer" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>
+                                        Total Shipments
+                                        <ArrowUpCircleIcon className={`w-4 h-4 transition-transform ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
+                                    </th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Flat Rate</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Pending Payouts</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                             <tbody className="divide-y divide-slate-200">
+                                {clientData.map(client => (
+                                    <tr key={client.id}>
+                                        <td className="p-4 font-semibold">{client.name}</td>
+                                        <td className="p-4 text-slate-600 font-mono">{client.shipmentCount}</td>
+                                        <td className="p-4 text-orange-600 font-semibold">{client.flatRateFee.toFixed(2)} EGP</td>
+                                        <td className="p-4 text-blue-600 font-semibold">{client.payoutRequestCount}</td>
+                                        <td className="p-4">
+                                            <button onClick={() => handleViewShipments(client.id)} className="px-3 py-1.5 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 text-sm">View Shipments</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             )}
-        </>
+            
+            {mainTab === 'payouts' && (
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200">
+                        <input
+                            type="text"
+                            placeholder="Filter by client name..."
+                            value={payoutsFilter}
+                            onChange={e => setPayoutsFilter(e.target.value)}
+                            className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        />
+                    </div>
+                    <div className="overflow-x-auto">
+                         <table className="w-full text-left">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Date</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Client</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Amount</th>
+                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                             <tbody className="divide-y divide-slate-200">
+                                {payoutRequests.map(payout => (
+                                    <tr key={payout.id}>
+                                        <td className="p-4 text-sm text-slate-600">{new Date(payout.date).toLocaleString()}</td>
+                                        <td className="p-4">
+                                            <p className="font-semibold">{payout.clientName}</p>
+                                            <p className="text-xs text-slate-500">{payout.clientEmail}</p>
+                                        </td>
+                                        <td className="p-4 font-bold text-red-600">-{Math.abs(payout.amount).toFixed(2)} EGP</td>
+                                        <td className="p-4">
+                                            <button onClick={() => handleProcessPayout(payout.id)} className="px-3 py-1.5 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 text-sm">Process Payout</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {payoutRequests.length === 0 && (
+                                    <tr><td colSpan={4} className="text-center py-12 text-slate-500">No pending payouts.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+            
+            <Modal isOpen={!!selectedClient} onClose={() => setSelectedClient(null)} title={`Shipments for ${selectedClient?.name}`} size="4xl">
+                <div className="space-y-4">
+                     <div className="mb-4 bg-slate-50 p-3 rounded-lg flex flex-col sm:flex-row gap-4 items-center flex-wrap">
+                        <input type="text" placeholder="Search ID or Recipient..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="flex-grow w-full sm:w-auto px-3 py-2 border border-slate-300 rounded-lg" />
+                        <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value as any)} className="w-full sm:w-auto px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="all">All Statuses</option>
+                            {Object.values(ShipmentStatus).map(status => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full sm:w-auto px-3 py-2 border border-slate-300 rounded-lg" />
+                    </div>
+                    <div className="max-h-[60vh] overflow-y-auto">
+                        <ShipmentList shipments={modalShipments} onSelect={(shipment) => { onSelectShipment(shipment); setSelectedClient(null); }} />
+                    </div>
+                </div>
+            </Modal>
+
+        </div>
     );
 };
 

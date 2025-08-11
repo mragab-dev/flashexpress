@@ -1,9 +1,12 @@
+// src/views/CourierFinancials.tsx
+
 
 
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { CourierStats, CourierTransaction, CourierTransactionStatus, CourierTransactionType } from '../types';
 import { Modal } from '../components/common/Modal';
+import { DownloadIcon } from '../components/Icons';
 
 // --- Reusable Components (could be moved to /components/specific) ---
 
@@ -26,7 +29,7 @@ const CourierEarningsSummary: React.FC<{ courierStats: CourierStats }> = ({ cour
                     <div className="text-2xl font-bold text-slate-800">{courierStats.currentBalance.toFixed(2)} EGP</div>
                 </div>
                 <div>
-                    <div className="text-sm text-slate-500">Pending Earnings</div>
+                    <div className="text-sm text-slate-500">Pending Payouts</div>
                     <div className="text-2xl font-bold text-blue-600">{courierStats.pendingEarnings.toFixed(2)} EGP</div>
                 </div>
                  <div>
@@ -76,10 +79,17 @@ const TransactionHistory: React.FC<{ transactions: CourierTransaction[] }> = ({ 
                         {transactions.map(t => (
                             <tr key={t.id}>
                                 <td className="px-6 py-4 text-sm text-slate-600 whitespace-nowrap">{new Date(t.timestamp).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-sm text-slate-800">{t.description}</td>
+                                <td className="px-6 py-4 text-sm text-slate-800">
+                                    {t.description}
+                                    {t.transferEvidencePath && (
+                                        <a href={`/${t.transferEvidencePath}`} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                            <DownloadIcon className="w-4 h-4"/> View Proof
+                                        </a>
+                                    )}
+                                </td>
                                 <td className="px-6 py-4 text-sm">
                                     <span className={`px-2 py-1 font-semibold text-xs rounded-full ${t.amount >= 0 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}`}>{t.type}</span>
-                                    {t.type === CourierTransactionType.WITHDRAWAL_REQUEST && <span className={`ml-2 px-2 py-1 font-semibold text-xs rounded-full ${statusStyles[t.status]}`}>{t.status}</span>}
+                                    {(t.type === CourierTransactionType.WITHDRAWAL_REQUEST || t.type === CourierTransactionType.WITHDRAWAL_PROCESSED) && <span className={`ml-2 px-2 py-1 font-semibold text-xs rounded-full ${statusStyles[t.status]}`}>{t.status}</span>}
                                 </td>
                                 <td className={`px-6 py-4 text-right font-bold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>{t.amount.toFixed(2)}</td>
                             </tr>
@@ -97,18 +107,33 @@ const TransactionHistory: React.FC<{ transactions: CourierTransaction[] }> = ({ 
 // --- Main View ---
 
 const CourierFinancials = () => {
-    const { currentUser, courierStats, courierTransactions, requestCourierPayout } = useAppContext();
+    const { currentUser, courierStats, courierTransactions, requestCourierPayout, addToast } = useAppContext();
     const [isPayoutModalOpen, setPayoutModalOpen] = useState(false);
+    const [payoutAmount, setPayoutAmount] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer'>('Cash');
     
     if (!currentUser) return null;
 
     const myStats = courierStats.find(cs => cs.courierId === currentUser.id);
     const myTransactions = courierTransactions.filter(ct => ct.courierId === currentUser.id).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
+    const hasPendingPayout = myTransactions.some(t => t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
+
     const handleRequestPayout = () => {
-        if (!myStats || myStats.currentBalance <= 0) return;
-        requestCourierPayout(currentUser.id, myStats.currentBalance);
+        if (!myStats) return;
+        const amount = parseFloat(payoutAmount);
+        if (isNaN(amount) || amount <= 0) {
+            addToast('Please enter a valid positive amount.', 'error');
+            return;
+        }
+        if (amount > myStats.currentBalance) {
+            addToast('Payout amount cannot exceed your current balance.', 'error');
+            return;
+        }
+        requestCourierPayout(currentUser.id, amount, paymentMethod);
+        addToast('Payout requested successfully!', 'success');
         setPayoutModalOpen(false);
+        setPayoutAmount('');
     };
 
     if (!myStats) {
@@ -124,20 +149,48 @@ const CourierFinancials = () => {
                 </div>
                 <button 
                     onClick={() => setPayoutModalOpen(true)}
-                    disabled={myStats.currentBalance <= 0}
+                    disabled={myStats.currentBalance <= 0 || hasPendingPayout}
                     className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 transition disabled:bg-slate-400 disabled:cursor-not-allowed"
+                    title={hasPendingPayout ? 'You already have a pending payout request' : ''}
                 >
-                    Request Payout ({myStats.currentBalance.toFixed(2)} EGP)
+                    Request Payout
                 </button>
             </div>
             
             <CourierEarningsSummary courierStats={myStats} />
             <TransactionHistory transactions={myTransactions} />
 
-            <Modal isOpen={isPayoutModalOpen} onClose={() => setPayoutModalOpen(false)} title="Confirm Payout Request">
-                <div>
-                    <p className="text-lg">You are about to request a payout for your entire current balance of <strong className="text-green-600">{myStats.currentBalance.toFixed(2)} EGP</strong>.</p>
-                    <p className="text-sm text-slate-600 mt-2">Once confirmed, an administrator will process your request. The funds will then be deducted from your balance and transferred to you.</p>
+            <Modal isOpen={isPayoutModalOpen} onClose={() => setPayoutModalOpen(false)} title="Request a Payout">
+                <div className="space-y-4">
+                    <p>Your current balance is <strong className="text-green-600">{myStats.currentBalance.toFixed(2)} EGP</strong>.</p>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
+                        <select
+                            value={paymentMethod}
+                            onChange={(e) => setPaymentMethod(e.target.value as any)}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                        >
+                            <option value="Cash">Cash</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="payout-amount" className="block text-sm font-medium text-slate-700 mb-1">
+                            Amount to withdraw (EGP)
+                        </label>
+                        <input
+                            id="payout-amount"
+                            type="number"
+                            value={payoutAmount}
+                            onChange={e => setPayoutAmount(e.target.value)}
+                            placeholder={`Max ${myStats.currentBalance.toFixed(2)}`}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                            min="0.01"
+                            step="0.01"
+                            max={myStats.currentBalance}
+                        />
+                    </div>
+                    <p className="text-xs text-slate-500">Once confirmed, an administrator will process your request. The funds will then be deducted from your balance and transferred to you.</p>
                     <div className="flex justify-end gap-4 mt-6">
                         <button onClick={() => setPayoutModalOpen(false)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
                         <button onClick={handleRequestPayout} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Confirm Request</button>

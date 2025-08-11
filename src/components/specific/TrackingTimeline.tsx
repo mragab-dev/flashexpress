@@ -10,7 +10,6 @@ const statusOrderMapping: Record<string, number> = {
     [ShipmentStatus.WAITING_FOR_PACKAGING]: 0,
     [ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT]: 1,
     [ShipmentStatus.ASSIGNED_TO_COURIER]: 2,
-    [ShipmentStatus.PICKED_UP]: 2, // Also part of step 2
     [ShipmentStatus.IN_TRANSIT]: 3,
     [ShipmentStatus.OUT_FOR_DELIVERY]: 4,
     [ShipmentStatus.DELIVERED]: 5,

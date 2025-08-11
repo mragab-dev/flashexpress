@@ -1,34 +1,837 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Flash Express Shipping</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flash Express - Fast & Reliable Shipping</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Custom Truck Cursor */
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%23061A40" stroke="%23FFD000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/><path d="M14 9h4l4 4v4h-8v-4c0-1.1.9-2 2-2z"/><circle cx="7.5" cy="18.5" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/></svg>'), auto;
+        }
+        /* Apply Cairo font when Arabic is active */
+        body.lang-ar {
+            font-family: 'Cairo', sans-serif;
+        }
 
-<link rel="stylesheet" href="/index.css">
+        /* Brand Palette */
+        .brand-yellow { color: #FFD000; }
+        .brand-yellow-bg { background-color: #FFD000; }
+        .brand-yellow-bg-hover:hover { background-color: #e6bb00; }
+
+        .brand-navy { color: #061A40; }
+        .brand-navy-bg { background-color: #061A40; }
+
+        .hero-bg {
+            background-color: #061A40; /* Deep Navy Blue */
+            position: relative;
+            overflow: hidden;
+        }
+        .testimonial-card, .pricing-card, .tier-card {
+            background-color: #fff;
+            border: 1px solid #e5e7eb;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .testimonial-card:hover, .pricing-card:hover, .tier-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+        }
+
+        /* Unified Button & Link Animation */
+        .animated-button, header nav a {
+            position: relative;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .animated-button:hover, header nav a:hover {
+            transform: translateY(-2px);
+        }
+        /* Add shadow to solid buttons on hover */
+        .animated-button:hover {
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+        }
+        /* Keep the underline for nav links specifically */
+        header nav a::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            bottom: -6px;
+            left: 50%;
+            background-color: #FFD000; /* Brand yellow */
+            transition: width 0.3s ease-in-out, left 0.3s ease-in-out;
+        }
+        header nav a:hover::after {
+            width: 100%;
+            left: 0;
+        }
+
+        /* --- Tech-Forward Logistics Hub Animation --- */
+        .map-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.25;
+        }
+        .map-svg {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+        }
+        .city-ping {
+            animation: pulse 2.5s infinite ease-in-out;
+        }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -16; }
+        }
+        .route-line {
+            stroke-dasharray: 4;
+            animation: dash 1s linear infinite;
+        }
+
+        @keyframes move-truck-1 {
+            0% { offset-distance: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { offset-distance: 100%; opacity: 0;}
+        }
+        @keyframes move-truck-2 {
+            0% { offset-distance: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { offset-distance: 100%; opacity: 0;}
+        }
+        @keyframes move-truck-3 {
+            0% { offset-distance: 0%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { offset-distance: 100%; opacity: 0;}
+        }
+        .truck-icon-1 { animation: move-truck-1 12s linear infinite; animation-delay: 0s; }
+        .truck-icon-2 { animation: move-truck-2 15s linear infinite; animation-delay: -5s; }
+        .truck-icon-3 { animation: move-truck-3 10s linear infinite; animation-delay: -10s; }
+
+        @keyframes fade-popup {
+            0%, 100% { opacity: 0; transform: translateY(5px); }
+            40% { opacity: 0; transform: translateY(5px); }
+            50% { opacity: 1; transform: translateY(0); }
+            70% { opacity: 1; transform: translateY(0); }
+            80% { opacity: 0; transform: translateY(-5px); }
+        }
+        .data-popup {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(2px);
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            opacity: 0;
+            white-space: nowrap;
+        }
+        .popup-1 { animation: fade-popup 12s linear infinite; animation-delay: 0s; }
+        .popup-2 { animation: fade-popup 15s linear infinite; animation-delay: -5s; }
+        .popup-3 { animation: fade-popup 10s linear infinite; animation-delay: -10s; }
+
+
+    </style>
 <script type="importmap">
 {
   "imports": {
-    "vite": "https://esm.sh/vite@^7.0.6",
-    "@vitejs/plugin-react-swc": "https://esm.sh/@vitejs/plugin-react-swc@^3.11.0",
-    "react": "https://esm.sh/react@^19.1.1",
     "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
-    "react/": "https://esm.sh/react@^19.1.1/",
+    "vite": "https://esm.sh/vite@^7.1.1",
     "papaparse": "https://esm.sh/papaparse@^5.5.3",
-    "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.1",
     "jspdf": "https://esm.sh/jspdf@^3.0.1",
     "jspdf-autotable": "https://esm.sh/jspdf-autotable@^5.0.2",
+    "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8",
     "@capacitor/cli": "https://esm.sh/@capacitor/cli@^7.4.2",
-    "types": "https://esm.sh/types@^0.1.1",
-    "socket.io-client": "https://esm.sh/socket.io-client@^4.7.5"
+    "@vitejs/plugin-react-swc": "https://esm.sh/@vitejs/plugin-react-swc@^4.0.0"
   }
 }
 </script>
+<link rel="stylesheet" href="/index.css">
 </head>
-  <body>
+<body class="bg-white text-gray-800">
+    <div id="landing-page">
+        <!-- Header -->
+        <header class="bg-white shadow-sm sticky top-0 z-50">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-20">
+                    <div class="flex-shrink-0">
+                        <a href="#">
+                            <img src="http://googleusercontent.com/file_content/3" alt="Flash Express Logo" class="h-16">
+                        </a>
+                    </div>
+                    <nav class="hidden md:flex md:items-center md:space-x-8">
+                        <a href="#services" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navServices">Services</a>
+                        <a href="#about" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navAbout">About Us</a>
+                        <a href="#pricing" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navPricing">Pricing</a>
+                        <a href="#tiers" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navTiers">Partner Tiers</a>
+                        <a href="#testimonials" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navTestimonials">Testimonials</a>
+                        <a href="#contact" class="text-sm text-gray-600 hover:brand-navy font-medium" data-lang="navContact">Contact</a>
+                    </nav>
+                    <div class="flex items-center gap-4">
+                        <a href="#tracking" class="hidden sm:inline-block text-gray-900 brand-yellow-bg brand-yellow-bg-hover font-bold rounded-lg text-sm px-4 py-2 text-center animated-button" data-lang="navTrackShipment">Track Shipment</a>
+                        <a href="/app.html" class="text-gray-900 brand-navy-bg text-white hover:bg-gray-800 font-bold rounded-lg text-sm px-4 py-2 text-center animated-button" data-lang="navLogin">Login</a>
+                        <button id="lang-switcher" class="font-bold text-sm brand-navy hover:brand-yellow animated-button">AR</button>
+                        <button id="mobile-menu-button" class="md:hidden p-2 text-gray-600 hover:brand-navy">
+                            <i data-lucide="menu"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Mobile Menu -->
+            <div id="mobile-menu" class="md:hidden hidden">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    <a href="#services" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navServices">Services</a>
+                    <a href="#about" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navAbout">About Us</a>
+                    <a href="#pricing" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navPricing">Pricing</a>
+                    <a href="#tiers" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navTiers">Partner Tiers</a>
+                    <a href="#testimonials" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navTestimonials">Testimonials</a>
+                    <a href="#contact" class="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50" data-lang="navContact">Contact</a>
+                    <a href="#tracking" class="mt-2 block w-full text-center px-3 py-2 rounded-md text-base font-bold text-gray-900 brand-yellow-bg brand-yellow-bg-hover" data-lang="navTrackShipmentMobile">Track Shipment</a>
+                    <a href="/app.html" class="mt-2 block w-full text-center px-3 py-2 rounded-md text-base font-bold text-white brand-navy-bg hover:bg-gray-800" data-lang="navLogin">Login</a>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <!-- Hero Section -->
+            <section class="hero-bg">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-32 text-center relative z-10">
+                    <h1 class="text-4xl md:text-6xl font-extrabold text-white leading-tight" data-lang="heroTitle">
+                        Lightning-Fast Shipping for Your
+                        <span class="brand-yellow" data-lang="heroTitleSpan">E-commerce Business</span>
+                    </h1>
+                    <p class="mt-6 max-w-2xl mx-auto text-lg text-gray-300" data-lang="heroSubtitle">
+                        We empower small businesses with professional handling and delivery in 3 business days, guaranteed.
+                    </p>
+                    <div class="mt-8 flex justify-center">
+                        <a href="/app.html" class="text-gray-900 brand-yellow-bg brand-yellow-bg-hover font-bold rounded-lg text-lg px-8 py-4 shadow-lg animated-button" data-lang="heroCTA">
+                            Get Started
+                        </a>
+                    </div>
+                </div>
+                <!-- Animation Container -->
+                <div class="map-container pointer-events-none">
+                    <svg class="map-svg" viewBox="0 0 800 400" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Map Background -->
+                        <path d="M400 350 Q350 200 200 150 T50 100 Q150 150 250 250 T400 350 Z" fill="#0A2451" opacity="0.5"/>
+                        <path d="M400 350 Q450 200 600 150 T750 100 Q650 150 550 250 T400 350 Z" fill="#0A2451" opacity="0.5"/>
+                        <path d="M300 100 Q400 50 500 100 T700 80 L650 150 Q500 120 400 150 T250 140 Z" fill="#0A2451" opacity="0.5"/>
+
+                        <!-- Routes -->
+                        <path id="route1" d="M100,300 C 250,200 350,200 500,100" stroke="#FFD000" fill="none" class="route-line" stroke-width="0.5"/>
+                        <path id="route2" d="M700,300 C 550,250 500,150 400,120" stroke="#FFD000" fill="none" class="route-line" stroke-width="0.5"/>
+                        <path id="route3" d="M200,80 C 300,150 450,150 600,80" stroke="#FFD000" fill="none" class="route-line" stroke-width="0.5"/>
+
+                        <!-- Cities -->
+                        <circle cx="100" cy="300" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 0s;"/>
+                        <circle cx="500" cy="100" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 0.5s;"/>
+                        <circle cx="700" cy="300" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 1s;"/>
+                        <circle cx="400" cy="120" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 1.5s;"/>
+                        <circle cx="200" cy="80" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 0.2s;"/>
+                        <circle cx="600" cy="80" r="4" fill="#FFD000" class="city-ping" style="animation-delay: 0.8s;"/>
+
+                        <!-- Animated Trucks -->
+                        <g class="truck-icon-1" style="offset-path: path('M100,300 C 250,200 350,200 500,100');">
+                            <path d="M3 17.5V6.5A2.5 2.5 0 0 1 5.5 4h5A2.5 2.5 0 0 1 13 6.5V18H1a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1.5a2.5 2.5 0 1 0 5 0H13a2.5 2.5 0 1 0 5 0h1.5a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H18v-4l-4-4H5.5" fill="#FFFFFF" transform="scale(0.8)"/>
+                        </g>
+                        <g class="truck-icon-2" style="offset-path: path('M700,300 C 550,250 500,150 400,120');">
+                            <path d="M3 17.5V6.5A2.5 2.5 0 0 1 5.5 4h5A2.5 2.5 0 0 1 13 6.5V18H1a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1.5a2.5 2.5 0 1 0 5 0H13a2.5 2.5 0 1 0 5 0h1.5a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H18v-4l-4-4H5.5" fill="#FFFFFF" transform="scale(0.8)"/>
+                        </g>
+                        <g class="truck-icon-3" style="offset-path: path('M200,80 C 300,150 450,150 600,80');">
+                            <path d="M3 17.5V6.5A2.5 2.5 0 0 1 5.5 4h5A2.5 2.5 0 0 1 13 6.5V18H1a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h1.5a2.5 2.5 0 1 0 5 0H13a2.5 2.5 0 1 0 5 0h1.5a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H18v-4l-4-4H5.5" fill="#FFFFFF" transform="scale(0.8)"/>
+                        </g>
+                    </svg>
+                     <!-- Data Popups (positioned via JS or complex CSS) -->
+                    <div class="data-popup popup-1" style="offset-path: path('M100,300 C 250,200 350,200 500,100'); top: -20px;">ID: CAI-4512<br>STATUS: IN TRANSIT</div>
+                    <div class="data-popup popup-2" style="offset-path: path('M700,300 C 550,250 500,150 400,120'); top: -20px;">ID: ALEX-8819<br>STATUS: IN TRANSIT</div>
+                    <div class="data-popup popup-3" style="offset-path: path('M200,80 C 300,150 450,150 600,80'); top: -20px;">ID: SUEZ-1102<br>STATUS: IN TRANSIT</div>
+                </div>
+            </section>
+
+            <!-- Shipment Tracking Section -->
+            <section id="tracking" class="py-16 sm:py-24 bg-white">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="max-w-3xl mx-auto">
+                        <h2 class="text-3xl font-bold text-center brand-navy" data-lang="trackTitle">Track Your Shipment</h2>
+                        <p class="mt-4 text-lg text-center text-gray-600" data-lang="trackSubtitle">Enter your tracking ID and phone number to see the latest status.</p>
+                        <div class="mt-8 p-8 bg-gray-50 rounded-2xl shadow-md">
+                            <form id="tracking-form" class="flex flex-col sm:flex-row gap-4">
+                                <input type="text" id="tracking-number" placeholder="Enter tracking ID" data-lang-placeholder="trackIdPlaceholder" class="flex-grow w-full px-5 py-3 text-base text-gray-700 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent">
+                                <input type="tel" id="tracking-phone" placeholder="Enter sender/recipient phone" data-lang-placeholder="trackPhonePlaceholder" class="flex-grow w-full px-5 py-3 text-base text-gray-700 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-transparent">
+                                <button type="submit" class="w-full sm:w-auto text-gray-900 brand-yellow-bg brand-yellow-bg-hover font-bold rounded-lg text-base px-8 py-3 text-center flex items-center justify-center animated-button">
+                                    <i data-lucide="search" class="mr-2 h-5 w-5"></i> <span data-lang="trackButton">Track</span>
+                                </button>
+                            </form>
+                            <div id="tracking-result" class="mt-6 hidden"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Services Section -->
+            <section id="services" class="py-16 sm:py-24 bg-gray-50">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="servicesTitle">Our Promise to You</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="servicesSubtitle">We handle every package with care and ensure it reaches its destination on time.</p>
+                    </div>
+                    <div class="grid md:grid-cols-2 gap-8">
+                        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex items-start">
+                            <div class="flex-shrink-0">
+                                <div class="flex items-center justify-center h-12 w-12 rounded-full brand-yellow-bg text-gray-900">
+                                    <i data-lucide="package-check" class="h-6 w-6"></i>
+                                </div>
+                            </div>
+                            <div class="ml-6">
+                                <h3 class="text-xl font-semibold brand-navy" data-lang="service1Title">Professional Handling</h3>
+                                <p class="mt-2 text-gray-600" data-lang="service1Desc">Our expert team is trained to handle your products with the utmost care, ensuring they arrive in perfect condition. We treat every package as if it were our own.</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 flex items-start">
+                            <div class="flex-shrink-0">
+                                <div class="flex items-center justify-center h-12 w-12 rounded-full brand-yellow-bg text-gray-900">
+                                    <i data-lucide="truck" class="h-6 w-6"></i>
+                                </div>
+                            </div>
+                            <div class="ml-6">
+                                <h3 class="text-xl font-semibold brand-navy" data-lang="service2Title">Max 3 Business Days Delivery</h3>
+                                <p class="mt-2 text-gray-600" data-lang="service2Desc">Speed is crucial for e-commerce. We guarantee delivery within a maximum of three business days, helping you keep your customers happy and loyal.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- About Us Section -->
+            <section id="about" class="py-16 sm:py-24 bg-white">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="aboutTitle">Our Mission & Vision</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="aboutSubtitle">The driving force behind our commitment to excellence.</p>
+                    </div>
+                    <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+                        <div class="bg-gray-50 p-8 rounded-2xl border border-gray-200">
+                            <i data-lucide="rocket" class="h-10 w-10 brand-yellow"></i>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="missionTitle">Our Mission</h3>
+                            <p class="mt-2 text-gray-600" data-lang="missionDesc">To empower small businesses and e-commerce entrepreneurs by providing the fastest, most reliable, and professional shipping services in Egypt, ensuring their success is delivered with every package.</p>
+                        </div>
+                        <div class="bg-gray-50 p-8 rounded-2xl border border-gray-200">
+                            <i data-lucide="eye" class="h-10 w-10 brand-yellow"></i>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="visionTitle">Our Vision</h3>
+                            <p class="mt-2 text-gray-600" data-lang="visionDesc">To be the leading logistics partner for Egypt's e-commerce sector, recognized for our unmatched speed, unwavering reliability, and our dedication to fostering the growth of local businesses.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Pricing Section -->
+            <section id="pricing" class="py-16 sm:py-24 bg-gray-50">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="pricingTitle">Clear & Simple Pricing</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="pricingSubtitle">Choose the speed that fits your needs. No hidden fees.</p>
+                    </div>
+                    <div class="max-w-6xl mx-auto grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <!-- Standard Pricing Card -->
+                        <div class="pricing-card p-8 rounded-2xl text-center flex flex-col">
+                            <i data-lucide="package" class="h-12 w-12 mx-auto brand-navy"></i>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="standardShippingTitle">Standard Shipping</h3>
+                            <p class="mt-2 text-5xl font-extrabold brand-navy" data-lang="standardShippingPrice">75 LE</p>
+                            <p class="mt-2 text-gray-600 font-medium" data-lang="standardShippingDesc">Reliable delivery within 3 business days. The perfect balance of speed and cost.</p>
+                        </div>
+                        <!-- Urgent Pricing Card -->
+                        <div class="pricing-card p-8 rounded-2xl text-center flex flex-col border-2 border-yellow-400 transform scale-105 shadow-xl">
+                            <span class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 brand-yellow-bg text-gray-900 text-xs font-bold px-3 py-1 rounded-full uppercase" data-lang="mostPopular">Most Popular</span>
+                            <i data-lucide="zap" class="h-12 w-12 mx-auto brand-yellow"></i>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="urgentShippingTitle">Urgent Shipping</h3>
+                            <p class="mt-2 text-5xl font-extrabold brand-navy" data-lang="urgentShippingPrice">90 LE</p>
+                            <p class="mt-2 text-gray-600 font-medium" data-lang="urgentShippingDesc">Faster delivery within 2 business days for when you need it there sooner.</p>
+                        </div>
+                        <!-- Express Pricing Card -->
+                        <div class="pricing-card p-8 rounded-2xl text-center flex flex-col">
+                            <i data-lucide="rocket" class="h-12 w-12 mx-auto brand-navy"></i>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="expressShippingTitle">Express Shipping</h3>
+                            <p class="mt-2 text-5xl font-extrabold brand-navy" data-lang="expressShippingPrice">150 LE</p>
+                            <p class="mt-2 text-gray-600 font-medium" data-lang="expressShippingDesc">Our fastest option. Next business day delivery for top priority shipments.</p>
+                        </div>
+                    </div>
+                    <div class="mt-12 max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-md border border-gray-200 text-center flex flex-col sm:flex-row items-center justify-between">
+                        <div>
+                            <h3 class="text-2xl font-bold brand-navy" data-lang="largeOrdersTitle">Large or Special Orders?</h3>
+                            <p class="mt-2 text-gray-600" data-lang="largeOrdersDesc">For bulk shipments or special requirements, let's create a custom plan for you.</p>
+                        </div>
+                        <a href="#contact" class="mt-4 sm:mt-0 flex-shrink-0 inline-block text-gray-900 brand-yellow-bg brand-yellow-bg-hover font-bold rounded-lg text-sm px-6 py-3 text-center animated-button" data-lang="largeOrdersCTA">Request a Quote</a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Partner Tiers Section -->
+            <section id="tiers" class="py-16 sm:py-24 bg-white">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="tiersTitle">Partner Tiers & Discounts</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="tiersSubtitle">We reward our loyal partners. The more you ship, the more you save.</p>
+                    </div>
+                    <div class="max-w-6xl mx-auto grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <!-- Bronze Tier -->
+                        <div class="tier-card p-8 rounded-2xl text-center flex flex-col">
+                            <div class="mx-auto bg-yellow-700/20 p-3 rounded-full"><i data-lucide="shield" class="h-10 w-10 text-yellow-700"></i></div>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="bronzeTierTitle">Bronze Partner</h3>
+                            <p class="text-gray-500 text-sm" data-lang="bronzeTierReq">50+ Shipments / Month</p>
+                            <p class="mt-4 text-4xl font-extrabold brand-navy" data-lang="bronzeTierDiscount">5%</p>
+                            <p class="text-gray-600 font-medium" data-lang="bronzeTierDesc">Discount on all shipments</p>
+                        </div>
+                        <!-- Silver Tier -->
+                        <div class="tier-card p-8 rounded-2xl text-center flex flex-col border-2 border-gray-400">
+                            <div class="mx-auto bg-gray-400/20 p-3 rounded-full"><i data-lucide="award" class="h-10 w-10 text-gray-500"></i></div>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="silverTierTitle">Silver Partner</h3>
+                            <p class="text-gray-500 text-sm" data-lang="silverTierReq">150+ Shipments / Month</p>
+                            <p class="mt-4 text-4xl font-extrabold brand-navy" data-lang="silverTierDiscount">10%</p>
+                            <p class="text-gray-600 font-medium" data-lang="silverTierDesc">Discount & Priority Support</p>
+                        </div>
+                        <!-- Gold Tier -->
+                        <div class="tier-card p-8 rounded-2xl text-center flex flex-col border-2 brand-yellow">
+                            <div class="mx-auto bg-yellow-400/20 p-3 rounded-full"><i data-lucide="crown" class="h-10 w-10 brand-yellow"></i></div>
+                            <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="goldTierTitle">Gold Partner</h3>
+                            <p class="text-gray-500 text-sm" data-lang="goldTierReq">300+ Shipments / Month</p>
+                            <p class="mt-4 text-4xl font-extrabold brand-navy" data-lang="goldTierDiscount">15%</p>
+                            <p class="text-gray-600 font-medium" data-lang="goldTierDesc">Discount & Dedicated Account Manager</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Testimonials Section -->
+            <section id="testimonials" class="py-16 sm:py-24 bg-gray-50">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="testimonialsTitle">Trusted by Businesses Like Yours</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="testimonialsSubtitle">Hear what our happy customers have to say about our service.</p>
+                    </div>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <div class="testimonial-card p-8 rounded-2xl">
+                            <div class="flex mb-4">
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                            </div>
+                            <p class="text-gray-700" data-lang="testimonial1">"Flash Express has been a game-changer for our online store. Their speed and reliability have significantly improved our customer satisfaction."</p>
+                            <div class="mt-6 flex items-center">
+                                <img class="h-12 w-12 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text=OH" alt="Omar Hassan">
+                                <div class="ml-4">
+                                    <p class="font-semibold brand-navy" data-lang="testimonial1Name">Omar Hassan</p>
+                                    <p class="text-gray-600" data-lang="testimonial1Role">Founder, The Cairo Bazaar</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="testimonial-card p-8 rounded-2xl">
+                            <div class="flex mb-4">
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                            </div>
+                            <p class="text-gray-700" data-lang="testimonial2">"The professional handling is top-notch. We ship fragile items, and with Flash Express, we have peace of mind knowing they'll arrive safely."</p>
+                            <div class="mt-6 flex items-center">
+                                <img class="h-12 w-12 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text=FA" alt="Fatima Ali">
+                                <div class="ml-4">
+                                    <p class="font-semibold brand-navy" data-lang="testimonial2Name">Fatima Ali</p>
+                                    <p class="text-gray-600" data-lang="testimonial2Role">Manager, Alexandria Crafts</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="testimonial-card p-8 rounded-2xl">
+                            <div class="flex mb-4">
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                                <svg class="w-5 h-5 brand-yellow" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                            </div>
+                            <p class="text-gray-700" data-lang="testimonial3">"Switching to Flash Express was the best decision we made for our logistics. The 3-day delivery promise is always met. Highly recommended!"</p>
+                            <div class="mt-6 flex items-center">
+                                <img class="h-12 w-12 rounded-full" src="https://placehold.co/100x100/E2E8F0/4A5568?text=YM" alt="Youssef Mahmoud">
+                                <div class="ml-4">
+                                    <p class="font-semibold brand-navy" data-lang="testimonial3Name">Youssef Mahmoud</p>
+                                    <p class="text-gray-600" data-lang="testimonial3Role">Owner, Giza Goods</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Contact Section -->
+            <section id="contact" class="py-16 sm:py-24 bg-white">
+                <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-12">
+                        <h2 class="text-3xl font-bold brand-navy" data-lang="contactTitle">Get in Touch</h2>
+                        <p class="mt-4 text-lg text-gray-600" data-lang="contactSubtitle">You can reach us via call or WhatsApp for any inquiries.</p>
+                    </div>
+                    <div class="max-w-md mx-auto bg-gray-50 p-8 rounded-2xl shadow-md border border-gray-200 text-center">
+                        <i data-lucide="smartphone" class="h-12 w-12 mx-auto brand-yellow"></i>
+                        <h3 class="mt-4 text-2xl font-bold brand-navy" data-lang="contactNumber">Customer Service</h3>
+                        <p class="mt-2 text-2xl font-semibold text-gray-700 tracking-wider">+20 111 630 6013</p>
+                        <div class="mt-6 flex flex-col sm:flex-row justify-center gap-4">
+                            <a href="tel:+201116306013" class="animated-button inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white brand-navy-bg hover:bg-gray-800">
+                                <i data-lucide="phone" class="mr-2 h-5 w-5"></i> <span data-lang="contactCall">Call Us</span>
+                            </a>
+                            <a href="https://wa.me/201116306013" target="_blank" class="animated-button inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-green-500 hover:bg-green-600">
+                                <i data-lucide="message-circle" class="mr-2 h-5 w-5"></i> <span data-lang="contactWhatsapp">WhatsApp</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="brand-navy-bg text-white">
+            <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div>
+                        <h3 class="text-xl font-bold brand-yellow">Flash Express</h3>
+                        <p class="mt-2 text-gray-400" data-lang="footerSlogan">Your reliable partner for e-commerce shipping.</p>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold" data-lang="footerLinks">Quick Links</h4>
+                        <ul class="mt-4 space-y-2">
+                            <li><a href="#services" class="text-gray-400 hover:text-white" data-lang="navServices">Services</a></li>
+                            <li><a href="#about" class="text-gray-400 hover:text-white" data-lang="navAbout">About Us</a></li>
+                            <li><a href="#pricing" class="text-gray-400 hover:text-white" data-lang="navPricing">Pricing</a></li>
+                            <li><a href="#tiers" class="text-gray-400 hover:text-white" data-lang="navTiers">Partner Tiers</a></li>
+                            <li><a href="#contact" class="text-gray-400 hover:text-white" data-lang="navContact">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold" data-lang="footerFollow">Follow Us</h4>
+                        <div class="mt-4 flex space-x-4">
+                            <a href="#" class="text-gray-400 hover:text-white"><i data-lucide="facebook"></i></a>
+                            <a href="#" class="text-gray-400 hover:text-white"><i data-lucide="twitter"></i></a>
+                            <a href="#" class="text-gray-400 hover:text-white"><i data-lucide="linkedin"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-8 pt-8 border-t border-gray-700 text-center text-gray-400 text-sm">
+                    &copy; <span id="year"></span> Flash Express. <span data-lang="footerRights">All rights reserved.</span>
+                </div>
+            </div>
+        </footer>
+
+        <script>
+            // --- Language and Translation ---
+            const translations = {
+                en: {
+                    navLogin: "Login",
+                    navServices: "Services",
+                    navAbout: "About Us",
+                    navPricing: "Pricing",
+                    navTiers: "Partner Tiers",
+                    navTestimonials: "Testimonials",
+                    navContact: "Contact",
+                    navTrackShipment: "Track Shipment",
+                    navTrackShipmentMobile: "Track Shipment",
+                    heroTitle: 'Lightning-Fast Shipping for Your <span class="brand-yellow">E-commerce Business</span>',
+                    heroSubtitle: "We empower small businesses with professional handling and delivery in 3 business days, guaranteed.",
+                    heroCTA: "Get Started",
+                    trackTitle: "Track Your Shipment",
+                    trackSubtitle: "Enter your tracking ID and phone number to see the latest status.",
+                    trackIdPlaceholder: "Enter tracking ID",
+                    trackPhonePlaceholder: "Enter sender/recipient phone",
+                    trackButton: "Track",
+                    servicesTitle: "Our Promise to You",
+                    servicesSubtitle: "We handle every package with care and ensure it reaches its destination on time.",
+                    service1Title: "Professional Handling",
+                    service1Desc: "Our expert team is trained to handle your products with the utmost care, ensuring they arrive in perfect condition. We treat every package as if it were our own.",
+                    service2Title: "Max 3 Business Days Delivery",
+                    service2Desc: "Speed is crucial for e-commerce. We guarantee delivery within a maximum of three business days, helping you keep your customers happy and loyal.",
+                    aboutTitle: "Our Mission & Vision",
+                    aboutSubtitle: "The driving force behind our commitment to excellence.",
+                    missionTitle: "Our Mission",
+                    missionDesc: "To empower small businesses and e-commerce entrepreneurs by providing the fastest, most reliable, and professional shipping services in Egypt, ensuring their success is delivered with every package.",
+                    visionTitle: "Our Vision",
+                    visionDesc: "To be the leading logistics partner for Egypt's e-commerce sector, recognized for our unmatched speed, unwavering reliability, and our dedication to fostering the growth of local businesses.",
+                    pricingTitle: "Clear & Simple Pricing",
+                    pricingSubtitle: "Choose the speed that fits your needs. No hidden fees.",
+                    standardShippingTitle: "Standard Shipping",
+                    standardShippingPrice: "75 LE",
+                    standardShippingDesc: "Reliable delivery within 3 business days. The perfect balance of speed and cost.",
+                    mostPopular: "Most Popular",
+                    urgentShippingTitle: "Urgent Shipping",
+                    urgentShippingPrice: "90 LE",
+                    urgentShippingDesc: "Faster delivery within 2 business days for when you need it there sooner.",
+                    expressShippingTitle: "Express Shipping",
+                    expressShippingPrice: "150 LE",
+                    expressShippingDesc: "Our fastest option. Next business day delivery for top priority shipments.",
+                    largeOrdersTitle: "Large or Special Orders?",
+                    largeOrdersDesc: "For bulk shipments or special requirements, let's create a custom plan for you.",
+                    largeOrdersCTA: "Request a Quote",
+                    tiersTitle: "Partner Tiers & Discounts",
+                    tiersSubtitle: "We reward our loyal partners. The more you ship, the more you save.",
+                    bronzeTierTitle: "Bronze Partner",
+                    bronzeTierReq: "50+ Shipments / Month",
+                    bronzeTierDiscount: "5%",
+                    bronzeTierDesc: "Discount on all shipments",
+                    silverTierTitle: "Silver Partner",
+                    silverTierReq: "150+ Shipments / Month",
+                    silverTierDiscount: "10%",
+                    silverTierDesc: "Discount & Priority Support",
+                    goldTierTitle: "Gold Partner",
+                    goldTierReq: "300+ Shipments / Month",
+                    goldTierDiscount: "15%",
+                    goldTierDesc: "Discount & Dedicated Account Manager",
+                    testimonialsTitle: "Trusted by Businesses Like Yours",
+                    testimonialsSubtitle: "Hear what our happy customers have to say about our service.",
+                    testimonial1: `"Flash Express has been a game-changer for our online store. Their speed and reliability have significantly improved our customer satisfaction."`,
+                    testimonial1Name: "Omar Hassan",
+                    testimonial1Role: "Founder, The Cairo Bazaar",
+                    testimonial2: `"The professional handling is top-notch. We ship fragile items, and with Flash Express, we have peace of mind knowing they'll arrive safely."`,
+                    testimonial2Name: "Fatima Ali",
+                    testimonial2Role: "Manager, Alexandria Crafts",
+                    testimonial3: `"Switching to Flash Express was the best decision we made for our logistics. The 3-day delivery promise is always met. Highly recommended!"`,
+                    testimonial3Name: "Youssef Mahmoud",
+                    testimonial3Role: "Owner, Giza Goods",
+                    contactTitle: "Get in Touch",
+                    contactSubtitle: "You can reach us via call or WhatsApp for any inquiries.",
+                    contactNumber: "Customer Service",
+                    contactCall: "Call Us",
+                    contactWhatsapp: "WhatsApp",
+                    footerSlogan: "Your reliable partner for e-commerce shipping.",
+                    footerLinks: "Quick Links",
+                    footerFollow: "Follow Us",
+                    footerRights: "All rights reserved."
+                },
+                ar: {
+                    navLogin: "تسجيل الدخول",
+                    navServices: "خدماتنا",
+                    navAbout: "عنا",
+                    navPricing: "الأسعار",
+                    navTiers: "باقات الشركاء",
+                    navTestimonials: "آراء العملاء",
+                    navContact: "اتصل بنا",
+                    navTrackShipment: "تتبع شحنتك",
+                    navTrackShipmentMobile: "تتبع شحنتك",
+                    heroTitle: 'شحن فائق السرعة لأعمالك التجارية الإلكترونية',
+                    heroSubtitle: "ندعم الشركات الصغيرة والمتاجر الإلكترونية من خلال التعامل الاحترافي والتوصيل في غضون 3 أيام عمل مضمونة.",
+                    heroCTA: "ابدأ الآن",
+                    trackTitle: "تتبع شحنتك",
+                    trackSubtitle: "أدخل رقم التتبع ورقم الهاتف الخاص بك لمعرفة حالة شحنتك.",
+                    trackIdPlaceholder: "أدخل رقم التتبع",
+                    trackPhonePlaceholder: "أدخل هاتف المرسل/المستلم",
+                    trackButton: "تتبع",
+                    servicesTitle: "وعدنا لك",
+                    servicesSubtitle: "نتعامل مع كل طرد بعناية فائقة ونضمن وصوله إلى وجهته في الوقت المحدد.",
+                    service1Title: "تعامل احترافي",
+                    service1Desc: "فريقنا الخبير مدرب على التعامل مع منتجاتك بأقصى درجات العناية، مما يضمن وصولها في حالة ممتازة. نتعامل مع كل طرد كما لو كان ملكنا.",
+                    service2Title: "توصيل خلال 3 أيام عمل كحد أقصى",
+                    service2Desc: "السرعة أمر حاسم في التجارة الإلكترونية. نضمن التوصيل في غضون ثلاثة أيام عمل كحد أقصى، مما يساعدك على إبقاء عملائك سعداء ومخلصين.",
+                    aboutTitle: "مهمتنا ورؤيتنا",
+                    aboutSubtitle: "القوة الدافعة وراء التزامنا بالتميز.",
+                    missionTitle: "مهمتنا",
+                    missionDesc: "تمكين الشركات الصغيرة ورواد التجارة الإلكترونية من خلال توفير خدمات الشحن الأسرع والأكثر موثوقية واحترافية في مصر، مما يضمن تحقيق نجاحهم مع كل طرد.",
+                    visionTitle: "رؤيتنا",
+                    visionDesc: "أن نكون الشريك اللوجستي الرائد لقطاع التجارة الإلكترونية في مصر، معترف بنا لسرعتنا التي لا مثيل لها، وموثوقيتنا الثابتة، وتفانينا في تعزيز نمو الشركات المحلية.",
+                    pricingTitle: "أسعار واضحة وبسيطة",
+                    pricingSubtitle: "اختر السرعة التي تناسب احتياجاتك. لا توجد رسوم خفية.",
+                    standardShippingTitle: "الشحن العادي",
+                    standardShippingPrice: "75 جنيه",
+                    standardShippingDesc: "توصيل موثوق خلال 3 أيام عمل. التوازن المثالي بين السرعة والتكلفة.",
+                    mostPopular: "الأكثر شيوعًا",
+                    urgentShippingTitle: "الشحن العاجل",
+                    urgentShippingPrice: "90 جنيه",
+                    urgentShippingDesc: "توصيل أسرع خلال يومي عمل عندما تحتاج إلى وصولها في وقت أقرب.",
+                    expressShippingTitle: "الشحن السريع",
+                    expressShippingPrice: "150 جنيه",
+                    expressShippingDesc: "خيارنا الأسرع. توصيل في يوم العمل التالي للشحنات ذات الأولوية القصوى.",
+                    largeOrdersTitle: "طلبات كبيرة أو خاصة؟",
+                    largeOrdersDesc: "للشحنات الكبيرة أو المتطلبات الخاصة، دعنا نضع خطة مخصصة لك.",
+                    largeOrdersCTA: "اطلب عرض سعر",
+                    tiersTitle: "باقات الشركاء والخصومات",
+                    tiersSubtitle: "نكافئ شركاءنا الأوفياء. كلما شحنت أكثر، كلما وفرت أكثر.",
+                    bronzeTierTitle: "الشريك البرونزي",
+                    bronzeTierReq: "50+ شحنة / شهر",
+                    bronzeTierDiscount: "5%",
+                    bronzeTierDesc: "خصم على جميع الشحنات",
+                    silverTierTitle: "الشريك الفضي",
+                    silverTierReq: "150+ شحنة / شهر",
+                    silverTierDiscount: "10%",
+                    silverTierDesc: "خصم ودعم ذو أولوية",
+                    goldTierTitle: "الشريك الذهبي",
+                    goldTierReq: "300+ شحنة / شهر",
+                    goldTierDiscount: "15%",
+                    goldTierDesc: "خصم ومدير حساب مخصص",
+                    testimonialsTitle: "موثوق به من قبل شركات مثل شركتك",
+                    testimonialsSubtitle: "استمع إلى ما يقوله عملاؤنا السعداء عن خدمتنا.",
+                    testimonial1: `"كانت فلاش إكسبريس نقطة تحول لمتجرنا عبر الإنترنت. لقد أدت سرعتهم وموثوقيتهم إلى تحسين رضا عملائنا بشكل كبير."`,
+                    testimonial1Name: "عمر حسن",
+                    testimonial1Role: "مؤسس، بازار القاهرة",
+                    testimonial2: `"التعامل الاحترافي على أعلى مستوى. نحن نشحن عناصر هشة، ومع فلاش إكسبريس، نشعر براحة البال مع العلم أنها ستصل بأمان."`,
+                    testimonial2Name: "فاطمة علي",
+                    testimonial2Role: "مديرة، حرف الإسكندرية",
+                    testimonial3: `"كان التحول إلى فلاش إكسبريس أفضل قرار اتخذناه بشأن الخدمات اللوجستية لدينا. يتم الوفاء بوعد التسليم لمدة 3 أيام دائمًا. موصى به للغاية!"`,
+                    testimonial3Name: "يوسف محمود",
+                    testimonial3Role: "صاحب، بضائع الجيزة",
+                    contactTitle: "تواصل معنا",
+                    contactSubtitle: "يمكنك التواصل معنا عبر الاتصال أو واتساب لأي استفسارات.",
+                    contactNumber: "خدمة العملاء",
+                    contactCall: "اتصل بنا",
+                    contactWhatsapp: "واتساب",
+                    footerSlogan: "شريكك الموثوق به في شحن التجارة الإلكترونية.",
+                    footerLinks: "روابط سريعة",
+                    footerFollow: "تابعنا",
+                    footerRights: "جميع الحقوق محفوظة."
+                }
+            };
+
+            const langSwitcher = document.getElementById('lang-switcher');
+            let currentLang = 'en';
+
+            const setLanguage = (lang) => {
+                currentLang = lang;
+                const translation = translations[lang];
+                document.documentElement.setAttribute('lang', lang);
+
+                if (lang === 'ar') {
+                    document.body.classList.add('lang-ar');
+                    document.documentElement.setAttribute('dir', 'rtl');
+                } else {
+                    document.body.classList.remove('lang-ar');
+                    document.documentElement.setAttribute('dir', 'ltr');
+                }
+                
+                document.querySelectorAll('[data-lang]').forEach(el => {
+                    const key = el.getAttribute('data-lang');
+                    if (translation[key]) {
+                        el.innerHTML = translation[key];
+                    }
+                });
+
+                document.querySelectorAll('[data-lang-placeholder]').forEach(el => {
+                    const key = el.getAttribute('data-lang-placeholder');
+                    if (translation[key]) {
+                        el.placeholder = translation[key];
+                    }
+                });
+
+                langSwitcher.textContent = lang === 'en' ? 'AR' : 'EN';
+            };
+
+            langSwitcher.addEventListener('click', () => {
+                const newLang = currentLang === 'en' ? 'ar' : 'en';
+                setLanguage(newLang);
+            });
+
+            lucide.createIcons();
+
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+            mobileMenuButton.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+
+            document.getElementById('year').textContent = new Date().getFullYear();
+
+            // --- Tracking Logic ---
+            const trackingForm = document.getElementById('tracking-form');
+            const trackingResult = document.getElementById('tracking-result');
+            const trackingNumberInput = document.getElementById('tracking-number');
+            const trackingPhoneInput = document.getElementById('tracking-phone');
+
+            trackingForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const trackingId = trackingNumberInput.value.trim();
+                const phone = trackingPhoneInput.value.trim();
+                
+                if (!trackingId || !phone) {
+                    trackingResult.innerHTML = `<p class="text-red-500 text-center">Please enter both a tracking ID and phone number.</p>`;
+                    trackingResult.classList.remove('hidden');
+                    return;
+                }
+
+                trackingResult.innerHTML = `<div class="text-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500 mx-auto"></div><p class="mt-2 text-slate-600">Searching...</p></div>`;
+                trackingResult.classList.remove('hidden');
+
+                try {
+                    const response = await fetch('/api/track', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ trackingId, phone }),
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Tracking information not found.');
+                    }
+                    
+                    const statusHistoryHTML = (data.statusHistory || [])
+                        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                        .map(h => `<li>${new Date(h.timestamp).toLocaleString()}: <strong>${h.status}</strong></li>`)
+                        .join('');
+
+                    trackingResult.innerHTML = `
+                        <div class="border-t pt-6 text-left space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="text-sm text-gray-500">Tracking ID</p>
+                                    <p class="font-semibold font-mono text-gray-800">${data.id}</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500">Current Status</p>
+                                    <p class="font-bold text-lg text-indigo-600">${data.status}</p>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Recipient</p>
+                                <p class="font-semibold text-gray-800">${data.recipientName}</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500">Destination</p>
+                                <p class="font-semibold text-gray-800">${data.toAddress.street}, ${data.toAddress.zone}</p>
+                            </div>
+                            ${(data.statusHistory && data.statusHistory.length > 0) ? `
+                            <div class="pt-4 border-t mt-4">
+                                <p class="text-sm font-semibold text-gray-500 mb-2">History</p>
+                                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">${statusHistoryHTML}</ul>
+                            </div>` : ''}
+                        </div>`;
+
+                } catch (error) {
+                    trackingResult.innerHTML = `<p class="text-red-600 text-center font-semibold">${error.message}</p>`;
+                }
+            });
+            
+            setLanguage('en');
+        </script>
+    </div>
+
     <div id="root"></div>
+
     <script type="module" src="/src/index.tsx"></script>
+
 <script type="module" src="/index.tsx"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+// src/views/AdminFinancials.tsx
+
 
 
 import React, { useState } from 'react';
@@ -148,7 +150,7 @@ const AdminFinancials: React.FC<AdminFinancialsProps> = ({ setActiveView }) => {
                     icon={<WalletIcon className="w-7 h-7"/>} 
                     color="#16a34a"
                     subtitle="Shipping fees earned"
-                    onClick={() => navigateWithFilter(s => s.status === ShipmentStatus.DELIVERED)}
+                    onClick={() => navigateWithFilter(s => s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.DELIVERY_FAILED)}
                 />
                 <StatCard 
                     title="Total Commission" 
@@ -164,7 +166,7 @@ const AdminFinancials: React.FC<AdminFinancialsProps> = ({ setActiveView }) => {
                     icon={<CheckCircleIcon className="w-7 h-7"/>} 
                     color="#3b82f6"
                     subtitle="Revenue - Commission"
-                    onClick={() => navigateWithFilter(s => s.status === ShipmentStatus.DELIVERED)}
+                    onClick={() => navigateWithFilter(s => s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.DELIVERY_FAILED)}
                 />
             </div>
 

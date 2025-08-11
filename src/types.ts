@@ -1,3 +1,5 @@
+// src/types.ts
+
 
 
 export const ZONES = {
@@ -84,7 +86,6 @@ export enum ShipmentStatus {
   WAITING_FOR_PACKAGING = 'Waiting for Packaging',
   PACKAGED_AND_WAITING_FOR_ASSIGNMENT = 'Packaged and Waiting for Assignment',
   ASSIGNED_TO_COURIER = 'Assigned to Courier',
-  PICKED_UP = 'Picked Up',
   IN_TRANSIT = 'In Transit',
   OUT_FOR_DELIVERY = 'Out for Delivery',
   DELIVERED = 'Delivered',
@@ -188,7 +189,11 @@ export interface Toast {
 export enum TransactionType {
     DEPOSIT = 'Deposit',
     PAYMENT = 'Payment',
+    WITHDRAWAL_REQUEST = 'Withdrawal Request',
+    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
 }
+
+export type ClientTransactionStatus = 'Pending' | 'Processed' | 'Failed';
 
 export interface ClientTransaction {
     id: string;
@@ -197,6 +202,7 @@ export interface ClientTransaction {
     amount: number;
     date: string;
     description: string;
+    status?: ClientTransactionStatus;
 }
 
 export enum NotificationChannel {
@@ -269,6 +275,8 @@ export interface CourierTransaction {
   shipmentId?: string;
   timestamp: string;
   status: CourierTransactionStatus;
+  paymentMethod?: 'Cash' | 'Bank Transfer';
+  transferEvidencePath?: string;
 }
 
 // Admin Financial System Types
@@ -310,6 +318,8 @@ export enum Permission {
   VIEW_OWN_SHIPMENTS = 'view_own_shipments',
   VIEW_ALL_SHIPMENTS = 'view_all_shipments',
   ASSIGN_SHIPMENTS = 'assign_shipments',
+  CREATE_SHIPMENTS_FOR_OTHERS = 'create_shipments_for_others',
+  PRINT_LABELS = 'print_labels',
   
   // Courier-specific tasks
   VIEW_COURIER_TASKS = 'view_courier_tasks',
@@ -323,6 +333,7 @@ export enum Permission {
   VIEW_CLIENT_ANALYTICS = 'view_client_analytics',
   VIEW_COURIER_PERFORMANCE = 'view_courier_performance',
   MANAGE_COURIER_PAYOUTS = 'manage_courier_payouts',
+  MANAGE_CLIENT_PAYOUTS = 'manage_client_payouts',
   VIEW_COURIER_EARNINGS = 'view_courier_earnings',
   
   // System & Logs
@@ -339,6 +350,9 @@ export enum Permission {
   MANAGE_ASSETS = 'manage_assets',
   VIEW_OWN_ASSETS = 'view_own_assets',
   DELETE_ASSET = 'delete_asset',
+
+  // Supplier Management
+  MANAGE_SUPPLIERS = 'manage_suppliers',
 }
 
 export interface CustomRole {
@@ -381,4 +395,36 @@ export interface Asset {
     status: AssetStatus;
     assignedToUserId?: number;
     assignmentDate?: string;
+    purchaseDate?: string;
+    purchasePrice?: number;
+    usefulLifeMonths?: number;
+}
+
+// --- Supplier Management Types ---
+export interface Supplier {
+    id: string;
+    name: string;
+    contact_person?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+}
+
+export interface SupplierTransaction {
+    id: string;
+    supplier_id: string;
+    date: string;
+    description?: string;
+    type: 'Payment' | 'Credit';
+    amount: number;
+}
+
+// --- In-App Notification System ---
+export interface InAppNotification {
+    id: string;
+    userId: number;
+    message: string;
+    link?: string;
+    isRead: boolean;
+    timestamp: string;
 }

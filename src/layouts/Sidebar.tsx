@@ -1,3 +1,5 @@
+// src/layouts/Sidebar.tsx
+
 
 
 import React from 'react';
@@ -42,6 +44,7 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
     { name: 'Role Management', icon: <CogIcon />, view: 'roles', permission: Permission.MANAGE_ROLES },
     { name: 'Inventory', icon: <ArchiveBoxIcon />, view: 'inventory', permission: Permission.MANAGE_INVENTORY },
     { name: 'Asset Management', icon: <TagIcon />, view: 'asset-management', permission: Permission.MANAGE_ASSETS },
+    { name: 'Supplier Management', icon: <SwitchHorizontalIcon />, view: 'supplier-management', permission: Permission.MANAGE_SUPPLIERS },
     
     // Analytics & Logs
     { name: 'Client Analytics', icon: <TrendingUpIcon />, view: 'client-analytics', permission: Permission.VIEW_CLIENT_ANALYTICS },

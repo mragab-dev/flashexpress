@@ -35,6 +35,12 @@ async function main() {
         fs.mkdirSync(uploadsDir);
         console.log('Created "uploads" directory.');
     }
+    const evidenceDir = path.join(uploadsDir, 'evidence');
+    if (!fs.existsSync(evidenceDir)) {
+        fs.mkdirSync(evidenceDir);
+        console.log('Created "uploads/evidence" directory.');
+    }
+
 
     // Explicitly configure CORS for better proxy compatibility
     app.use(cors({
@@ -56,6 +62,47 @@ async function main() {
             console.log(`WebSocket Client disconnected: ${socket.id}`);
         });
     });
+    
+    // --- Scheduled Job for Overdue Shipments ---
+    const checkForOverdueShipments = async () => {
+        console.log('Running scheduled job: checking for overdue shipments...');
+        const twoAndHalfDaysAgo = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000).toISOString();
+        try {
+            const overdueCandidates = await knex('shipments')
+                .whereIn('status', ['In Transit', 'Out for Delivery', 'Assigned to Courier'])
+                .where('creationDate', '<', twoAndHalfDaysAgo);
+
+            for (const shipment of overdueCandidates) {
+                // Check if an overdue notification already exists for this shipment
+                const existingNotification = await knex('notifications')
+                    .where({ shipmentId: shipment.id })
+                    .andWhere('message', 'like', '%OVERDUE%')
+                    .first();
+
+                if (!existingNotification) {
+                    console.log(`Shipment ${shipment.id} is overdue. Logging notification.`);
+                    const notification = {
+                        id: generateId('NOT_OVERDUE'),
+                        shipmentId: shipment.id,
+                        channel: 'System',
+                        recipient: 'admin',
+                        message: `SYSTEM ALERT: Shipment ${shipment.id} is OVERDUE. It has been in transit for more than 2.5 days.`,
+                        date: new Date().toISOString(),
+                        status: shipment.status,
+                        sent: true,
+                    };
+                    await knex('notifications').insert(notification);
+                    io.emit('data_updated'); // Notify admins
+                }
+            }
+        } catch (error) {
+            console.error('Error in overdue shipment job:', error);
+        }
+    };
+    
+    // Run the job every 4 hours
+    setInterval(checkForOverdueShipments, 4 * 60 * 60 * 1000);
+    checkForOverdueShipments(); // Also run on startup
 
 
     // --- Helper Functions ---
@@ -118,6 +165,18 @@ async function main() {
             return false;
         }
     }
+    
+    const createInAppNotification = async (trx, userId, message, link = null) => {
+        await trx('in_app_notifications').insert({
+            id: generateId('INAPP'),
+            userId,
+            message,
+            link,
+            isRead: false,
+            timestamp: new Date().toISOString()
+        });
+    };
+
 
     // --- Internal Business Logic ---
     const updateStatusAndHistory = async (trx, shipmentId, newStatus) => {
@@ -198,6 +257,7 @@ async function main() {
                         timestamp: new Date().toISOString(),
                         status: 'Processed'
                     });
+                     await createInAppNotification(trx, shipment.courierId, `You earned ${commissionAmount.toFixed(2)} EGP for delivering shipment ${shipment.id}.`, '/courier-financials');
                 }
                 await trx('courier_stats').where({ courierId: shipment.courierId }).update({ consecutiveFailures: 0 });
             }
@@ -323,7 +383,7 @@ async function main() {
     // Fetch all application data
     app.get('/api/data', async (req, res) => {
       try {
-        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles, inventoryItems, assets] = await Promise.all([
+        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications] = await Promise.all([
           knex('users').select(),
           knex('shipments').select(),
           knex('client_transactions').select(),
@@ -333,6 +393,9 @@ async function main() {
           knex('custom_roles').select(),
           knex('inventory_items').select(),
           knex('assets').select(),
+          knex('suppliers').select(),
+          knex('supplier_transactions').select(),
+          knex('in_app_notifications').select(),
         ]);
 
         const safeUsers = users.map(u => {
@@ -354,7 +417,7 @@ async function main() {
 
         const parsedRoles = customRoles.map(r => parseJsonField(r, 'permissions'));
 
-        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles, inventoryItems, assets });
+        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications });
       } catch (error) {
         console.error('Error fetching data:', error);
         res.status(500).json({ error: 'Failed to fetch application data' });
@@ -575,6 +638,7 @@ async function main() {
                 await createNotification(trx, shipment, status);
     
                 if (status === 'Delivery Failed') {
+                    // Penalize courier
                     if (shipment.courierId) {
                         const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
                         if (courierStats) {
@@ -586,7 +650,21 @@ async function main() {
                                 isRestricted: shouldRestrict,
                                 restrictionReason: shouldRestrict ? `Exceeded failure limit of ${failureLimit}.` : null
                             });
+                            await createInAppNotification(trx, shipment.courierId, `Delivery failed for shipment ${shipment.id}. A penalty may be applied.`, '/courier-financials');
                         }
+                    }
+                    // Deduct fee from client's wallet
+                    const clientFee = shipment.clientFlatRateFee || 0;
+                    if (shipment.clientId && clientFee > 0) {
+                        await trx('client_transactions').insert({
+                            id: generateId('TRN_FAIL'),
+                            userId: shipment.clientId,
+                            type: 'Payment',
+                            amount: -Math.abs(clientFee),
+                            date: new Date().toISOString(),
+                            description: `Fee for rejected shipment ${id}`,
+                            status: 'Processed'
+                        });
                     }
                 }
             });
@@ -640,8 +718,9 @@ async function main() {
                     clientFlatRateFee: client.flatRateFee,
                     courierCommission: commission
                 });
-
-                 await createNotification(trx, shipment, newStatus);
+                
+                await createInAppNotification(trx, courierId, `You have a new shipment assigned: ${id}`, '/tasks');
+                await createNotification(trx, shipment, newStatus);
             });
             res.status(200).json({ success: true });
             io.emit('data_updated');
@@ -652,6 +731,69 @@ async function main() {
             res.status(statusCode).json({ error: message });
         }
     });
+    
+    app.post('/api/shipments/auto-assign', async (req, res) => {
+        try {
+            let assignmentsMade = 0;
+            await knex.transaction(async trx => {
+                const shipmentsToAssign = await trx('shipments').where('status', 'Packaged and Waiting for Assignment');
+                if (shipmentsToAssign.length === 0) return;
+
+                const couriers = await trx('users')
+                    .join('courier_stats', 'users.id', 'courier_stats.courierId')
+                    .where('courier_stats.isRestricted', false)
+                    .select('users.*');
+
+                const activeShipments = await trx('shipments')
+                    .whereIn('status', ['Assigned to Courier', 'In Transit', 'Out for Delivery'])
+                    .select('id', 'courierId');
+
+                const courierWorkload = couriers.reduce((acc, c) => {
+                    acc[c.id] = activeShipments.filter(s => s.courierId === c.id).length;
+                    return acc;
+                }, {});
+
+                for (const shipment of shipmentsToAssign) {
+                    const toAddress = JSON.parse(shipment.toAddress);
+                    const suitableCouriers = couriers
+                        .filter(c => (JSON.parse(c.zones || '[]')).includes(toAddress.zone))
+                        .sort((a, b) => courierWorkload[a.id] - courierWorkload[b.id]);
+                    
+                    if (suitableCouriers.length > 0) {
+                        const bestCourier = suitableCouriers[0];
+                        
+                        // Perform assignment logic (copied from individual assign endpoint)
+                        const client = await trx('users').where({ id: shipment.clientId }).first();
+                        const courierStats = await trx('courier_stats').where({ courierId: bestCourier.id }).first();
+                        const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
+                        const newStatus = 'Assigned to Courier';
+                        const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                        currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
+
+                        await trx('shipments').where({ id: shipment.id }).update({
+                            courierId: bestCourier.id,
+                            status: newStatus,
+                            statusHistory: JSON.stringify(currentHistory),
+                            clientFlatRateFee: client.flatRateFee,
+                            courierCommission: commission
+                        });
+
+                        await createInAppNotification(trx, bestCourier.id, `You have a new shipment assigned: ${shipment.id}`, '/tasks');
+                        await createNotification(trx, shipment, newStatus);
+                        
+                        courierWorkload[bestCourier.id]++;
+                        assignmentsMade++;
+                    }
+                }
+            });
+            res.status(200).json({ success: true, message: `${assignmentsMade} shipments were auto-assigned.` });
+            io.emit('data_updated');
+        } catch (error) {
+            console.error("Auto-assignment error:", error);
+            res.status(500).json({ error: 'Failed to auto-assign shipments.' });
+        }
+    });
+
 
     app.put('/api/shipments/:id/fees', async (req, res) => {
         const { id } = req.params;
@@ -760,9 +902,12 @@ async function main() {
         const { id } = req.params;
         const { amount, description, shipmentId } = req.body;
         try { 
-            await knex('courier_transactions').insert({ 
-                id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -Math.abs(amount), description, 
-                shipmentId: shipmentId || null, timestamp: new Date().toISOString(), status: 'Processed' 
+            await knex.transaction(async trx => {
+                await trx('courier_transactions').insert({ 
+                    id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -Math.abs(amount), description, 
+                    shipmentId: shipmentId || null, timestamp: new Date().toISOString(), status: 'Processed' 
+                });
+                await createInAppNotification(trx, id, `A penalty of ${amount} EGP was applied to your account. Reason: ${description}`, '/courier-financials');
             });
             res.status(200).json({ success: true });
             io.emit('data_updated');
@@ -778,11 +923,15 @@ async function main() {
             if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
             
             const penaltyAmount = shipment.packageValue;
+            const finalDescription = description || `Penalty for failed delivery of ${shipmentId} - Package value: ${penaltyAmount} EGP`;
             
-            await knex('courier_transactions').insert({ 
-                id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -penaltyAmount, 
-                description: description || `Penalty for failed delivery of ${shipmentId} - Package value: ${penaltyAmount} EGP`, 
-                shipmentId: shipmentId, timestamp: new Date().toISOString(), status: 'Processed' 
+            await knex.transaction(async trx => {
+                await trx('courier_transactions').insert({ 
+                    id: generateId('TRN'), courierId: id, type: 'Penalty', amount: -penaltyAmount, 
+                    description: finalDescription,
+                    shipmentId: shipmentId, timestamp: new Date().toISOString(), status: 'Processed' 
+                });
+                await createInAppNotification(trx, id, `A penalty of ${penaltyAmount} EGP was applied for failed delivery of ${shipmentId}.`, '/courier-financials');
             });
             res.status(200).json({ success: true, penaltyAmount, message: `Penalty of ${penaltyAmount} EGP applied` });
             io.emit('data_updated');
@@ -793,9 +942,15 @@ async function main() {
     });
 
     app.post('/api/couriers/payouts', async (req, res) => {
-        const { courierId, amount } = req.body;
+        const { courierId, amount, paymentMethod } = req.body;
         try {
-            await knex('courier_transactions').insert({ id: generateId('TRN'), courierId, type: 'Withdrawal Request', amount: -Math.abs(amount), description: 'Payout request from courier', timestamp: new Date().toISOString(), status: 'Pending' });
+            await knex('courier_transactions').insert({ 
+                id: generateId('TRN'), courierId, type: 'Withdrawal Request', 
+                amount: -Math.abs(amount), 
+                description: `Payout request via ${paymentMethod}`, 
+                timestamp: new Date().toISOString(), status: 'Pending',
+                paymentMethod
+            });
             res.status(200).json({ success: true });
             io.emit('data_updated');
         }
@@ -804,16 +959,104 @@ async function main() {
 
     app.put('/api/payouts/:id/process', async (req, res) => {
         const { id } = req.params;
+        const { transferEvidence } = req.body; // base64 string
         try {
-            await knex('courier_transactions').where({ id }).update({ status: 'Processed', type: 'Withdrawal Processed', description: 'Payout processed by admin' });
+            await knex.transaction(async trx => {
+                const updatePayload = { 
+                    status: 'Processed', 
+                    type: 'Withdrawal Processed', 
+                    description: 'Payout processed by admin' 
+                };
+
+                if (transferEvidence) {
+                     try {
+                        const matches = transferEvidence.match(/^data:(.+?);base64,(.+)$/);
+                        if (matches && matches.length === 3) {
+                            const imageType = matches[1].split('/')[1];
+                            const buffer = Buffer.from(matches[2], 'base64');
+                            const fileName = `evidence_${id}_${Date.now()}.${imageType}`;
+                            const filePath = path.join(evidenceDir, fileName);
+                            
+                            fs.writeFileSync(filePath, buffer);
+                            updatePayload.transferEvidencePath = `uploads/evidence/${fileName}`;
+                        }
+                    } catch (e) { console.error('Could not save transfer evidence:', e); }
+                }
+
+                const [payout] = await trx('courier_transactions').where({ id }).update(updatePayload).returning('*');
+                await createInAppNotification(trx, payout.courierId, `Your payout request for ${-payout.amount} EGP has been processed.`, '/courier-financials');
+            });
             res.status(200).json({ success: true });
             io.emit('data_updated');
         }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
     });
 
+    // --- NEW: Client Payouts ---
+    app.post('/api/clients/:id/payouts', async (req, res) => {
+        const { id } = req.params;
+        const { amount } = req.body;
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ error: 'Invalid payout amount.' });
+        }
+        try {
+            await knex('client_transactions').insert({
+                id: generateId('TRN_PAYOUT'),
+                userId: id,
+                type: 'Withdrawal Request',
+                amount: -Math.abs(amount),
+                date: new Date().toISOString(),
+                description: 'Client payout request',
+                status: 'Pending'
+            });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        } catch (error) {
+            console.error('Client payout request error:', error);
+            res.status(500).json({ error: 'Server error processing payout request.' });
+        }
+    });
+
+    app.put('/api/client-transactions/:id/process', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex('client_transactions')
+                .where({ id, type: 'Withdrawal Request' })
+                .update({ status: 'Processed', type: 'Withdrawal Processed', description: 'Payout processed by admin' });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        } catch (error) {
+            console.error('Client payout processing error:', error);
+            res.status(500).json({ error: 'Server error processing payout.' });
+        }
+    });
+
 
     // Notifications
+    app.get('/api/notifications/user/:userId', async (req, res) => {
+        const { userId } = req.params;
+        try {
+            const notifications = await knex('in_app_notifications')
+                .where({ userId })
+                .orderBy('timestamp', 'desc')
+                .limit(50);
+            res.json(notifications);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch notifications.' });
+        }
+    });
+
+    app.put('/api/notifications/:id/read', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex('in_app_notifications').where({ id }).update({ isRead: true });
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to mark notification as read.' });
+        }
+    });
+
     app.post('/api/notifications/:id/resend', async (req, res) => {
         const { id } = req.params;
         try {
@@ -937,6 +1180,118 @@ async function main() {
         }
     });
 
+    // --- NEW BULK ACTION ENDPOINTS ---
+    // RE-ENGINEERED FOR MIXED-BATCH PACKAGING
+    app.post('/api/shipments/bulk-package', async (req, res) => {
+        const { shipmentIds, materialsSummary, packagingNotes } = req.body;
+        if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0 || !materialsSummary) {
+            return res.status(400).json({ error: 'Missing shipment IDs or material summary.' });
+        }
+
+        try {
+            // Validate that the total number of boxes matches the number of shipments
+            const totalBoxes = Object.entries(materialsSummary)
+                .filter(([key]) => key.startsWith('inv_box_'))
+                .reduce((sum, [, value]) => sum + Number(value), 0);
+            
+            if (totalBoxes !== shipmentIds.length) {
+                return res.status(400).json({ error: `The number of boxes (${totalBoxes}) does not match the number of selected shipments (${shipmentIds.length}).` });
+            }
+
+            await knex.transaction(async trx => {
+                const newStatus = 'Packaged and Waiting for Assignment';
+                const timestamp = new Date().toISOString();
+                
+                const shipmentsToUpdate = await trx('shipments').whereIn('id', shipmentIds).andWhere('status', 'Waiting for Packaging');
+
+                if (shipmentsToUpdate.length === 0) {
+                    return;
+                }
+                
+                const inventoryItemsForLog = await trx('inventory_items').whereIn('id', Object.keys(materialsSummary));
+                const packagingLogFromSummary = inventoryItemsForLog.map(item => ({
+                    inventoryItemId: item.id,
+                    itemName: item.name,
+                    quantityUsed: materialsSummary[item.id]
+                })).filter(log => log.quantityUsed > 0);
+
+                for(const shipment of shipmentsToUpdate) {
+                    const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                    currentHistory.push({ status: newStatus, timestamp });
+                    await trx('shipments').where({ id: shipment.id }).update({
+                        status: newStatus,
+                        statusHistory: JSON.stringify(currentHistory),
+                        packagingNotes: packagingNotes || null,
+                        packagingLog: JSON.stringify(packagingLogFromSummary)
+                    });
+                     await createNotification(trx, shipment, newStatus);
+                }
+
+                const inventoryUpdates = Object.entries(materialsSummary).map(([itemId, quantity]) => {
+                    if (Number(quantity) > 0) {
+                        return trx('inventory_items').where({ id: itemId }).decrement('quantity', Number(quantity));
+                    }
+                    return Promise.resolve();
+                });
+                await Promise.all(inventoryUpdates);
+            });
+            
+            res.json({ success: true, message: `${shipmentIds.length} shipments packaged successfully.` });
+            io.emit('data_updated');
+        } catch (e) {
+            console.error('Error during bulk packaging:', e);
+            res.status(500).json({ error: 'Failed to bulk package shipments.' });
+        }
+    });
+
+    app.post('/api/shipments/bulk-assign', async (req, res) => {
+        const { shipmentIds, courierId } = req.body;
+        if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0 || !courierId) {
+            return res.status(400).json({ error: 'Missing shipment IDs or courier ID.' });
+        }
+
+        try {
+            await knex.transaction(async trx => {
+                const newStatus = 'Assigned to Courier';
+                const timestamp = new Date().toISOString();
+
+                let courierStats = await trx('courier_stats').where({ courierId }).first();
+                if (!courierStats) { // Should not happen but as a fallback
+                    courierStats = { commissionType: 'flat', commissionValue: 30 };
+                }
+
+                for (const id of shipmentIds) {
+                    const shipment = await trx('shipments').where({ id }).first();
+                    if (!shipment || shipment.status !== 'Packaged and Waiting for Assignment') continue;
+
+                    const client = await trx('users').where({ id: shipment.clientId }).first();
+                    const commission = courierStats.commissionType === 'flat' 
+                        ? courierStats.commissionValue 
+                        : shipment.price * (courierStats.commissionValue / 100);
+                    
+                    const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                    currentHistory.push({ status: newStatus, timestamp });
+
+                    await trx('shipments').where({ id }).update({
+                        courierId,
+                        status: newStatus,
+                        statusHistory: JSON.stringify(currentHistory),
+                        clientFlatRateFee: client.flatRateFee,
+                        courierCommission: commission
+                    });
+                    
+                    await createInAppNotification(trx, courierId, `You have a new shipment assigned: ${id}`, '/tasks');
+                    await createNotification(trx, shipment, newStatus);
+                }
+            });
+            res.json({ success: true, message: `${shipmentIds.length} shipments assigned.` });
+            io.emit('data_updated');
+        } catch (e) {
+            console.error('Error during bulk assignment:', e);
+            res.status(500).json({ error: 'Failed to bulk assign shipments.' });
+        }
+    });
+
     // Assets
     app.delete('/api/assets/:id', async (req, res) => {
         try {
@@ -947,9 +1302,18 @@ async function main() {
     });
 
     app.post('/api/assets', async (req, res) => {
-      const { type, name, identifier } = req.body;
+      const { type, name, identifier, purchaseDate, purchasePrice, usefulLifeMonths } = req.body;
       try {
-        const newAsset = { id: generateId('asset'), type, name, identifier, status: 'Available' };
+        const newAsset = { 
+            id: generateId('asset'), 
+            type, 
+            name, 
+            identifier, 
+            status: 'Available',
+            purchaseDate: purchaseDate || null,
+            purchasePrice: purchasePrice || null,
+            usefulLifeMonths: usefulLifeMonths || null
+        };
         await knex('assets').insert(newAsset);
         res.status(201).json(newAsset);
         io.emit('data_updated');
@@ -991,6 +1355,58 @@ async function main() {
             io.emit('data_updated');
         } catch (e) { res.status(500).json({ error: 'Failed to unassign asset' }); }
     });
+    
+    // --- Supplier Management Endpoints ---
+    app.post('/api/suppliers', async (req, res) => {
+        const { name, contact_person, phone, email, address } = req.body;
+        if (!name) return res.status(400).json({ error: 'Supplier name is required' });
+        try {
+            const newSupplier = { id: generateId('sup'), name, contact_person, phone, email, address };
+            await knex('suppliers').insert(newSupplier);
+            res.status(201).json(newSupplier);
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Server error creating supplier' }); }
+    });
+
+    app.put('/api/suppliers/:id', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex('suppliers').where({ id }).update(req.body);
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Server error updating supplier' }); }
+    });
+    
+    app.delete('/api/suppliers/:id', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex('suppliers').where({ id }).del();
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Server error deleting supplier' }); }
+    });
+
+    app.post('/api/supplier-transactions', async (req, res) => {
+        const { supplier_id, date, description, type, amount } = req.body;
+        if (!supplier_id || !date || !type || amount === undefined) {
+            return res.status(400).json({ error: 'Missing required transaction fields' });
+        }
+        try {
+            const newTransaction = { id: generateId('stran'), supplier_id, date, description, type, amount };
+            await knex('supplier_transactions').insert(newTransaction);
+            res.status(201).json(newTransaction);
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Server error creating transaction' }); }
+    });
+
+    app.delete('/api/supplier-transactions/:id', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex('supplier_transactions').where({ id }).del();
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Server error deleting transaction' }); }
+    });
 
 
     // Fallback for client-side routing
@@ -999,6 +1415,27 @@ async function main() {
     });
 
     // --- Scheduled Cleanup Task ---
+    const cleanupExpiredEvidence = async () => {
+        console.log('Running scheduled job: cleaning up expired payout evidence...');
+        try {
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+            const expiredTransactions = await knex('courier_transactions')
+                .whereNotNull('transferEvidencePath')
+                .andWhere('timestamp', '<', threeDaysAgo);
+
+            for (const transaction of expiredTransactions) {
+                console.log(`Evidence for transaction ${transaction.id} is older than 3 days. Deleting.`);
+                const fullPath = path.join(__dirname, transaction.transferEvidencePath);
+                if (fs.existsSync(fullPath)) {
+                    fs.unlinkSync(fullPath);
+                    console.log(`Deleted file: ${fullPath}`);
+                }
+            }
+        } catch (error) {
+            console.error('Error during evidence cleanup job:', error);
+        }
+    };
+    
     const cleanupExpiredFailurePhotos = async () => {
         console.log('Running scheduled job: cleaning up expired failure photos...');
         try {
@@ -1034,8 +1471,10 @@ async function main() {
 
     // Run the cleanup job every hour
     setInterval(cleanupExpiredFailurePhotos, 60 * 60 * 1000);
+    setInterval(cleanupExpiredEvidence, 60 * 60 * 1000);
     // Run once on startup as well
     cleanupExpiredFailurePhotos();
+    cleanupExpiredEvidence();
 
     // Start the server
     const PORT = process.env.PORT || 3001;

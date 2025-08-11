@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Asset, Permission, UserRole, AssetType, AssetStatus } from '../types';
@@ -37,6 +36,24 @@ const AssetManagement = () => {
         return users.find(u => u.id === userId)?.name || 'Unknown User';
     };
 
+    const calculateCurrentValue = (asset: Asset): number | null => {
+        if (!asset.purchasePrice || !asset.purchaseDate || !asset.usefulLifeMonths || asset.usefulLifeMonths <= 0) {
+            return null;
+        }
+        const purchaseDate = new Date(asset.purchaseDate);
+        const now = new Date();
+        const monthsPassed = (now.getFullYear() - purchaseDate.getFullYear()) * 12 + (now.getMonth() - purchaseDate.getMonth());
+
+        if (monthsPassed >= asset.usefulLifeMonths) {
+            return 0; // Fully depreciated
+        }
+        const monthlyDepreciation = asset.purchasePrice / asset.usefulLifeMonths;
+        const totalDepreciation = monthlyDepreciation * monthsPassed;
+        const currentValue = asset.purchasePrice - totalDepreciation;
+        return currentValue;
+    };
+
+
     const filteredAssets = useMemo(() => {
         return assets.filter(asset => {
             const matchesSearch = searchTerm.trim() === '' || 
@@ -58,7 +75,7 @@ const AssetManagement = () => {
         setModalMode(mode);
         setCurrentAsset(asset || null);
         if (asset) {
-            setFormData({ type: asset.type, name: asset.name, identifier: asset.identifier, status: asset.status });
+            setFormData({ ...asset });
             setAssigneeId(asset.assignedToUserId ? String(asset.assignedToUserId) : null);
         } else {
             setFormData({ type: AssetType.DEVICE, name: '', identifier: '' });
@@ -84,7 +101,8 @@ const AssetManagement = () => {
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const isNumeric = ['purchasePrice', 'usefulLifeMonths'].includes(name);
+        setFormData(prev => ({ ...prev, [name]: isNumeric ? parseFloat(value) || 0 : value }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -100,16 +118,20 @@ const AssetManagement = () => {
     };
 
     const handleExport = () => {
-        const headers = ['ID', 'Name', 'Type', 'Identifier', 'Status', 'Assigned To', 'Assignment Date'];
-        const data = filteredAssets.map(asset => [
-            asset.id,
-            asset.name,
-            asset.type,
-            asset.identifier || 'N/A',
-            asset.status,
-            getAssigneeName(asset.assignedToUserId),
-            asset.assignmentDate ? new Date(asset.assignmentDate).toLocaleDateString() : 'N/A'
-        ]);
+        const headers = ['ID', 'Name', 'Type', 'Identifier', 'Status', 'Assigned To', 'Assignment Date', 'Current Value (EGP)'];
+        const data = filteredAssets.map(asset => {
+            const currentValue = calculateCurrentValue(asset);
+            return [
+                asset.id,
+                asset.name,
+                asset.type,
+                asset.identifier || 'N/A',
+                asset.status,
+                getAssigneeName(asset.assignedToUserId),
+                asset.assignmentDate ? new Date(asset.assignmentDate).toLocaleDateString() : 'N/A',
+                currentValue !== null ? currentValue.toFixed(2) : 'N/A'
+            ];
+        });
         exportToCsv(headers, data, 'Asset_Report');
     };
 
@@ -163,34 +185,41 @@ const AssetManagement = () => {
                         <tr>
                             <th className="p-4 text-xs font-medium text-slate-500 uppercase">Asset</th>
                             <th className="p-4 text-xs font-medium text-slate-500 uppercase">Type</th>
+                            <th className="p-4 text-xs font-medium text-slate-500 uppercase">Current Value</th>
                             <th className="p-4 text-xs font-medium text-slate-500 uppercase">Status</th>
                             <th className="p-4 text-xs font-medium text-slate-500 uppercase">Assigned To</th>
                             <th className="p-4 text-xs font-medium text-slate-500 uppercase">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {filteredAssets.map(asset => (
-                            <tr key={asset.id}>
-                                <td className="p-4">
-                                    <p className="font-semibold">{asset.name}</p>
-                                    <p className="text-sm text-slate-500 font-mono">{asset.identifier}</p>
-                                </td>
-                                <td className="p-4 text-sm text-slate-600">{asset.type}</td>
-                                <td className="p-4">
-                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${asset.status === AssetStatus.AVAILABLE ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>{asset.status}</span>
-                                </td>
-                                <td className="p-4 text-sm text-slate-600">{getAssigneeName(asset.assignedToUserId)}</td>
-                                <td className="p-4">
-                                    <div className="flex gap-2">
-                                        <button onClick={() => openModal('edit', asset)} className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
-                                        <button onClick={() => openModal('assign', asset)} className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md"><UserCircleIcon /></button>
-                                        {hasPermission(Permission.DELETE_ASSET) && (
-                                            <button onClick={() => handleDeleteClick(asset)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                        {filteredAssets.map(asset => {
+                            const currentValue = calculateCurrentValue(asset);
+                            return (
+                                <tr key={asset.id}>
+                                    <td className="p-4">
+                                        <p className="font-semibold">{asset.name}</p>
+                                        <p className="text-sm text-slate-500 font-mono">{asset.identifier}</p>
+                                    </td>
+                                    <td className="p-4 text-sm text-slate-600">{asset.type}</td>
+                                    <td className="p-4 font-mono text-sm font-semibold text-slate-700">
+                                        {currentValue !== null ? `${currentValue.toFixed(2)} EGP` : 'N/A'}
+                                    </td>
+                                    <td className="p-4">
+                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${asset.status === AssetStatus.AVAILABLE ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>{asset.status}</span>
+                                    </td>
+                                    <td className="p-4 text-sm text-slate-600">{getAssigneeName(asset.assignedToUserId)}</td>
+                                    <td className="p-4">
+                                        <div className="flex gap-2">
+                                            <button onClick={() => openModal('edit', asset)} className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
+                                            <button onClick={() => openModal('assign', asset)} className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md"><UserCircleIcon /></button>
+                                            {hasPermission(Permission.DELETE_ASSET) && (
+                                                <button onClick={() => handleDeleteClick(asset)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
@@ -216,6 +245,20 @@ const AssetManagement = () => {
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Identifier</label>
                                     <input type="text" name="identifier" value={formData.identifier || ''} onChange={handleFormChange} className="w-full p-2 border border-slate-300 rounded-md" placeholder="e.g., License Plate, S/N" />
                                 </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Purchase Price (EGP)</label>
+                                    <input type="number" step="0.01" name="purchasePrice" value={formData.purchasePrice || ''} onChange={handleFormChange} className="w-full p-2 border border-slate-300 rounded-md" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Purchase Date</label>
+                                    <input type="date" name="purchaseDate" value={formData.purchaseDate?.split('T')[0] || ''} onChange={handleFormChange} className="w-full p-2 border border-slate-300 rounded-md" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Useful Life (in months)</label>
+                                <input type="number" name="usefulLifeMonths" value={formData.usefulLifeMonths || ''} onChange={handleFormChange} className="w-full p-2 border border-slate-300 rounded-md" />
                             </div>
                         </>
                     ) : (

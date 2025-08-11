@@ -77,14 +77,15 @@ async function setupDatabase() {
         'view_courier_performance', 'manage_courier_payouts', 'view_courier_earnings', 
         'view_notifications_log', 'view_dashboard', 'view_profile', 'view_total_shipments_overview',
         'view_courier_completed_orders', 'manage_inventory', 'manage_assets', 'view_own_assets',
-        'delete_inventory_item', 'delete_asset'
+        'delete_inventory_item', 'delete_asset', 'manage_client_payouts', 'manage_suppliers',
+        'create_shipments_for_others', 'print_labels'
     ];
     const clientPermissions = ['create_shipments', 'view_own_shipments', 'view_own_wallet', 'view_own_financials', 'view_dashboard', 'view_profile', 'view_own_assets'];
     const courierPermissions = ['view_courier_tasks', 'update_shipment_status', 'view_courier_earnings', 'view_dashboard', 'view_profile', 'view_courier_completed_orders', 'view_own_assets'];
     const superUserPermissions = allPermissions.filter(p => ![
         'manage_roles', 'view_admin_financials'
     ].includes(p));
-    const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory'];
+    const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory', 'view_all_shipments', 'view_profile', 'print_labels'];
 
     const rolesToSeed = [
         { id: 'role_admin', name: 'Administrator', permissions: JSON.stringify(allPermissions), isSystemRole: true },
@@ -162,7 +163,12 @@ async function setupDatabase() {
             table.decimal('amount', 10, 2).notNullable();
             table.string('date').notNullable();
             table.string('description').notNullable();
+            table.string('status').notNullable().defaultTo('Processed');
         });
+    } else {
+        if (!(await knex.schema.hasColumn('client_transactions', 'status'))) {
+            await knex.schema.alterTable('client_transactions', t => t.string('status').notNullable().defaultTo('Processed'));
+        }
     }
 
     const hasCourierStatsTable = await knex.schema.hasTable('courier_stats');
@@ -191,7 +197,16 @@ async function setupDatabase() {
             table.string('shipmentId');
             table.string('timestamp').notNullable();
             table.string('status').notNullable();
+            table.string('paymentMethod');
+            table.string('transferEvidencePath');
         });
+    } else {
+        if (!(await knex.schema.hasColumn('courier_transactions', 'paymentMethod'))) {
+            await knex.schema.alterTable('courier_transactions', t => t.string('paymentMethod'));
+        }
+        if (!(await knex.schema.hasColumn('courier_transactions', 'transferEvidencePath'))) {
+            await knex.schema.alterTable('courier_transactions', t => t.string('transferEvidencePath'));
+        }
     }
     
     const hasNotificationsTable = await knex.schema.hasTable('notifications');
@@ -206,6 +221,19 @@ async function setupDatabase() {
             table.string('date').notNullable();
             table.string('status').notNullable();
             table.boolean('sent').defaultTo(false);
+        });
+    }
+
+    const hasInAppNotificationsTable = await knex.schema.hasTable('in_app_notifications');
+    if (!hasInAppNotificationsTable) {
+        console.log('Creating "in_app_notifications" table...');
+        await knex.schema.createTable('in_app_notifications', table => {
+            table.string('id').primary();
+            table.integer('userId').unsigned().references('id').inTable('users').onDelete('CASCADE');
+            table.text('message').notNullable();
+            table.string('link');
+            table.boolean('isRead').defaultTo(false);
+            table.string('timestamp').notNullable();
         });
     }
     
@@ -273,7 +301,46 @@ async function setupDatabase() {
         table.string('status').notNullable();
         table.integer('assignedToUserId').unsigned().references('id').inTable('users');
         table.string('assignmentDate');
+        table.string('purchaseDate');
+        table.decimal('purchasePrice', 10, 2);
+        table.integer('usefulLifeMonths');
       });
+    } else {
+        if (!(await knex.schema.hasColumn('assets', 'purchaseDate'))) {
+            await knex.schema.alterTable('assets', t => t.string('purchaseDate'));
+        }
+        if (!(await knex.schema.hasColumn('assets', 'purchasePrice'))) {
+            await knex.schema.alterTable('assets', t => t.decimal('purchasePrice', 10, 2));
+        }
+        if (!(await knex.schema.hasColumn('assets', 'usefulLifeMonths'))) {
+            await knex.schema.alterTable('assets', t => t.integer('usefulLifeMonths'));
+        }
+    }
+    
+    const hasSuppliersTable = await knex.schema.hasTable('suppliers');
+    if (!hasSuppliersTable) {
+        console.log('Creating "suppliers" table...');
+        await knex.schema.createTable('suppliers', table => {
+            table.string('id').primary();
+            table.string('name').notNullable();
+            table.string('contact_person');
+            table.string('phone');
+            table.string('email');
+            table.text('address');
+        });
+    }
+
+    const hasSupplierTransactionsTable = await knex.schema.hasTable('supplier_transactions');
+    if (!hasSupplierTransactionsTable) {
+        console.log('Creating "supplier_transactions" table...');
+        await knex.schema.createTable('supplier_transactions', table => {
+            table.string('id').primary();
+            table.string('supplier_id').notNullable().references('id').inTable('suppliers').onDelete('CASCADE');
+            table.string('date').notNullable();
+            table.string('description');
+            table.string('type').notNullable(); // 'Payment' or 'Credit'
+            table.decimal('amount', 10, 2).notNullable();
+        });
     }
 
     console.log('Database setup complete.');

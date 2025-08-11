@@ -1,7 +1,9 @@
+// src/context/AppContext.tsx
+
 
 
 import React, { useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
-import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission, InventoryItem, Asset, PackagingLogEntry } from '../types';
+import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission, InventoryItem, Asset, PackagingLogEntry, TransactionType, Supplier, SupplierTransaction, InAppNotification } from '../types';
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
 import { apiFetch } from '../api/client';
 import { io, Socket } from 'socket.io-client';
@@ -22,10 +24,13 @@ export type AppContextType = {
     customRoles: CustomRole[];
     inventoryItems: InventoryItem[];
     assets: Asset[];
+    suppliers: Supplier[];
+    supplierTransactions: SupplierTransaction[];
+    inAppNotifications: InAppNotification[];
     isLoading: boolean;
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
-    addShipment: (shipment: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status' | 'statusHistory' | 'packagingLog'>) => Promise<void>;
+    addShipment: (shipment: Omit<Shipment, 'id' | 'creationDate' | 'status' | 'statusHistory' | 'packagingLog'>) => Promise<void>;
     updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { failureReason?: string; failurePhoto?: string | null; }) => Promise<boolean>;
     updateShipmentFees: (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => Promise<void>;
     updateShipmentPackaging: (shipmentId: string, packagingLog: PackagingLogEntry[], packagingNotes: string) => Promise<void>;
@@ -41,8 +46,10 @@ export type AppContextType = {
     canCourierReceiveAssignment: (courierId: number) => boolean;
     updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => Promise<void>;
     applyManualPenalty: (courierId: number, amount: number, description: string) => Promise<void>;
-    processCourierPayout: (transactionId: string) => Promise<void>;
-    requestCourierPayout: (courierId: number, amount: number) => Promise<void>;
+    processCourierPayout: (transactionId: string, transferEvidence?: string) => Promise<void>;
+    requestCourierPayout: (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => Promise<void>;
+    requestClientPayout: (userId: number, amount: number) => Promise<void>;
+    processClientPayout: (transactionId: string) => Promise<void>;
     updateClientFlatRate: (clientId: number, flatRate: number) => Promise<void>;
     updateClientTaxCard: (clientId: number, taxCardNumber: string) => Promise<void>;
     getTaxCardNumber: (clientId: number) => string;
@@ -59,6 +66,10 @@ export type AppContextType = {
     verifyDelivery: (shipmentId: string, code: string) => Promise<boolean>;
     shipmentFilter: ShipmentFilter | null;
     setShipmentFilter: React.Dispatch<React.SetStateAction<ShipmentFilter | null>>;
+    markNotificationAsRead: (notificationId: string) => Promise<void>;
+    autoAssignShipments: () => Promise<void>;
+    bulkPackageShipments: (shipmentIds: string[], materialsSummary: Record<string, number>, packagingNotes: string) => Promise<void>;
+    bulkAssignShipments: (shipmentIds: string[], courierId: number) => Promise<void>;
     // Inventory
     addInventoryItem: (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => Promise<void>;
     updateInventoryItem: (itemId: string, data: Partial<InventoryItem>) => Promise<void>;
@@ -68,6 +79,12 @@ export type AppContextType = {
     updateAsset: (assetId: string, data: Partial<Asset>) => Promise<void>;
     deleteAsset: (assetId: string) => Promise<void>;
     assignAsset: (assetId: string, userId: number | null) => Promise<void>;
+    // Suppliers
+    addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>;
+    updateSupplier: (supplierId: string, data: Partial<Supplier>) => Promise<void>;
+    deleteSupplier: (supplierId: string) => Promise<void>;
+    addSupplierTransaction: (transaction: Omit<SupplierTransaction, 'id'>) => Promise<void>;
+    deleteSupplierTransaction: (transactionId: string) => Promise<void>;
 };
 
 export const AppContext = React.createContext<AppContextType | null>(null);
@@ -91,6 +108,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [customRoles, setCustomRoles] = useState<CustomRole[]>([]);
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
     const [assets, setAssets] = useState<Asset[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [supplierTransactions, setSupplierTransactions] = useState<SupplierTransaction[]>([]);
+    const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
     const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter | null>(null);
     
     const [isLoading, setIsLoading] = useState(false);
@@ -141,6 +161,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCustomRoles([]);
         setInventoryItems([]);
         setAssets([]);
+        setSuppliers([]);
+        setSupplierTransactions([]);
+        setInAppNotifications([]);
         addToast('You have been logged out.', 'info');
     }, [addToast]);
 
@@ -158,6 +181,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCustomRoles(data.customRoles || []);
             setInventoryItems(data.inventoryItems || []);
             setAssets(data.assets || []);
+            setSuppliers(data.suppliers || []);
+            setSupplierTransactions(data.supplierTransactions || []);
+            setInAppNotifications(data.inAppNotifications || []);
         } catch (error: any) {
             addToast(`Failed to load data: ${error.message}`, 'error');
             logout();
@@ -236,41 +262,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
     }, [currentUser, fetchData, addToast]);
 
-    useEffect(() => {
-        if (currentUser && users.length > 0 && customRoles.length > 0) {
-            const updatedUserFromList = users.find(u => u.id === currentUser.id);
-            if (updatedUserFromList) {
-                const safeUserRoles = Array.isArray(updatedUserFromList.roles) ? updatedUserFromList.roles : [];
-                const allPermissions = safeUserRoles.reduce((acc, roleName) => {
-                    const role = customRoles.find(r => r.name === roleName);
-                    if (role && Array.isArray(role.permissions)) {
-                        return [...acc, ...role.permissions];
-                    }
-                    return acc;
-                }, [] as Permission[]);
-                
-                const updatedPermissions = [...new Set(allPermissions)].sort();
-                if (JSON.stringify(currentUser.permissions) !== JSON.stringify(updatedPermissions)) {
-                    setCurrentUser(prev => prev ? ({ ...prev, permissions: updatedPermissions }) : null);
-                }
+    // This effect ensures the currentUser in context is always up-to-date
+    // with permissions and a calculated wallet balance.
+    const userWithCalculatedData = useMemo(() => {
+        if (!currentUser) return null;
+
+        // 1. Recalculate permissions from the latest roles data
+        const updatedUserFromList = users.find(u => u.id === currentUser.id);
+        const safeUserRoles = updatedUserFromList ? (Array.isArray(updatedUserFromList.roles) ? updatedUserFromList.roles : []) : (Array.isArray(currentUser.roles) ? currentUser.roles : []);
+        const allPermissions = safeUserRoles.reduce((acc, roleName) => {
+            const role = customRoles.find(r => r.name === roleName);
+            if (role?.permissions) {
+                return [...acc, ...role.permissions];
             }
-        }
-    }, [currentUser, users, customRoles]);
-    
+            return acc;
+        }, [] as Permission[]);
+        const permissions = [...new Set(allPermissions)].sort();
+
+        // 2. Calculate wallet balance
+        const myTransactions = clientTransactions.filter(t => t.userId === currentUser.id);
+        const walletBalance = myTransactions.filter(t => t.status !== 'Pending').reduce((sum, t) => sum + t.amount, 0);
+
+        return {
+            ...currentUser,
+            ...(updatedUserFromList || {}), // Get latest user data like name, address, etc.
+            permissions,
+            walletBalance,
+        };
+
+    }, [currentUser, users, customRoles, clientTransactions]);
+
+
     // --- App Functions ---
     const hasPermission = useCallback((permission: Permission) => {
-        return currentUser?.permissions?.includes(permission) ?? false;
-    }, [currentUser]);
+        return userWithCalculatedData?.permissions?.includes(permission) ?? false;
+    }, [userWithCalculatedData]);
 
-    const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'creationDate' | 'status'>) => {
-        if (!currentUser) return;
-        const newShipment = {
-            ...shipmentData,
-            clientId: currentUser.id,
-            clientName: currentUser.name,
-        };
-        await apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(newShipment) });
-    }, [currentUser]);
+    const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'creationDate' | 'status'>) => {
+        if (!userWithCalculatedData) return;
+        await apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(shipmentData) });
+    }, [userWithCalculatedData]);
     
     const updateShipmentStatus = useCallback(async (shipmentId: string, status: ShipmentStatus, details: { failureReason?: string; failurePhoto?: string | null } = {}) => {
         try {
@@ -393,8 +424,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const undeliveredPackagesValue = undeliveredShipments.reduce((sum, s) => sum + s.price, 0);
         const failedDeliveriesValue = failedShipments.reduce((sum, s) => sum + s.packageValue, 0);
         
+        const allShipmentsWithFees = shipments.filter(s => s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.DELIVERY_FAILED);
+        
         const totalFees = shipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
-        const totalRevenue = deliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
+        const totalRevenue = allShipmentsWithFees.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
         const totalCommission = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
         const netRevenue = totalRevenue - totalCommission;
         
@@ -457,12 +490,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await apiFetch(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) });
     };
 
-    const processCourierPayout = async (transactionId: string) => {
-        await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT' });
+    const processCourierPayout = async (transactionId: string, transferEvidence?: string) => {
+        await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT', body: JSON.stringify({ transferEvidence }) });
     };
     
-    const requestCourierPayout = async (courierId: number, amount: number) => {
-        await apiFetch(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount }) });
+    const requestCourierPayout = async (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => {
+        await apiFetch(`/api/couriers/payouts`, { method: 'POST', body: JSON.stringify({ courierId, amount, paymentMethod }) });
+    };
+
+    const requestClientPayout = async (userId: number, amount: number) => {
+        await apiFetch(`/api/clients/${userId}/payouts`, { method: 'POST', body: JSON.stringify({ amount }) });
+    };
+
+    const processClientPayout = async (transactionId: string) => {
+        await apiFetch(`/api/client-transactions/${transactionId}/process`, { method: 'PUT' });
     };
 
     const updateClientFlatRate = async (clientId: number, flatRateFee: number) => {
@@ -501,6 +542,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await apiFetch(`/api/roles/${roleId}`, { method: 'DELETE' });
     };
 
+    const markNotificationAsRead = useCallback(async (notificationId: string) => {
+        try {
+            // Optimistic update
+            setInAppNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
+            await apiFetch(`/api/notifications/${notificationId}/read`, { method: 'PUT' });
+        } catch (error: any) {
+            addToast(`Failed to mark notification as read: ${error.message}`, 'error');
+            // Revert on failure
+            setInAppNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: false } : n));
+        }
+    }, [addToast]);
+    
+    const autoAssignShipments = async () => {
+        try {
+            const result = await apiFetch('/api/shipments/auto-assign', { method: 'POST' });
+            addToast(result.message || 'Auto-assignment completed.', 'success');
+        } catch (error: any) {
+            addToast(`Auto-assignment failed: ${error.message}`, 'error');
+        }
+    };
+
+    const bulkPackageShipments = useCallback(async (shipmentIds: string[], materialsSummary: Record<string, number>, packagingNotes: string) => {
+        try {
+            const result = await apiFetch('/api/shipments/bulk-package', {
+                method: 'POST',
+                body: JSON.stringify({ shipmentIds, materialsSummary, packagingNotes }),
+            });
+            addToast(result.message || 'Shipments packaged successfully.', 'success');
+        } catch (error: any) {
+            addToast(`Bulk packaging failed: ${error.message}`, 'error');
+        }
+    }, [addToast]);
+
+    const bulkAssignShipments = useCallback(async (shipmentIds: string[], courierId: number) => {
+        try {
+            const result = await apiFetch('/api/shipments/bulk-assign', {
+                method: 'POST',
+                body: JSON.stringify({ shipmentIds, courierId }),
+            });
+            addToast(result.message || 'Shipments assigned successfully.', 'success');
+        } catch (error: any) {
+            addToast(`Bulk assignment failed: ${error.message}`, 'error');
+        }
+    }, [addToast]);
+
     // Inventory
     const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
         await apiFetch('/api/inventory', { method: 'POST', body: JSON.stringify(item) });
@@ -530,8 +616,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     };
 
+    // Suppliers
+    const addSupplier = async (supplier: Omit<Supplier, 'id'>) => {
+        await apiFetch('/api/suppliers', { method: 'POST', body: JSON.stringify(supplier) });
+    };
+    const updateSupplier = async (supplierId: string, data: Partial<Supplier>) => {
+        await apiFetch(`/api/suppliers/${supplierId}`, { method: 'PUT', body: JSON.stringify(data) });
+    };
+    const deleteSupplier = async (supplierId: string) => {
+        await apiFetch(`/api/suppliers/${supplierId}`, { method: 'DELETE' });
+    };
+    const addSupplierTransaction = async (transaction: Omit<SupplierTransaction, 'id'>) => {
+        await apiFetch('/api/supplier-transactions', { method: 'POST', body: JSON.stringify(transaction) });
+    };
+    const deleteSupplierTransaction = async (transactionId: string) => {
+        await apiFetch(`/api/supplier-transactions/${transactionId}`, { method: 'DELETE' });
+    };
+
     const value: AppContextType = {
-        currentUser,
+        currentUser: userWithCalculatedData,
         users,
         shipments,
         clientTransactions,
@@ -543,6 +646,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customRoles,
         inventoryItems,
         assets,
+        suppliers,
+        supplierTransactions,
+        inAppNotifications,
         isLoading,
         login,
         logout,
@@ -564,6 +670,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyManualPenalty,
         processCourierPayout,
         requestCourierPayout,
+        requestClientPayout,
+        processClientPayout,
         updateClientFlatRate,
         updateClientTaxCard,
         getTaxCardNumber,
@@ -580,6 +688,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         verifyDelivery,
         shipmentFilter,
         setShipmentFilter,
+        markNotificationAsRead,
+        autoAssignShipments,
+        bulkPackageShipments,
+        bulkAssignShipments,
         addInventoryItem,
         updateInventoryItem,
         deleteInventoryItem,
@@ -587,6 +699,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAsset,
         deleteAsset,
         assignAsset,
+        addSupplier,
+        updateSupplier,
+        deleteSupplier,
+        addSupplierTransaction,
+        deleteSupplierTransaction,
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

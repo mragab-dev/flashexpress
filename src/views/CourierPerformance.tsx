@@ -1,10 +1,14 @@
+// src/views/CourierPerformance.tsx
 
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType, ShipmentStatus, Shipment } from '../types';
 import { Modal } from '../components/common/Modal';
 import { ShipmentList } from '../components/specific/ShipmentList';
+import { DocumentDownloadIcon, UploadIcon } from '../components/Icons';
+import { exportToCsv } from '../utils/pdf';
 
 interface CourierPerformanceProps {
     onSelectShipment: (shipment: Shipment) => void;
@@ -14,10 +18,69 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
     const { users, shipments, courierStats, courierTransactions, updateCourierSettings, applyManualPenalty, processCourierPayout } = useAppContext();
     const [selectedCourier, setSelectedCourier] = useState<CourierStats | null>(null);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     // New state for shipment list modal
     const [modalShipments, setModalShipments] = useState<Shipment[] | null>(null);
     const [modalTitle, setModalTitle] = useState('');
+
+    const courierData = useMemo(() => {
+        const data = users.filter(u => (u.roles || []).includes('Courier')).map(user => {
+            const stats = courierStats.find(cs => cs.courierId === user.id);
+            const pendingPayouts = courierTransactions.filter(t => t.courierId === user.id && t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
+            
+            const pendingCount = shipments.filter(s => 
+                s.courierId === user.id && 
+                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
+            ).length;
+
+            const totalAssigned = shipments.filter(s => s.courierId === user.id).length;
+            const totalCompleted = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERED).length;
+            const totalFailed = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERY_FAILED).length;
+
+            return {
+                user,
+                stats,
+                pendingPayouts,
+                pendingCount,
+                totalAssigned,
+                totalCompleted,
+                totalFailed,
+            };
+        });
+        
+        if (!searchTerm.trim()) {
+            return data;
+        }
+        
+        return data.filter(({ user }) => user.name.toLowerCase().includes(searchTerm.trim().toLowerCase()));
+
+    }, [users, courierStats, courierTransactions, shipments, searchTerm]);
+    
+    const handleExport = () => {
+        const headers = [
+            'Courier Name', 'Email', 'Phone', 'Status',
+            'Total Assigned', 'Completed', 'Failed', 'Pending',
+            'Total Earnings (EGP)', 'Current Balance (EGP)', 'Commission Type', 'Commission Value'
+        ];
+
+        const data = courierData.map(({ user, stats, totalAssigned, totalCompleted, totalFailed, pendingCount }) => [
+            user.name,
+            user.email,
+            user.phone || 'N/A',
+            stats?.isRestricted ? 'Restricted' : 'Active',
+            totalAssigned,
+            totalCompleted,
+            totalFailed,
+            pendingCount,
+            stats?.totalEarnings?.toFixed(2) || '0.00',
+            stats?.currentBalance?.toFixed(2) || '0.00',
+            stats?.commissionType || 'N/A',
+            stats?.commissionValue || 'N/A'
+        ]);
+
+        exportToCsv(headers, data, 'Courier_Performance_Report');
+    };
 
     const handleManageClick = (courierId: number) => {
         const stats = courierStats.find(cs => cs.courierId === courierId);
@@ -52,39 +115,31 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
         setModalShipments(null); // Close the list modal
     };
 
-
-    const courierData = users.filter(u => (u.roles || []).includes('Courier')).map(user => {
-        const stats = courierStats.find(cs => cs.courierId === user.id);
-        const pendingPayouts = courierTransactions.filter(t => t.courierId === user.id && t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
-        
-        const pendingCount = shipments.filter(s => 
-            s.courierId === user.id && 
-            [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
-        ).length;
-
-        // New metrics
-        const totalAssigned = shipments.filter(s => s.courierId === user.id).length;
-        const totalCompleted = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERED).length;
-        const totalFailed = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERY_FAILED).length;
-
-        return {
-            user,
-            stats,
-            pendingPayouts,
-            pendingCount,
-            totalAssigned,
-            totalCompleted,
-            totalFailed,
-        };
-    });
-
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-800">Courier Performance</h1>
-                <p className="text-slate-500 mt-1">Manage courier financials, restrictions, and view performance metrics.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-800">Courier Performance</h1>
+                    <p className="text-slate-500 mt-1">Manage courier financials, restrictions, and view performance metrics.</p>
+                </div>
+                 <button 
+                    onClick={handleExport}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                >
+                    <DocumentDownloadIcon className="w-5 h-5"/>
+                    Export CSV
+                </button>
             </div>
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200">
+                    <input
+                        type="text"
+                        placeholder="Filter couriers by name..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    />
+                </div>
                  {/* Desktop Table */}
                 <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
@@ -222,11 +277,11 @@ interface ManageCourierModalProps {
     payoutRequests: CourierTransaction[];
     onUpdateSettings: (courierId: number, settings: Partial<Pick<CourierStats, 'commissionType'|'commissionValue'>>) => void;
     onApplyPenalty: (courierId: number, amount: number, description: string) => void;
-    onProcessPayout: (transactionId: string) => void;
+    onProcessPayout: (transactionId: string, transferEvidence?: string) => void;
 }
 
 const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout }) => {
-    const { shipments } = useAppContext();
+    const { shipments, addToast } = useAppContext();
     const [settings, setSettings] = useState({
         commissionType: courierStats.commissionType,
         commissionValue: courierStats.commissionValue,
@@ -235,156 +290,90 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
     const [penaltyReason, setPenaltyReason] = useState('');
     const [selectedFailedShipment, setSelectedFailedShipment] = useState<string>('');
     const [failedDeliveryPenaltyReason, setFailedDeliveryPenaltyReason] = useState('');
+    const [transferEvidence, setTransferEvidence] = useState<Record<string, string>>({});
 
-    // Get failed shipments for this courier
-    const failedShipments = shipments.filter(s => 
-        s.courierId === courierUser.id && 
-        s.status === ShipmentStatus.DELIVERY_FAILED
-    );
+    const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>, transactionId: string) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setTransferEvidence(prev => ({ ...prev, [transactionId]: reader.result as string }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
 
-    useEffect(() => {
-        setSettings({
-            commissionType: courierStats.commissionType,
-            commissionValue: courierStats.commissionValue,
-        });
-    }, [courierStats]);
+    const failedShipments = shipments.filter(s => s.courierId === courierUser.id && s.status === ShipmentStatus.DELIVERY_FAILED);
 
-    const handleSettingsSave = () => {
-        onUpdateSettings(courierUser.id, settings);
+    useEffect(() => { setSettings({ commissionType: courierStats.commissionType, commissionValue: courierStats.commissionValue }); }, [courierStats]);
+    const handleSettingsSave = () => { onUpdateSettings(courierUser.id, settings); onClose(); };
+    const handlePenaltyApply = () => { if (penaltyAmount > 0 && penaltyReason) { onApplyPenalty(courierUser.id, penaltyAmount, penaltyReason); setPenaltyAmount(0); setPenaltyReason(''); onClose(); }};
+    const handleProcessClick = (payout: CourierTransaction) => {
+        if (payout.paymentMethod === 'Bank Transfer' && !transferEvidence[payout.id]) {
+            addToast('Please upload proof of transfer for this payout.', 'error');
+            return;
+        }
+        onProcessPayout(payout.id, transferEvidence[payout.id]);
         onClose();
-    };
-
-    const handlePenaltyApply = () => {
-        if (penaltyAmount > 0 && penaltyReason) {
-            onApplyPenalty(courierUser.id, penaltyAmount, penaltyReason);
-            setPenaltyAmount(0);
-            setPenaltyReason('');
-            onClose();
-        }
-    };
-
-    const handleFailedDeliveryPenalty = () => {
-        if (selectedFailedShipment) {
-            const shipment = failedShipments.find(s => s.id === selectedFailedShipment);
-            if (shipment) {
-                onApplyPenalty(courierUser.id, shipment.packageValue, 
-                    failedDeliveryPenaltyReason || `Failed delivery penalty for ${shipment.id} - Package value: ${shipment.packageValue} EGP`);
-                setSelectedFailedShipment('');
-                setFailedDeliveryPenaltyReason('');
-                onClose();
-            }
-        }
     };
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Manage ${courierUser.name}`} size="4xl">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Left Side: Settings */}
-                <div className="space-y-6 p-6 bg-slate-50 rounded-lg">
-                    <h3 className="font-bold text-lg text-slate-800">Financial Settings</h3>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">Commission Type</label>
-                        <select
-                            value={settings.commissionType}
-                            onChange={(e) => setSettings(s => ({ ...s, commissionType: e.target.value as CommissionType }))}
-                            className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                        >
-                            <option value={CommissionType.FLAT}>Flat Rate (EGP)</option>
-                            <option value={CommissionType.PERCENTAGE}>Percentage (%)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700">Commission Value</label>
-                        <input
-                            type="number"
-                            value={settings.commissionValue}
-                            onChange={(e) => setSettings(s => ({ ...s, commissionValue: Number(e.target.value) }))}
-                            className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                        />
-                    </div>
-                    <button onClick={handleSettingsSave} className="w-full bg-primary-600 text-white font-semibold py-2 rounded-lg">Save Settings</button>
-                </div>
-
-                {/* Right Side: Manual Actions */}
+                {/* Left Side: Settings & Penalty */}
                 <div className="space-y-6">
-                    <div className="space-y-4 p-6 bg-red-50 rounded-lg">
+                    <div className="p-6 bg-slate-50 rounded-lg space-y-4">
+                        <h3 className="font-bold text-lg text-slate-800">Financial Settings</h3>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Commission Type</label>
+                            <select value={settings.commissionType} onChange={(e) => setSettings(s => ({ ...s, commissionType: e.target.value as CommissionType }))} className="w-full mt-1 p-2 border border-slate-300 rounded-md">
+                                <option value={CommissionType.FLAT}>Flat Rate (EGP)</option>
+                                <option value={CommissionType.PERCENTAGE}>Percentage (%)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Commission Value</label>
+                            <input type="number" value={settings.commissionValue} onChange={(e) => setSettings(s => ({ ...s, commissionValue: Number(e.target.value) }))} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
+                        </div>
+                        <button onClick={handleSettingsSave} className="w-full bg-primary-600 text-white font-semibold py-2 rounded-lg">Save Settings</button>
+                    </div>
+                     <div className="space-y-4 p-6 bg-red-50 rounded-lg">
                         <h3 className="font-bold text-lg text-red-800">Apply Manual Penalty</h3>
                         <div>
                             <label className="block text-sm font-medium text-slate-700">Penalty Amount (EGP)</label>
-                            <input
-                                type="number"
-                                value={penaltyAmount}
-                                onChange={(e) => setPenaltyAmount(Number(e.target.value))}
-                                className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                            />
+                            <input type="number" value={penaltyAmount} onChange={(e) => setPenaltyAmount(Number(e.target.value))} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-slate-700">Reason</label>
-                            <input
-                                type="text"
-                                placeholder="e.g., Damaged item, Stolen item"
-                                value={penaltyReason}
-                                onChange={(e) => setPenaltyReason(e.target.value)}
-                                className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                            />
+                            <input type="text" placeholder="e.g., Damaged item" value={penaltyReason} onChange={(e) => setPenaltyReason(e.target.value)} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
                         </div>
                         <button onClick={handlePenaltyApply} disabled={penaltyAmount <= 0 || !penaltyReason} className="w-full bg-red-600 text-white font-semibold py-2 rounded-lg disabled:bg-red-300">Apply Penalty</button>
                     </div>
-
-                    {/* Failed Delivery Penalty Section */}
-                    {failedShipments.length > 0 && (
-                        <div className="space-y-4 p-6 bg-orange-50 rounded-lg">
-                            <h3 className="font-bold text-lg text-orange-800">Failed Delivery Penalties</h3>
-                            <p className="text-sm text-orange-700">Apply penalty equal to package value for failed deliveries</p>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700">Select Failed Shipment</label>
-                                <select
-                                    value={selectedFailedShipment}
-                                    onChange={(e) => setSelectedFailedShipment(e.target.value)}
-                                    className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                                >
-                                    <option value="">Choose a failed shipment...</option>
-                                    {failedShipments.map(shipment => (
-                                        <option key={shipment.id} value={shipment.id}>
-                                            {shipment.id} - {shipment.recipientName} (Value: {shipment.packageValue} EGP)
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700">Reason (Optional)</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g., Package lost, Damaged beyond repair"
-                                    value={failedDeliveryPenaltyReason}
-                                    onChange={(e) => setFailedDeliveryPenaltyReason(e.target.value)}
-                                    className="w-full mt-1 p-2 border border-slate-300 rounded-md"
-                                />
-                            </div>
-                            {selectedFailedShipment && (
-                                <div className="bg-orange-100 p-3 rounded-md">
-                                    <p className="text-sm text-orange-800">
-                                        <strong>Penalty Amount:</strong> {failedShipments.find(s => s.id === selectedFailedShipment)?.packageValue} EGP
-                                    </p>
-                                </div>
-                            )}
-                            <button 
-                                onClick={handleFailedDeliveryPenalty} 
-                                disabled={!selectedFailedShipment} 
-                                className="w-full bg-orange-600 text-white font-semibold py-2 rounded-lg disabled:bg-orange-300"
-                            >
-                                Apply Failed Delivery Penalty
-                            </button>
-                        </div>
-                    )}
-                    
+                </div>
+                {/* Right Side: Payouts */}
+                <div className="space-y-6">
                     <div className="space-y-4 p-6 bg-green-50 rounded-lg">
                         <h3 className="font-bold text-lg text-green-800">Process Payouts</h3>
                         {payoutRequests.length > 0 ? (
                             payoutRequests.map(payout => (
-                                <div key={payout.id} className="flex justify-between items-center">
-                                    <p>Request for {-payout.amount} EGP</p>
-                                    <button onClick={() => { onProcessPayout(payout.id); onClose(); }} className="bg-green-600 text-white px-3 py-1 rounded-md text-sm">Process</button>
+                                <div key={payout.id} className="p-4 bg-white border rounded-md space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <p>Request for <strong>{-payout.amount} EGP</strong></p>
+                                            <p className="text-xs text-slate-500">Method: {payout.paymentMethod || 'N/A'}</p>
+                                        </div>
+                                         <button onClick={() => handleProcessClick(payout)} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-semibold">Process</button>
+                                    </div>
+                                    {payout.paymentMethod === 'Bank Transfer' && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Upload Proof of Transfer</label>
+                                            {!transferEvidence[payout.id] ? (
+                                                <input type="file" onChange={(e) => handleEvidenceUpload(e, payout.id)} accept="image/*,.pdf" className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                                            ) : (
+                                                <p className="text-xs text-green-700 font-semibold">File ready for upload.</p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         ) : (

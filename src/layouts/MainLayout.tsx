@@ -1,3 +1,5 @@
+// src/layouts/MainLayout.tsx
+
 
 
 import React, { useState, useEffect } from 'react';
@@ -29,6 +31,7 @@ import CourierCompleted from '../views/CourierCompleted';
 import InventoryManagement from '../views/InventoryManagement';
 import AssetManagement from '../views/AssetManagement';
 import MyAssets from '../views/MyAssets';
+import SupplierManagement from '../views/SupplierManagement';
 
 const MainLayout: React.FC = () => {
     const { currentUser, logout, users, reassignCourier, getCourierName, hasPermission } = useAppContext();
@@ -90,6 +93,7 @@ const MainLayout: React.FC = () => {
             case 'inventory': return <InventoryManagement />;
             case 'asset-management': return <AssetManagement />;
             case 'my-assets': return <MyAssets />;
+            case 'supplier-management': return <SupplierManagement />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }
@@ -124,7 +128,7 @@ const MainLayout: React.FC = () => {
                                 <p className="text-sm text-slate-600"><strong>Courier:</strong> {getCourierName(selectedShipment.courierId)}</p>
                             </div>
                             <div className="flex flex-col gap-2 items-end flex-shrink-0">
-                                {hasPermission(Permission.CREATE_SHIPMENTS) && (
+                                {hasPermission(Permission.PRINT_LABELS) && (
                                     <button onClick={() => setLabelShipment(selectedShipment)} className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition w-full justify-center text-sm">
                                         <PrinterIcon className="w-5 h-5"/>
                                         Print Label
