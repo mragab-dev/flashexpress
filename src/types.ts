@@ -111,6 +111,19 @@ export interface Address {
   details: string;
 }
 
+export enum PartnerTier {
+    BRONZE = 'Bronze',
+    SILVER = 'Silver',
+    GOLD = 'Gold',
+}
+
+export interface TierSetting {
+    tierName: PartnerTier;
+    shipmentThreshold: number;
+    discountPercentage: number;
+}
+
+
 export interface User {
   id: number;
   publicId: string;
@@ -139,6 +152,10 @@ export interface User {
   // For courier referrals
   referrerId?: number; // ID of the courier who referred this one
   referralCommission?: number; // Amount the referee gets per delivery
+
+  // For partner tiers
+  partnerTier?: PartnerTier;
+  manualTierAssignment?: boolean;
 }
 
 export interface PackagingLogEntry {
@@ -289,6 +306,8 @@ export interface AdminFinancials {
   totalFees: number; // Sum of flat rates of all orders
   totalCommission: number; // Total commission paid for all orders
   netRevenue: number; // Total Revenue + Total Fees - Total Commission
+  cashToCollect: number; // COD amount for packages currently in transit
+  totalCODCollected: number; // COD amount for delivered packages
   
   // Legacy fields (keeping for backward compatibility)
   grossRevenue: number;
@@ -304,6 +323,8 @@ export interface ClientFinancialSummary {
   totalOrders: number;
   orderSum: number;
   flatRateFee: number;
+  partnerTier?: PartnerTier;
+  manualTierAssignment?: boolean;
 }
 
 // --- Role-Based Access Control (RBAC) Types ---
@@ -311,6 +332,8 @@ export interface ClientFinancialSummary {
 export enum Permission {
   // User Management
   MANAGE_USERS = 'manage_users', // Create, edit, delete users
+  EDIT_USER_PROFILE = 'edit_user_profile', // Granular permission to edit user profiles
+  EDIT_CLIENT_ADDRESS = 'edit_client_address', // New permission for admins
   MANAGE_ROLES = 'manage_roles', // Create, edit, delete roles and permissions
   
   // Shipment Management
@@ -335,6 +358,7 @@ export enum Permission {
   MANAGE_COURIER_PAYOUTS = 'manage_courier_payouts',
   MANAGE_CLIENT_PAYOUTS = 'manage_client_payouts',
   VIEW_COURIER_EARNINGS = 'view_courier_earnings',
+  MANAGE_PARTNER_TIERS = 'manage_partner_tiers',
   
   // System & Logs
   VIEW_NOTIFICATIONS_LOG = 'view_notifications_log',
@@ -353,6 +377,10 @@ export enum Permission {
 
   // Supplier Management
   MANAGE_SUPPLIERS = 'manage_suppliers',
+
+  // Assigner Specific
+  VIEW_DELIVERED_SHIPMENTS = 'view_delivered_shipments',
+  VIEW_COURIERS_BY_ZONE = 'view_couriers_by_zone',
 }
 
 export interface CustomRole {

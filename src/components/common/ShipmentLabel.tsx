@@ -1,16 +1,60 @@
-
 import React from 'react';
 import { Shipment, PaymentMethod } from '../../types';
 import { LogoIcon } from '../Icons';
 
-export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) => {
-    const Barcode = () => (
-        <svg x="0px" y="0px" viewBox="0 0 200 60" className="w-full h-12">
-            <rect x="0" y="0" width="4" height="50" fill="#000000" />
-            <rect x="7" y="0" width="2" height="50" fill="#000000" />
-            <rect x="15" y="0" width="2" height="50" fill="#000000" /><rect x="18" y="0" width="5" height="50" fill="#000000" /><rect x="26" y="0" width="1" height="50" fill="#000000" /><rect x="30" y="0" width="3" height="50" fill="#000000" /><rect x="36" y="0" width="3" height="50" fill="#000000" /><rect x="42" y="0" width="2" height="50" fill="#000000" /><rect x="47" y="0" width="1" height="50" fill="#000000" /><rect x="51" y="0" width="5" height="50" fill="#000000" /><rect x="59" y="0" width="2" height="50" fill="#000000" /><rect x="64" y="0" width="4" height="50" fill="#000000" /><rect x="71" y="0" width="1" height="50" fill="#000000" /><rect x="75" y="0" width="2" height="50" fill="#000000" /><rect x="80" y="0" width="4" height="50" fill="#000000" /><rect x="87" y="0" width="2" height="50" fill="#000000" /><rect x="92" y="0" width="3" height="50" fill="#000000" /><rect x="98" y="0" width="3" height="50" fill="#000000" /><rect x="104" y="0" width="2" height="50" fill="#000000" /><rect x="109" y="0" width="1" height="50" fill="#000000" /><rect x="113" y="0" width="5" height="50" fill="#000000" /><rect x="121" y="0" width="2" height="50" fill="#000000" /><rect x="126" y="0" width="4" height="50" fill="#000000" /><rect x="133" y="0" width="1" height="50" fill="#000000" /><rect x="137" y="0" width="2" height="50" fill="#000000" /><rect x="142" y="0" width="4" height="50" fill="#000000" /><rect x="149" y="0" width="2" height="50" fill="#000000" /><rect x="154" y="0" width="3" height="50" fill="#000000" /><rect x="160" y="0" width="3" height="50" fill="#000000" /><rect x="166" y="0" width="2" height="50" fill="#000000" /><rect x="171" y="0" width="1" height="50" fill="#000000" /><rect x="175" y="0" width="5" height="50" fill="#000000" /><rect x="183" y="0" width="2" height="50" fill="#000000" /><rect x="188" y="0" width="4" height="50" fill="#000000" /><rect x="195" y="0" width="1" height="50" fill="#000000" />
+// --- Code 39 Barcode Generation Logic ---
+const CODE39_MAP: { [key: string]: string } = {
+    '0': 'bwbwwwbbw', '1': 'bbwbwwwbw', '2': 'bwbbwwwbw', '3': 'bbbbwwwbw',
+    '4': 'bwbwbbwbw', '5': 'bbwbwbbwbw', '6': 'bwbbwbbwbw', '7': 'bwbwwwbbwbw',
+    '8': 'bbwbwwbbw', '9': 'bwbbwwbbw', 'A': 'bbwbwwwbbw', 'B': 'bwbbwwwbbw',
+    'C': 'bbbbwwwbbw', 'D': 'bwbwbbwbbw', 'E': 'bbwbwbbwbbw', 'F': 'bwbbwbbwbbw',
+    'G': 'bwbwwwbbbwbw', 'H': 'bbwbwwwbbbwbw', 'I': 'bwbbwwwbbbwbw', 'J': 'bwbwbbwbbbwbw',
+    'K': 'bbwbwwwbwbw', 'L': 'bwbbwwwbwbw', 'M': 'bbbbwwwbwbw', 'N': 'bwbwbbwbwbw',
+    'O': 'bbwbwbbwbwbw', 'P': 'bwbbwbbwbwbw', 'Q': 'bwbwwwbbwbwbw', 'R': 'bbwbwwbbwbw',
+    'S': 'bwbbwwbbwbw', 'T': 'bwbwbbwbbwbw', 'U': 'bbwbbwbwwwbw', 'V': 'bwwbbwbwwwbw',
+    'W': 'bbwbbwbbwwwbw', 'X': 'bwwbwbwbbwbw', 'Y': 'bbwbwbwbbwbw', 'Z': 'bwwbwbwbbwbw',
+    '-': 'bwwbwbwwwbw', '.': 'bbwbwbwwwbw', ' ': 'bwwbbwbwwwbw', '$': 'bwwbwwbwwbwbw',
+    '/': 'bwwbwwbwbwwbw', '+': 'bwwbwbwwbwwbw', '%': 'bwbwwbwwbwwbw',
+    '*': 'bwwbwbbwbwwwbw' // Start/Stop character
+};
+
+const generateBarcodeSVG = (text: string) => {
+    const fullText = `*${text.toUpperCase().replace(/[^A-Z0-9-]/g, '')}*`;
+    let path = '';
+    let currentX = 0;
+    const barWidth = 1.5;
+    const wideBarWidth = barWidth * 2.5;
+    
+    for (const char of fullText) {
+        const encoding = CODE39_MAP[char];
+        if (encoding) {
+            for (let i = 0; i < encoding.length; i++) {
+                const isBar = i % 2 === 0;
+                const isWide = encoding[i] === 'B' || encoding[i] === 'w';
+                const width = isWide ? wideBarWidth : barWidth;
+                
+                if (isBar) {
+                    path += `M${currentX},0 V60 `;
+                }
+                currentX += width;
+            }
+             // Add inter-character gap
+            currentX += barWidth;
+        }
+    }
+
+    return (
+        <svg x="0px" y="0px" viewBox={`0 0 ${currentX} 60`} className="w-full h-12">
+            <path d={path} stroke="#000000" strokeWidth={barWidth} />
         </svg>
     );
+};
+// --- End Barcode Logic ---
+
+export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) => {
+
+    const shippingFee = shipment.price - shipment.packageValue;
+    const serialNumber = shipment.id.split('-').slice(2).join('-');
 
     return (
         <div className="bg-white p-8 border-4 border-dashed border-slate-300 w-full printable-label-container">
@@ -48,13 +92,19 @@ export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) =>
                         <div>
                              <p className="text-xs uppercase font-bold text-slate-600">Payment Details</p>
                              <p className="text-2xl font-bold">{shipment.paymentMethod}</p>
-                             {shipment.paymentMethod === PaymentMethod.COD && <p className="text-3xl font-extrabold text-green-600">{shipment.price.toFixed(2)} EGP</p>}
+                             {shipment.paymentMethod === PaymentMethod.COD && (
+                                <div className="mt-2">
+                                    <div className="flex justify-between text-sm"><span>Package Value:</span> <span>{shipment.packageValue.toFixed(2)} EGP</span></div>
+                                    <div className="flex justify-between text-sm"><span>Shipping Fee:</span> <span>{shippingFee.toFixed(2)} EGP</span></div>
+                                    <div className="flex justify-between text-xl font-extrabold mt-1 border-t border-black pt-1"><span>COD Amount:</span> <span className="text-green-600">{shipment.price.toFixed(2)} EGP</span></div>
+                                </div>
+                             )}
                              <p className="text-xs uppercase font-bold text-slate-600 mt-4">Package</p>
                              <p>{shipment.packageDescription}{shipment.isLargeOrder && ' (Large Order)'}</p>
                         </div>
                         <div className="text-center">
-                            <Barcode />
-                            <p className="font-mono tracking-widest text-sm">{shipment.id}</p>
+                            {generateBarcodeSVG(serialNumber)}
+                            <p className="font-mono tracking-widest text-sm mt-1">{shipment.id}</p>
                         </div>
                     </div>
                 </footer>

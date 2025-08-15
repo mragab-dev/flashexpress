@@ -32,6 +32,9 @@ import InventoryManagement from '../views/InventoryManagement';
 import AssetManagement from '../views/AssetManagement';
 import MyAssets from '../views/MyAssets';
 import SupplierManagement from '../views/SupplierManagement';
+import DeliveredShipmentsView from '../views/DeliveredShipmentsView';
+import CouriersByZoneView from '../views/CouriersByZoneView';
+import PartnerTierManagement from '../views/PartnerTierManagement';
 
 const MainLayout: React.FC = () => {
     const { currentUser, logout, users, reassignCourier, getCourierName, hasPermission } = useAppContext();
@@ -76,7 +79,7 @@ const MainLayout: React.FC = () => {
             case 'dashboard': return <Dashboard setActiveView={setActiveView} />;
             case 'shipments': return <ShipmentsView onSelectShipment={setSelectedShipment} />;
             case 'create': return <CreateShipment />;
-            case 'packaging-and-assignment': return <PackagingAndAssignment />;
+            case 'packaging-and-assignment': return <PackagingAndAssignment setLabelShipment={setLabelShipment} />;
             case 'tasks': return <CourierTasks setActiveView={setActiveView} />;
             case 'completed-orders': return <CourierCompleted onSelectShipment={setSelectedShipment} />;
             case 'users': return <UserManagement />;
@@ -84,7 +87,7 @@ const MainLayout: React.FC = () => {
             case 'wallet': return <Wallet />;
             case 'financials': return <Financials />;
             case 'admin-financials': return <AdminFinancials setActiveView={setActiveView} />;
-            case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} />;
+            case 'client-analytics': return <ClientAnalytics onSelectShipment={setSelectedShipment} setActiveView={setActiveView} />;
             case 'notifications': return <NotificationsLog />;
             case 'profile': return <Profile />;
             case 'courier-financials': return <CourierFinancials />;
@@ -94,6 +97,9 @@ const MainLayout: React.FC = () => {
             case 'asset-management': return <AssetManagement />;
             case 'my-assets': return <MyAssets />;
             case 'supplier-management': return <SupplierManagement />;
+            case 'delivered-shipments': return <DeliveredShipmentsView onSelectShipment={setSelectedShipment} />;
+            case 'couriers-by-zone': return <CouriersByZoneView />;
+            case 'partner-tier-management': return <PartnerTierManagement />;
             default: return <Dashboard setActiveView={setActiveView} />;
         }
     }

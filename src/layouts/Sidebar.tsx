@@ -8,7 +8,7 @@ import { useAppContext } from '../context/AppContext';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
     ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
-    UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon, CheckCircleIcon, ArchiveBoxIcon, TagIcon, SwitchHorizontalIcon
+    UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon, CheckCircleIcon, ArchiveBoxIcon, TagIcon, SwitchHorizontalIcon, MapPinIcon, CrownIcon
 } from '../components/Icons';
 
 interface NavItemConfig {
@@ -33,6 +33,10 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
     { name: 'Completed Orders', icon: <CheckCircleIcon />, view: 'completed-orders', permission: Permission.VIEW_COURIER_COMPLETED_ORDERS },
     { name: 'My Earnings', icon: <CurrencyDollarIcon />, view: 'courier-financials', permission: Permission.VIEW_COURIER_EARNINGS },
 
+    // Assigner
+    { name: 'Delivered Shipments', icon: <PackageIcon />, view: 'delivered-shipments', permission: Permission.VIEW_DELIVERED_SHIPMENTS },
+    { name: 'Couriers By Zone', icon: <MapPinIcon />, view: 'couriers-by-zone', permission: Permission.VIEW_COURIERS_BY_ZONE },
+
     // User General
     { name: 'My Profile', icon: <UserCircleIcon />, view: 'profile', permission: Permission.VIEW_PROFILE },
     { name: 'My Assets', icon: <TagIcon />, view: 'my-assets', permission: Permission.VIEW_OWN_ASSETS },
@@ -42,6 +46,7 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
     { name: 'Packaging & Assignment', icon: <ArchiveBoxIcon />, view: 'packaging-and-assignment', permission: Permission.ASSIGN_SHIPMENTS },
     { name: 'User Management', icon: <UsersIcon />, view: 'users', permission: Permission.MANAGE_USERS },
     { name: 'Role Management', icon: <CogIcon />, view: 'roles', permission: Permission.MANAGE_ROLES },
+    { name: 'Partner Tiers', icon: <CrownIcon />, view: 'partner-tier-management', permission: Permission.MANAGE_PARTNER_TIERS },
     { name: 'Inventory', icon: <ArchiveBoxIcon />, view: 'inventory', permission: Permission.MANAGE_INVENTORY },
     { name: 'Asset Management', icon: <TagIcon />, view: 'asset-management', permission: Permission.MANAGE_ASSETS },
     { name: 'Supplier Management', icon: <SwitchHorizontalIcon />, view: 'supplier-management', permission: Permission.MANAGE_SUPPLIERS },

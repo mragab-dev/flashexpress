@@ -3,8 +3,8 @@
 
 
 import React, { useState, useCallback, useMemo, useEffect, ReactNode } from 'react';
-import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission, InventoryItem, Asset, PackagingLogEntry, TransactionType, Supplier, SupplierTransaction, InAppNotification } from '../types';
-import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority } from '../types';
+import type { User, Shipment, Toast, ClientTransaction, Notification, CourierStats, CourierTransaction, FinancialSettings, AdminFinancials, ClientFinancialSummary, Address, CustomRole, Permission, InventoryItem, Asset, PackagingLogEntry, TransactionType, Supplier, SupplierTransaction, InAppNotification, TierSetting, PartnerTier } from '../types';
+import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority, PaymentMethod } from '../types';
 import { apiFetch } from '../api/client';
 import { io, Socket } from 'socket.io-client';
 
@@ -27,6 +27,7 @@ export type AppContextType = {
     suppliers: Supplier[];
     supplierTransactions: SupplierTransaction[];
     inAppNotifications: InAppNotification[];
+    tierSettings: TierSetting[];
     isLoading: boolean;
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
@@ -46,12 +47,14 @@ export type AppContextType = {
     canCourierReceiveAssignment: (courierId: number) => boolean;
     updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => Promise<void>;
     applyManualPenalty: (courierId: number, amount: number, description: string) => Promise<void>;
-    processCourierPayout: (transactionId: string, transferEvidence?: string) => Promise<void>;
+    processCourierPayout: (transactionId: string, processedAmount: number, transferEvidence?: string) => Promise<void>;
     requestCourierPayout: (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => Promise<void>;
     requestClientPayout: (userId: number, amount: number) => Promise<void>;
     processClientPayout: (transactionId: string) => Promise<void>;
     updateClientFlatRate: (clientId: number, flatRate: number) => Promise<void>;
     updateClientTaxCard: (clientId: number, taxCardNumber: string) => Promise<void>;
+    updateTierSettings: (settings: TierSetting[]) => Promise<void>;
+    updateClientTier: (clientId: number, tier: PartnerTier | null) => Promise<void>;
     getTaxCardNumber: (clientId: number) => string;
     getAdminFinancials: () => AdminFinancials;
     getClientFinancials: () => ClientFinancialSummary[];
@@ -70,6 +73,7 @@ export type AppContextType = {
     autoAssignShipments: () => Promise<void>;
     bulkPackageShipments: (shipmentIds: string[], materialsSummary: Record<string, number>, packagingNotes: string) => Promise<void>;
     bulkAssignShipments: (shipmentIds: string[], courierId: number) => Promise<void>;
+    bulkUpdateShipmentStatus: (shipmentIds: string[], status: ShipmentStatus) => Promise<void>;
     // Inventory
     addInventoryItem: (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => Promise<void>;
     updateInventoryItem: (itemId: string, data: Partial<InventoryItem>) => Promise<void>;
@@ -111,6 +115,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [supplierTransactions, setSupplierTransactions] = useState<SupplierTransaction[]>([]);
     const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
+    const [tierSettings, setTierSettings] = useState<TierSetting[]>([]);
     const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter | null>(null);
     
     const [isLoading, setIsLoading] = useState(false);
@@ -164,6 +169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSuppliers([]);
         setSupplierTransactions([]);
         setInAppNotifications([]);
+        setTierSettings([]);
         addToast('You have been logged out.', 'info');
     }, [addToast]);
 
@@ -184,6 +190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSuppliers(data.suppliers || []);
             setSupplierTransactions(data.supplierTransactions || []);
             setInAppNotifications(data.inAppNotifications || []);
+            setTierSettings(data.tierSettings || []);
         } catch (error: any) {
             addToast(`Failed to load data: ${error.message}`, 'error');
             logout();
@@ -418,27 +425,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const getAdminFinancials = useCallback(() => {
         const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
         const undeliveredShipments = shipments.filter(s => ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(s.status));
-        const failedShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERY_FAILED);
-
+        const inTransitCOD = shipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status) && s.paymentMethod === PaymentMethod.COD);
+        const deliveredCOD = shipments.filter(s => s.status === ShipmentStatus.DELIVERED && s.paymentMethod === PaymentMethod.COD);
+    
         const totalCollectedMoney = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
         const undeliveredPackagesValue = undeliveredShipments.reduce((sum, s) => sum + s.price, 0);
-        const failedDeliveriesValue = failedShipments.reduce((sum, s) => sum + s.packageValue, 0);
         
         const allShipmentsWithFees = shipments.filter(s => s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.DELIVERY_FAILED);
         
-        const totalFees = shipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
+        const potentialFeesFromPending = undeliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
         const totalRevenue = allShipmentsWithFees.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
         const totalCommission = deliveredShipments.reduce((sum, s) => sum + (s.courierCommission || 0), 0);
         const netRevenue = totalRevenue - totalCommission;
+
+        const cashToCollect = inTransitCOD.reduce((sum, s) => sum + s.price, 0);
+        const totalCODCollected = deliveredCOD.reduce((sum, s) => sum + s.price, 0);
         
         return {
             totalCollectedMoney,
             undeliveredPackagesValue,
-            failedDeliveriesValue,
+            failedDeliveriesValue: 0, // This has been removed as per user request
             totalRevenue,
-            totalFees,
+            totalFees: potentialFeesFromPending,
             totalCommission,
             netRevenue,
+            cashToCollect,
+            totalCODCollected,
             grossRevenue: totalRevenue, // legacy
             totalClientFees: totalRevenue, // legacy
             totalCourierPayouts: totalCommission, // legacy
@@ -490,8 +502,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await apiFetch(`/api/couriers/${courierId}/penalty`, { method: 'POST', body: JSON.stringify({ amount, description }) });
     };
 
-    const processCourierPayout = async (transactionId: string, transferEvidence?: string) => {
-        await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT', body: JSON.stringify({ transferEvidence }) });
+    const processCourierPayout = async (transactionId: string, processedAmount: number, transferEvidence?: string) => {
+        await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT', body: JSON.stringify({ transferEvidence, processedAmount }) });
     };
     
     const requestCourierPayout = async (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => {
@@ -512,6 +524,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     
     const updateClientTaxCard = async (clientId: number, taxCardNumber: string) => {
         await apiFetch(`/api/clients/${clientId}/taxcard`, { method: 'PUT', body: JSON.stringify({ taxCardNumber }) });
+    };
+
+    const updateTierSettings = async (settings: TierSetting[]) => {
+        await apiFetch('/api/tier-settings', { method: 'PUT', body: JSON.stringify({ settings }) });
+    };
+
+    const updateClientTier = async (clientId: number, tier: PartnerTier | null) => {
+        await apiFetch(`/api/clients/${clientId}/tier`, { method: 'PUT', body: JSON.stringify({ tier }) });
     };
 
     const getTaxCardNumber = (clientId: number): string => {
@@ -587,6 +607,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [addToast]);
 
+    const bulkUpdateShipmentStatus = useCallback(async (shipmentIds: string[], status: ShipmentStatus) => {
+        try {
+            const result = await apiFetch('/api/shipments/bulk-status-update', {
+                method: 'POST',
+                body: JSON.stringify({ shipmentIds, status }),
+            });
+            addToast(result.message || 'Shipments updated successfully.', 'success');
+        } catch (error: any) {
+            addToast(`Bulk update failed: ${error.message}`, 'error');
+        }
+    }, [addToast]);
+
     // Inventory
     const addInventoryItem = async (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
         await apiFetch('/api/inventory', { method: 'POST', body: JSON.stringify(item) });
@@ -649,6 +681,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         suppliers,
         supplierTransactions,
         inAppNotifications,
+        tierSettings,
         isLoading,
         login,
         logout,
@@ -674,6 +707,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         processClientPayout,
         updateClientFlatRate,
         updateClientTaxCard,
+        updateTierSettings,
+        updateClientTier,
         getTaxCardNumber,
         getAdminFinancials,
         getClientFinancials,
@@ -692,6 +727,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         autoAssignShipments,
         bulkPackageShipments,
         bulkAssignShipments,
+        bulkUpdateShipmentStatus,
         addInventoryItem,
         updateInventoryItem,
         deleteInventoryItem,

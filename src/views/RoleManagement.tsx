@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Permission, CustomRole } from '../types';
@@ -203,7 +204,7 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
                         required 
                         disabled={role?.isSystemRole}
                     />
-                     {role?.isSystemRole && <p className="text-xs text-slate-500 mt-1">System role names cannot be changed.</p>}
+                     {role?.isSystemRole && <p className="text-xs text-slate-500 mt-2 p-2 bg-slate-100 rounded">Permissions for system roles can be modified, but the role name is fixed.</p>}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Permissions</label>
@@ -232,7 +233,7 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
                                                             checked={selectedPermissions.includes(p)}
                                                             onChange={(isChecked) => {
                                                                 if (isChecked) {
-                                                                    setSelectedPermissions(prev => [...prev, p]);
+                                                                    setSelectedPermissions(prev => [...new Set([...prev, p])]);
                                                                 } else {
                                                                     setSelectedPermissions(prev => prev.filter(perm => perm !== p));
                                                                 }

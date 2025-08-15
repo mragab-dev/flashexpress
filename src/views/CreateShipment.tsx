@@ -1,6 +1,6 @@
 // src/views/CreateShipment.tsx
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, User, Permission, UserRole } from '../types';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
@@ -26,9 +26,16 @@ const CreateShipment = () => {
     const [packageValue, setPackageValue] = useState('');
 
     // State for Bulk Upload
+    const [bulkSelectedClientId, setBulkSelectedClientId] = useState<string>(canCreateForOthers ? '' : String(currentUser?.id));
     const [file, setFile] = useState<File | null>(null);
     const [parsedData, setParsedData] = useState<BulkShipment[]>([]);
     const [verificationResults, setVerificationResults] = useState<{ isValid: boolean, errors: string[] }[]>([]);
+
+    useEffect(() => {
+        if (paymentMethod === PaymentMethod.INSTAPAY) {
+            setPackageValue('0');
+        }
+    }, [paymentMethod]);
 
     const clientForShipment = useMemo(() => {
         if (canCreateForOthers) {
@@ -43,7 +50,7 @@ const CreateShipment = () => {
     
     const totalPrice = useMemo(() => {
         if (paymentMethod === PaymentMethod.INSTAPAY) {
-            return -priorityAdjustedFee;
+            return 0; // For pre-paid, the COD amount is 0. The fee is separate.
         }
         return numericPackageValue + priorityAdjustedFee;
     }, [paymentMethod, priorityAdjustedFee, numericPackageValue]);
@@ -157,8 +164,14 @@ const CreateShipment = () => {
     };
 
     const handleBulkUpload = () => {
-        if (!currentUser?.address) {
-            addToast('Please complete your profile address before creating shipments.', 'error');
+        const clientForBulk = users.find(u => u.id === parseInt(bulkSelectedClientId));
+
+        if (!clientForBulk) {
+            addToast('Please select a client to upload for.', 'error');
+            return;
+        }
+        if (!clientForBulk.address) {
+            addToast(`Client ${clientForBulk.name} does not have a default address.`, 'error');
             return;
         }
 
@@ -170,11 +183,12 @@ const CreateShipment = () => {
         }
         
         validShipments.forEach(shipment => {
-             const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, currentUser as User);
+             const baseFee = clientForBulk.flatRateFee || 0;
+             const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, clientForBulk);
              
              let calculatedPrice;
              if (shipment.paymentMethod === PaymentMethod.INSTAPAY) {
-                 calculatedPrice = -priorityAdjustedFee;
+                 calculatedPrice = 0;
              } else { // COD
                  calculatedPrice = (shipment.packageValue || 0) + priorityAdjustedFee;
              }
@@ -184,13 +198,13 @@ const CreateShipment = () => {
                  isLargeOrder: false,
                  price: calculatedPrice,
                  clientFlatRateFee: priorityAdjustedFee,
-                 clientId: currentUser.id,
-                 clientName: currentUser.name,
-                 fromAddress: currentUser.address!,
+                 clientId: clientForBulk.id,
+                 clientName: clientForBulk.name,
+                 fromAddress: clientForBulk.address!,
             });
         });
         
-        addToast(`${validShipments.length} shipments uploaded successfully!`, 'success');
+        addToast(`${validShipments.length} shipments uploaded successfully for ${clientForBulk.name}!`, 'success');
         setFile(null);
         setParsedData([]);
         setVerificationResults([]);
@@ -351,9 +365,10 @@ const CreateShipment = () => {
                                 pattern="^\d*(\.\d{0,2})?$"
                                 value={packageValue}
                                 onChange={e => setPackageValue(e.target.value.replace(/[^0-9.]/g, ''))}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                                placeholder="e.g. 500 (Optional for InstaPay)"
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 disabled:bg-slate-100"
+                                placeholder="e.g. 500"
                                 required={paymentMethod === PaymentMethod.COD}
+                                disabled={paymentMethod === PaymentMethod.INSTAPAY}
                             />
                         </div>
                     </div>
@@ -394,14 +409,14 @@ const CreateShipment = () => {
                             {paymentMethod === PaymentMethod.INSTAPAY ? (
                                  <>
                                     <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                    <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{Math.abs(totalPrice).toFixed(2)} EGP</span></div>
+                                    <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
                                     <p className="text-xs text-slate-500 mt-1">You must transfer this amount to cover the shipping fee.</p>
                                 </>
                             ) : (
                                 <>
                                     <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
                                     <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                    <div className="text-lg font-bold text-slate-800 mt-1">Total (Price + Shipping): <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
+                                    <div className="text-lg font-bold text-slate-800 mt-1">Total COD Amount: <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
                                     {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
                                 </>
                             )}
@@ -422,6 +437,17 @@ const CreateShipment = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {/* Upload Section */}
                         <div className="space-y-4">
+                             {canCreateForOthers && (
+                                <div className="p-4 bg-slate-50 rounded-lg">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Create Bulk Shipment For Client</label>
+                                    <select value={bulkSelectedClientId} onChange={e => setBulkSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required>
+                                        <option value="" disabled>Select a client...</option>
+                                        {clients.map(client => (
+                                            <option key={client.id} value={client.id}>{client.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="p-6 border-2 border-dashed border-slate-300 rounded-lg text-center">
                                 <UploadIcon className="mx-auto h-12 w-12 text-slate-400" />
                                 <label htmlFor="file-upload" className="mt-2 block text-sm font-medium text-slate-700">

@@ -53,7 +53,7 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({
     };
 
     const getDaysInPhase = (shipment: Shipment): string => {
-        if (shipment.status === ShipmentStatus.DELIVERED || !shipment.statusHistory || shipment.statusHistory.length === 0) return '-';
+        if (shipment.status === ShipmentStatus.DELIVERED || shipment.status === ShipmentStatus.DELIVERY_FAILED || !shipment.statusHistory || shipment.statusHistory.length === 0) return '-';
         const lastStatusUpdate = new Date(shipment.statusHistory[shipment.statusHistory.length - 1].timestamp);
         const diff = now.getTime() - lastStatusUpdate.getTime();
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));

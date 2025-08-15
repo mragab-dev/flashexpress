@@ -4,17 +4,18 @@
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { UserRole, User, Shipment, ShipmentStatus, TransactionType } from '../types';
-import { ArrowUpCircleIcon, DocumentDownloadIcon, MailIcon, PhoneIcon, UserCircleIcon, WalletIcon } from '../components/Icons';
+import { ArrowUpCircleIcon, DocumentDownloadIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 import { Modal } from '../components/common/Modal';
 import { ShipmentList } from '../components/specific/ShipmentList';
 
 interface ClientAnalyticsProps {
     onSelectShipment: (shipment: Shipment) => void;
+    setActiveView: (view: string) => void;
 }
 
-const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) => {
-    const { users, shipments, clientTransactions, hasPermission, processClientPayout, addToast } = useAppContext();
+const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment, setActiveView }) => {
+    const { users, shipments, clientTransactions, processClientPayout, addToast } = useAppContext();
     const [mainTab, setMainTab] = useState<'summary' | 'payouts'>('summary');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [selectedClient, setSelectedClient] = useState<User | null>(null);
@@ -177,7 +178,11 @@ const ClientAnalytics: React.FC<ClientAnalyticsProps> = ({ onSelectShipment }) =
                              <tbody className="divide-y divide-slate-200">
                                 {clientData.map(client => (
                                     <tr key={client.id}>
-                                        <td className="p-4 font-semibold">{client.name}</td>
+                                        <td className="p-4 font-semibold">
+                                            <button onClick={() => setActiveView('users')} className="text-primary-600 hover:underline">
+                                                {client.name}
+                                            </button>
+                                        </td>
                                         <td className="p-4 text-slate-600 font-mono">{client.shipmentCount}</td>
                                         <td className="p-4 text-orange-600 font-semibold">{client.flatRateFee.toFixed(2)} EGP</td>
                                         <td className="p-4 text-blue-600 font-semibold">{client.payoutRequestCount}</td>

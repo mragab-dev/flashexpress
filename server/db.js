@@ -33,6 +33,9 @@ async function setupDatabase() {
         // For courier referrals
         table.integer('referrerId').unsigned().references('id').inTable('users');
         table.decimal('referralCommission', 10, 2);
+        // For partner tiers
+        table.string('partnerTier');
+        table.boolean('manualTierAssignment').defaultTo(false);
       });
     } else {
       // Add new columns if they don't exist
@@ -54,7 +57,31 @@ async function setupDatabase() {
        if (!(await knex.schema.hasColumn('users', 'zones'))) {
         await knex.schema.alterTable('users', t => t.json('zones'));
       }
+      if (!(await knex.schema.hasColumn('users', 'partnerTier'))) {
+        await knex.schema.alterTable('users', t => t.string('partnerTier'));
+      }
+      if (!(await knex.schema.hasColumn('users', 'manualTierAssignment'))) {
+        await knex.schema.alterTable('users', t => t.boolean('manualTierAssignment').defaultTo(false));
+      }
     }
+    
+    const hasTierSettingsTable = await knex.schema.hasTable('tier_settings');
+    if (!hasTierSettingsTable) {
+        console.log('Creating "tier_settings" table...');
+        await knex.schema.createTable('tier_settings', table => {
+            table.string('tierName').primary();
+            table.integer('shipmentThreshold').notNullable();
+            table.decimal('discountPercentage', 5, 2).notNullable();
+        });
+
+        console.log('Seeding tier settings...');
+        await knex('tier_settings').insert([
+            { tierName: 'Bronze', shipmentThreshold: 50, discountPercentage: 2.0 },
+            { tierName: 'Silver', shipmentThreshold: 150, discountPercentage: 10.0 },
+            { tierName: 'Gold', shipmentThreshold: 300, discountPercentage: 15.0 },
+        ]);
+    }
+
 
     const hasCustomRolesTable = await knex.schema.hasTable('custom_roles');
     if (!hasCustomRolesTable) {
@@ -71,21 +98,22 @@ async function setupDatabase() {
     console.log('Seeding default roles and permissions...');
     await knex('custom_roles').del(); // Clear old roles
     const allPermissions = [
-        'manage_users', 'manage_roles', 'create_shipments', 'view_own_shipments', 'view_all_shipments',
+        'manage_users', 'edit_user_profile', 'manage_roles', 'create_shipments', 'view_own_shipments', 'view_all_shipments',
         'assign_shipments', 'view_courier_tasks', 'update_shipment_status', 
         'view_own_wallet', 'view_own_financials', 'view_admin_financials', 'view_client_analytics', 
         'view_courier_performance', 'manage_courier_payouts', 'view_courier_earnings', 
         'view_notifications_log', 'view_dashboard', 'view_profile', 'view_total_shipments_overview',
         'view_courier_completed_orders', 'manage_inventory', 'manage_assets', 'view_own_assets',
         'delete_inventory_item', 'delete_asset', 'manage_client_payouts', 'manage_suppliers',
-        'create_shipments_for_others', 'print_labels'
+        'create_shipments_for_others', 'print_labels', 'view_delivered_shipments', 'view_couriers_by_zone',
+        'manage_partner_tiers', 'edit_client_address'
     ];
     const clientPermissions = ['create_shipments', 'view_own_shipments', 'view_own_wallet', 'view_own_financials', 'view_dashboard', 'view_profile', 'view_own_assets'];
     const courierPermissions = ['view_courier_tasks', 'update_shipment_status', 'view_courier_earnings', 'view_dashboard', 'view_profile', 'view_courier_completed_orders', 'view_own_assets'];
     const superUserPermissions = allPermissions.filter(p => ![
         'manage_roles', 'view_admin_financials'
     ].includes(p));
-    const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory', 'view_all_shipments', 'view_profile', 'print_labels'];
+    const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory', 'view_all_shipments', 'view_profile', 'print_labels', 'view_delivered_shipments', 'view_couriers_by_zone'];
 
     const rolesToSeed = [
         { id: 'role_admin', name: 'Administrator', permissions: JSON.stringify(allPermissions), isSystemRole: true },
@@ -152,6 +180,17 @@ async function setupDatabase() {
          await knex.schema.alterTable('shipments', t => t.json('statusHistory'));
        }
     }
+    
+    const hasShipmentCountersTable = await knex.schema.hasTable('shipment_counters');
+    if (!hasShipmentCountersTable) {
+        console.log('Creating "shipment_counters" table...');
+        await knex.schema.createTable('shipment_counters', table => {
+            table.string('id').primary();
+            table.integer('count').notNullable().defaultTo(0);
+        });
+        await knex('shipment_counters').insert({ id: 'global', count: 0 });
+    }
+
 
     const hasClientTransactionsTable = await knex.schema.hasTable('client_transactions');
     if (!hasClientTransactionsTable) {
@@ -285,7 +324,6 @@ async function setupDatabase() {
         { id: 'inv_box_sm', name: 'Small Cardboard Box', quantity: 1000, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 100, unitPrice: 5.00 },
         { id: 'inv_box_md', name: 'Medium Cardboard Box', quantity: 1000, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 100, unitPrice: 7.50 },
         { id: 'inv_box_lg', name: 'Large Cardboard Box', quantity: 500, unit: 'boxes', lastUpdated: new Date().toISOString(), minStock: 50, unitPrice: 10.00 },
-        { id: 'inv_bubble_wrap', name: 'Bubble Wrap Roll', quantity: 100, unit: 'rolls', lastUpdated: new Date().toISOString(), minStock: 10, unitPrice: 50.00 },
         { id: 'inv_plastic_wrap', name: 'Packaging Plastic', quantity: 200, unit: 'rolls', lastUpdated: new Date().toISOString(), minStock: 20, unitPrice: 30.00 },
       ]);
     

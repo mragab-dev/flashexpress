@@ -100,9 +100,55 @@ async function main() {
         }
     };
     
-    // Run the job every 4 hours
-    setInterval(checkForOverdueShipments, 4 * 60 * 60 * 1000);
-    checkForOverdueShipments(); // Also run on startup
+    // --- Scheduled Job for Partner Tiers ---
+    const updateClientTiers = async () => {
+        console.log('Running scheduled job: updating client partner tiers...');
+        try {
+            await knex.transaction(async (trx) => {
+                const tierSettings = await trx('tier_settings').orderBy('shipmentThreshold', 'desc');
+                const clients = await trx('users')
+                    .where('manualTierAssignment', false)
+                    .andWhere('roles', 'like', '%"Client"%');
+                
+                const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+                for (const client of clients) {
+                    const shipmentCount = await trx('shipments')
+                        .where({ clientId: client.id })
+                        .andWhere('creationDate', '>=', thirtyDaysAgo)
+                        .count('id as count')
+                        .first();
+                    
+                    const count = shipmentCount.count;
+                    let newTier = null;
+                    for (const setting of tierSettings) {
+                        if (count >= setting.shipmentThreshold) {
+                            newTier = setting.tierName;
+                            break;
+                        }
+                    }
+
+                    if (client.partnerTier !== newTier) {
+                        await trx('users').where({ id: client.id }).update({ partnerTier: newTier });
+                        if(newTier) {
+                            await createInAppNotification(trx, client.id, `Congratulations! You've been promoted to the ${newTier} partner tier.`);
+                        } else {
+                            await createInAppNotification(trx, client.id, `Your partner tier has been updated based on recent activity.`);
+                        }
+                        io.emit('data_updated');
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error in update client tiers job:', error);
+        }
+    };
+
+    // Run jobs
+    setInterval(checkForOverdueShipments, 4 * 60 * 60 * 1000); // 4 hours
+    setInterval(updateClientTiers, 24 * 60 * 60 * 1000); // Daily
+    checkForOverdueShipments(); // Run on startup
+    updateClientTiers(); // Run on startup
 
 
     // --- Helper Functions ---
@@ -383,7 +429,7 @@ async function main() {
     // Fetch all application data
     app.get('/api/data', async (req, res) => {
       try {
-        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications] = await Promise.all([
+        const [users, shipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications, tierSettings] = await Promise.all([
           knex('users').select(),
           knex('shipments').select(),
           knex('client_transactions').select(),
@@ -396,6 +442,7 @@ async function main() {
           knex('suppliers').select(),
           knex('supplier_transactions').select(),
           knex('in_app_notifications').select(),
+          knex('tier_settings').select(),
         ]);
 
         const safeUsers = users.map(u => {
@@ -417,7 +464,7 @@ async function main() {
 
         const parsedRoles = customRoles.map(r => parseJsonField(r, 'permissions'));
 
-        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications });
+        res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications, tierSettings });
       } catch (error) {
         console.error('Error fetching data:', error);
         res.status(500).json({ error: 'Failed to fetch application data' });
@@ -564,30 +611,69 @@ async function main() {
     app.post('/api/shipments', async (req, res) => {
         const shipmentData = req.body;
         try {
-            const today = new Date();
-            const yymmdd = today.toISOString().slice(2, 10).replace(/-/g, "");
-            const cityCode = (shipmentData.toAddress.city || 'UNK').substring(0, 3).toUpperCase();
-            const sequence = Date.now().toString().slice(-4);
-            const newId = `${cityCode}-${yymmdd}-${shipmentData.clientId}-${sequence}`;
+            let newId;
+            await knex.transaction(async (trx) => {
+                const client = await trx('users').where({ id: shipmentData.clientId }).first();
+                if (!client) {
+                    throw new Error('Client not found');
+                }
 
-            const initialStatus = 'Waiting for Packaging';
-            const statusHistory = [{ status: initialStatus, timestamp: new Date().toISOString() }];
+                // Recalculate fees on backend for security
+                const priorityMultipliers = client.priorityMultipliers ? JSON.parse(client.priorityMultipliers) : { Standard: 1.0, Urgent: 1.5, Express: 2.0 };
+                let clientFee = (client.flatRateFee || 75) * (priorityMultipliers[shipmentData.priority] || 1.0);
+                
+                // Apply partner tier discount
+                if (client.partnerTier) {
+                    const tierSetting = await trx('tier_settings').where({ tierName: client.partnerTier }).first();
+                    if (tierSetting && tierSetting.discountPercentage > 0) {
+                        clientFee = clientFee * (1 - (tierSetting.discountPercentage / 100));
+                    }
+                }
 
-            const newShipment = { 
-                ...shipmentData, 
-                id: newId, 
-                status: initialStatus,
-                statusHistory: JSON.stringify(statusHistory),
-                creationDate: new Date().toISOString(), 
-                fromAddress: JSON.stringify(shipmentData.fromAddress), 
-                toAddress: JSON.stringify(shipmentData.toAddress) 
-            };
-            await knex('shipments').insert(newShipment);
-            res.status(201).json(newShipment);
+                let finalPrice = shipmentData.packageValue + clientFee;
+                if (shipmentData.paymentMethod === 'InstaPay') {
+                    finalPrice = 0; // Pre-paid, no COD
+                }
+
+                const govMap = { 'Cairo': 'CAI', 'Giza': 'GIZ', 'Alexandria': 'ALX' };
+                const govCode = govMap[shipmentData.toAddress.city] || 'GOV';
+    
+                const [counter] = await trx('shipment_counters').where({ id: 'global' }).forUpdate().select('count');
+                const newCount = counter.count + 1;
+                await trx('shipment_counters').where({ id: 'global' }).update({ count: newCount });
+                
+                const today = new Date();
+                const yymmdd = today.toISOString().slice(2, 10).replace(/-/g, "");
+                
+                const batch = Math.floor((newCount - 1) / 10000);
+                const sequence = ((newCount - 1) % 10000).toString().padStart(4, '0');
+                
+                newId = `${govCode}-${yymmdd}-${batch}-${sequence}`;
+    
+                const initialStatus = 'Waiting for Packaging';
+                const statusHistory = [{ status: initialStatus, timestamp: new Date().toISOString() }];
+    
+                const newShipment = {
+                    ...shipmentData,
+                    id: newId,
+                    price: finalPrice, // Use server-calculated price
+                    clientFlatRateFee: clientFee, // Use server-calculated fee
+                    status: initialStatus,
+                    statusHistory: JSON.stringify(statusHistory),
+                    creationDate: new Date().toISOString(),
+                    fromAddress: JSON.stringify(shipmentData.fromAddress),
+                    toAddress: JSON.stringify(shipmentData.toAddress)
+                };
+    
+                await trx('shipments').insert(newShipment);
+            });
+            
+            const createdShipment = await knex('shipments').where({ id: newId }).first();
+            res.status(201).json(createdShipment);
             io.emit('data_updated');
-        } catch (error) { 
+        } catch (error) {
             console.error("Error creating shipment:", error);
-            res.status(500).json({ error: 'Server error creating shipment' }); 
+            res.status(500).json({ error: 'Server error creating shipment' });
         }
     });
 
@@ -959,13 +1045,19 @@ async function main() {
 
     app.put('/api/payouts/:id/process', async (req, res) => {
         const { id } = req.params;
-        const { transferEvidence } = req.body; // base64 string
+        const { transferEvidence, processedAmount } = req.body; // base64 string and optional amount
         try {
             await knex.transaction(async trx => {
+                const payoutRequest = await trx('courier_transactions').where({ id }).first();
+                if (!payoutRequest) return res.status(404).json({ error: 'Payout request not found.' });
+                
+                const finalAmount = processedAmount !== undefined ? -Math.abs(processedAmount) : payoutRequest.amount;
+
                 const updatePayload = { 
                     status: 'Processed', 
                     type: 'Withdrawal Processed', 
-                    description: 'Payout processed by admin' 
+                    description: `Payout processed by admin. Requested: ${-payoutRequest.amount}, Paid: ${-finalAmount}`,
+                    amount: finalAmount
                 };
 
                 if (transferEvidence) {
@@ -1181,7 +1273,6 @@ async function main() {
     });
 
     // --- NEW BULK ACTION ENDPOINTS ---
-    // RE-ENGINEERED FOR MIXED-BATCH PACKAGING
     app.post('/api/shipments/bulk-package', async (req, res) => {
         const { shipmentIds, materialsSummary, packagingNotes } = req.body;
         if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0 || !materialsSummary) {
@@ -1189,13 +1280,15 @@ async function main() {
         }
 
         try {
-            // Validate that the total number of boxes matches the number of shipments
             const totalBoxes = Object.entries(materialsSummary)
                 .filter(([key]) => key.startsWith('inv_box_'))
                 .reduce((sum, [, value]) => sum + Number(value), 0);
             
-            if (totalBoxes !== shipmentIds.length) {
-                return res.status(400).json({ error: `The number of boxes (${totalBoxes}) does not match the number of selected shipments (${shipmentIds.length}).` });
+            if (totalBoxes < shipmentIds.length) {
+                return res.status(400).json({ error: `Not enough boxes (${totalBoxes}) for the selected shipments (${shipmentIds.length}).` });
+            }
+            if (totalBoxes > shipmentIds.length && (!packagingNotes || packagingNotes.trim() === '')) {
+                return res.status(400).json({ error: 'Packaging notes are mandatory when the number of boxes exceeds the number of shipments.' });
             }
 
             await knex.transaction(async trx => {
@@ -1289,6 +1382,38 @@ async function main() {
         } catch (e) {
             console.error('Error during bulk assignment:', e);
             res.status(500).json({ error: 'Failed to bulk assign shipments.' });
+        }
+    });
+
+    app.post('/api/shipments/bulk-status-update', async (req, res) => {
+        const { shipmentIds, status } = req.body;
+        if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0 || !status) {
+            return res.status(400).json({ error: 'Missing shipment IDs or status.' });
+        }
+    
+        try {
+            await knex.transaction(async trx => {
+                for (const id of shipmentIds) {
+                    const shipment = await trx('shipments').where({ id }).first();
+                    if (shipment) {
+                        const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                        // Avoid adding duplicate status if somehow called multiple times
+                        if (currentHistory.length === 0 || currentHistory[currentHistory.length - 1].status !== status) {
+                            currentHistory.push({ status: status, timestamp: new Date().toISOString() });
+                            await trx('shipments').where({ id }).update({
+                                status: status,
+                                statusHistory: JSON.stringify(currentHistory)
+                            });
+                            await createNotification(trx, shipment, status);
+                        }
+                    }
+                }
+            });
+            res.json({ success: true, message: `${shipmentIds.length} shipments updated to ${status}.` });
+            io.emit('data_updated');
+        } catch (e) {
+            console.error('Error during bulk status update:', e);
+            res.status(500).json({ error: 'Failed to bulk update shipment statuses.' });
         }
     });
 
@@ -1406,6 +1531,44 @@ async function main() {
             res.json({ success: true });
             io.emit('data_updated');
         } catch (e) { res.status(500).json({ error: 'Server error deleting transaction' }); }
+    });
+
+    // --- Partner Tier Management Endpoints ---
+    app.get('/api/tier-settings', async (req, res) => {
+        try {
+            const settings = await knex('tier_settings').select();
+            res.json(settings);
+        } catch (e) { res.status(500).json({ error: 'Failed to fetch tier settings' }); }
+    });
+
+    app.put('/api/tier-settings', async (req, res) => {
+        const { settings } = req.body;
+        try {
+            await knex.transaction(async trx => {
+                for (const setting of settings) {
+                    await trx('tier_settings').where({ tierName: setting.tierName }).update({
+                        shipmentThreshold: setting.shipmentThreshold,
+                        discountPercentage: setting.discountPercentage,
+                    });
+                }
+            });
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Failed to update tier settings' }); }
+    });
+
+    app.put('/api/clients/:id/tier', async (req, res) => {
+        const { id } = req.params;
+        const { tier } = req.body; // tier can be 'Bronze', 'Silver', 'Gold', or null
+        try {
+            const updatePayload = {
+                partnerTier: tier,
+                manualTierAssignment: tier !== null,
+            };
+            await knex('users').where({ id }).update(updatePayload);
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Failed to assign tier' }); }
     });
 
 

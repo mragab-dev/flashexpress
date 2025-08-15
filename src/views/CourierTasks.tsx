@@ -205,8 +205,8 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
     }, [myDeliveryTasks, addToast]);
 
     const nextAction: Record<string, { label: string; nextStatus: ShipmentStatus } | null> = {
-        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Mark In Transit', nextStatus: ShipmentStatus.IN_TRANSIT },
-        [ShipmentStatus.IN_TRANSIT]: { label: 'Mark Out for Delivery', nextStatus: ShipmentStatus.OUT_FOR_DELIVERY },
+        [ShipmentStatus.ASSIGNED_TO_COURIER]: null,
+        [ShipmentStatus.IN_TRANSIT]: null,
         [ShipmentStatus.OUT_FOR_DELIVERY]: null, // Special case with two buttons
     };
     

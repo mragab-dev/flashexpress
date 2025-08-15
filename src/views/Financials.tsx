@@ -21,7 +21,7 @@ const Financials = () => {
         ? deliveredShipments.filter(s => s.clientId === currentUser.id)
         : deliveredShipments;
     
-    const totalRevenue = filteredShipments.reduce((sum, s) => sum + s.price, 0);
+    const totalRevenue = filteredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
     const totalDelivered = filteredShipments.length;
     const totalCOD = filteredShipments.filter(s => s.paymentMethod === PaymentMethod.COD).reduce((sum, s) => sum + s.price, 0);
     
@@ -43,7 +43,7 @@ const Financials = () => {
         if(s.deliveryDate) {
             const dateString = s.deliveryDate.split('T')[0];
             if(revenueByDay.hasOwnProperty(dateString)) {
-                revenueByDay[dateString] += s.price;
+                revenueByDay[dateString] += (s.clientFlatRateFee || 0);
             }
         }
     });
@@ -63,7 +63,7 @@ const Financials = () => {
                 new Date(s.deliveryDate!).toLocaleDateString(),
                 s.clientName,
                 s.paymentMethod,
-                s.price.toFixed(2)
+                (s.clientFlatRateFee || 0).toFixed(2)
             ]);
         
         exportToCsv(headers, body, 'Financial_Report');
@@ -100,7 +100,7 @@ const Financials = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Total Revenue" value={`${totalRevenue.toFixed(2)} EGP`} icon={<ChartBarIcon className="w-7 h-7"/>} color="#16a34a" />
                 <StatCard title="Shipments Delivered" value={totalDelivered} icon={<CheckCircleIcon className="w-7 h-7"/>} color="#3b82f6" />
-                <StatCard title="COD to Collect" value={`${totalCOD.toFixed(2)} EGP`} icon={<WalletIcon className="w-7 h-7"/>} color="#f97316"/>
+                <StatCard title="COD Collected" value={`${totalCOD.toFixed(2)} EGP`} icon={<WalletIcon className="w-7 h-7"/>} color="#f97316"/>
             </div>
 
             {/* Revenue Chart */}
@@ -144,7 +144,7 @@ const Financials = () => {
                                    <td className="px-6 py-4 text-slate-800">{new Date(s.deliveryDate!).toLocaleDateString()}</td>
                                    <td className="px-6 py-4 text-slate-600">{s.clientName}</td>
                                    <td className="px-6 py-4 text-slate-600">{s.paymentMethod}</td>
-                                   <td className="px-6 py-4 font-semibold text-slate-800 text-right">{s.price.toFixed(2)} EGP</td>
+                                   <td className="px-6 py-4 font-semibold text-slate-800 text-right">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</td>
                                </tr>
                            ))}
                         </tbody>
@@ -156,7 +156,7 @@ const Financials = () => {
                         <div key={s.id} className="responsive-card">
                             <div className="responsive-card-header">
                                 <span className="font-mono text-sm text-slate-700">{s.id}</span>
-                                <span className="font-semibold text-slate-800">{s.price.toFixed(2)} EGP</span>
+                                <span className="font-semibold text-slate-800">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</span>
                             </div>
                             <div className="responsive-card-item">
                                 <span className="responsive-card-label">Client</span>

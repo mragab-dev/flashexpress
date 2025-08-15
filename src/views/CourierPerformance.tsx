@@ -95,17 +95,20 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
         setSelectedCourier(null);
     };
 
-    const handleCountClick = (courierId: number, courierName: string, type: 'delivered' | 'pending') => {
+    const handleCountClick = (courierId: number, courierName: string, type: 'delivered' | 'pending' | 'assigned') => {
         let filteredShipments: Shipment[] = [];
         if (type === 'delivered') {
             filteredShipments = shipments.filter(s => s.courierId === courierId && s.status === ShipmentStatus.DELIVERED);
             setModalTitle(`Delivered Shipments for ${courierName}`);
-        } else {
+        } else if (type === 'pending') {
             filteredShipments = shipments.filter(s => 
                 s.courierId === courierId && 
-                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
+                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.ASSIGNED_TO_COURIER].includes(s.status)
             );
             setModalTitle(`Pending Shipments for ${courierName}`);
+        } else if (type === 'assigned') {
+            filteredShipments = shipments.filter(s => s.courierId === courierId);
+            setModalTitle(`All Assigned Shipments for ${courierName}`);
         }
         setModalShipments(filteredShipments);
     };
@@ -160,7 +163,15 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                             {courierData.map(({ user, stats, pendingPayouts, pendingCount, totalAssigned, totalCompleted, totalFailed }) => (
                                 <tr key={user.id}>
                                     <td className="p-4 font-semibold">{user.name}</td>
-                                    <td className="p-4 font-mono text-center text-slate-600">{totalAssigned}</td>
+                                    <td className="p-4 font-mono text-center">
+                                        <button 
+                                            onClick={() => handleCountClick(user.id, user.name, 'assigned')}
+                                            className="font-mono text-slate-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            disabled={totalAssigned === 0}
+                                        >
+                                            {totalAssigned}
+                                        </button>
+                                    </td>
                                     <td className="p-4 font-mono text-center">
                                          <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'delivered')}
@@ -212,20 +223,26 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                             </div>
                             <div className="grid grid-cols-2 gap-4 pt-2">
                                 <div className="text-center">
-                                    <div className="font-bold text-lg text-slate-800">{totalAssigned}</div>
-                                    <div className="text-xs text-slate-500">Assigned</div>
+                                    <button onClick={() => handleCountClick(user.id, user.name, 'assigned')} disabled={totalAssigned === 0} className="disabled:opacity-50">
+                                        <div className="font-bold text-lg text-slate-800">{totalAssigned}</div>
+                                        <div className="text-xs text-slate-500">Assigned</div>
+                                    </button>
                                 </div>
                                 <div className="text-center">
-                                    <div className="font-bold text-lg text-green-600">{totalCompleted}</div>
-                                    <div className="text-xs text-slate-500">Completed</div>
+                                    <button onClick={() => handleCountClick(user.id, user.name, 'delivered')} disabled={totalCompleted === 0} className="disabled:opacity-50">
+                                        <div className="font-bold text-lg text-green-600">{totalCompleted}</div>
+                                        <div className="text-xs text-slate-500">Completed</div>
+                                    </button>
                                 </div>
                                 <div className="text-center">
                                     <div className="font-bold text-lg text-red-600">{totalFailed}</div>
                                     <div className="text-xs text-slate-500">Failed</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="font-bold text-lg text-blue-600">{pendingCount}</div>
-                                    <div className="text-xs text-slate-500">Pending</div>
+                                    <button onClick={() => handleCountClick(user.id, user.name, 'pending')} disabled={pendingCount === 0} className="disabled:opacity-50">
+                                        <div className="font-bold text-lg text-blue-600">{pendingCount}</div>
+                                        <div className="text-xs text-slate-500">Pending</div>
+                                    </button>
                                 </div>
                             </div>
                             <div className="responsive-card-item">
@@ -277,7 +294,7 @@ interface ManageCourierModalProps {
     payoutRequests: CourierTransaction[];
     onUpdateSettings: (courierId: number, settings: Partial<Pick<CourierStats, 'commissionType'|'commissionValue'>>) => void;
     onApplyPenalty: (courierId: number, amount: number, description: string) => void;
-    onProcessPayout: (transactionId: string, transferEvidence?: string) => void;
+    onProcessPayout: (transactionId: string, processedAmount: number, transferEvidence?: string) => void;
 }
 
 const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout }) => {
@@ -313,7 +330,7 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
             addToast('Please upload proof of transfer for this payout.', 'error');
             return;
         }
-        onProcessPayout(payout.id, transferEvidence[payout.id]);
+        onProcessPayout(payout.id, -payout.amount, transferEvidence[payout.id]);
         onClose();
     };
 

@@ -419,7 +419,7 @@ const UserManagement = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-2">
-                                        <button onClick={() => openModal('edit', user)} title="Edit User" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
+                                        {hasPermission(Permission.EDIT_USER_PROFILE) && <button onClick={() => openModal('edit', user)} title="Edit User" className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>}
                                         <button onClick={() => openModal('reset', user)} title="Reset Password" className="p-2 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-md"><KeyIcon /></button>
                                         <button onClick={() => openModal('delete', user)} title="Delete User" className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>
                                          {(user.roles || []).includes(UserRole.CLIENT) && <button onClick={() => openModal('priorityPricing', user)} title="Set Priority Pricing" className="p-2 text-slate-500 hover:text-green-600 hover:bg-slate-100 rounded-md"><WalletIcon className="w-5 h-5"/></button>}
