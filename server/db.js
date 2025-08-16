@@ -1,15 +1,46 @@
+
 // server/db.js
 const path = require('path');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 
-const knex = require('knex')({
-  client: 'sqlite3',
-  connection: {
-    filename: path.join(__dirname, 'flash.sqlite'),
-  },
-  useNullAsDefault: true,
-});
+// =================================================================================
+// Environment-Aware Database Configuration for Railway Compatibility
+// =================================================================================
+// This setup automatically detects if the app is running in a production environment
+// (like Railway) and uses the appropriate database configuration.
+//
+// - In Production (on Railway): It connects to your PostgreSQL database using the
+//   `DATABASE_URL` environment variable that Railway provides automatically.
+// - In Development (on your local machine): It falls back to using the local
+//   `flash.sqlite` file, so your development process remains unchanged.
+// =================================================================================
+
+let knex;
+
+if (process.env.DATABASE_URL) {
+  // Production configuration for PostgreSQL (used by Railway)
+  console.log("Production environment detected. Connecting to PostgreSQL...");
+  knex = require('knex')({
+    client: 'pg',
+    connection: {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false } // Required for many cloud database providers
+    },
+    pool: { min: 2, max: 10 },
+  });
+} else {
+  // Development configuration for SQLite
+  console.log("Development environment detected. Using local SQLite database...");
+  knex = require('knex')({
+    client: 'sqlite3',
+    connection: {
+      filename: path.join(__dirname, 'flash.sqlite'),
+    },
+    useNullAsDefault: true,
+  });
+}
+
 
 async function setupDatabase() {
   console.log('Setting up database...');

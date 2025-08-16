@@ -1,10 +1,12 @@
+// src/views/UserManagement.tsx
 
-
+// FIX: Added React and hooks import
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, ZONES, ShipmentPriority, Permission, CustomRole, PartnerTier, Address } from '../types';
 import { Modal } from '../components/common/Modal';
-import { PlusCircleIcon, PencilIcon, KeyIcon, TrashIcon, DocumentDownloadIcon, WalletIcon, PhoneIcon, UserCircleIcon, CrownIcon, MapPinIcon } from '../components/Icons';
+// FIX: Removed unused PhoneIcon
+import { PlusCircleIcon, PencilIcon, KeyIcon, TrashIcon, DocumentDownloadIcon, WalletIcon, UserCircleIcon, CrownIcon, MapPinIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 
 const UserManagement = () => {
@@ -29,13 +31,14 @@ const UserManagement = () => {
     const [filterRole, setFilterRole] = useState('all');
 
     const filteredUsers = useMemo(() => {
-        return users.filter(user => {
+        // FIX: Added explicit type to user parameter and role parameter
+        return users.filter((user: User) => {
             const matchesSearch = searchTerm.trim() === '' ||
                 user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 user.publicId.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesRole = filterRole === 'all' || (user.roles || []).some(role => role === filterRole);
+            const matchesRole = filterRole === 'all' || (user.roles || []).some((role: UserRole | string) => role === filterRole);
             
             return matchesSearch && matchesRole;
         });
@@ -134,11 +137,13 @@ const UserManagement = () => {
         setFormData({});
     };
     
+    // FIX: Added explicit type for event parameter
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    // FIX: Added explicit type for event parameter
     const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prev => {
@@ -176,6 +181,7 @@ const UserManagement = () => {
     };
 
 
+    // FIX: Added explicit type for event parameter
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (mode === 'add') {
@@ -368,6 +374,7 @@ const UserManagement = () => {
         }
 
         if (mode === 'priorityPricing' && selectedUser) {
+            // FIX: Added explicit type for parameter
             const handleMultiplierChange = (priority: ShipmentPriority, value: string) => {
                 setTempPriorityMultipliers(prev => ({
                     ...prev,
@@ -425,7 +432,8 @@ const UserManagement = () => {
                     <div>
                         <label className="block text-sm font-medium text-muted-foreground mb-2">Roles</label>
                         <div className="grid grid-cols-2 gap-3 p-3 bg-secondary rounded-lg">
-                            {availableRoles.map(r => (
+                            {/* FIX: Added explicit type for parameter */}
+                            {availableRoles.map((r: CustomRole) => (
                                 <label key={r.id} className="flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" checked={(formData.roles || []).includes(r.name)} onChange={e => handleRoleChange(r.name, e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
                                     <span>{r.name}</span>
@@ -443,7 +451,8 @@ const UserManagement = () => {
                                         <div key={city}>
                                             <h5 className="font-semibold text-muted-foreground mt-2 px-1">{city}</h5>
                                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 p-1">
-                                                {zoneList.map(zone => (
+                                                {/* FIX: Added explicit type for parameter */}
+                                                {zoneList.map((zone: string) => (
                                                     <label key={zone} className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
                                                         <input type="checkbox" checked={(formData.zones || []).includes(zone)} onChange={e => handleZoneChange(zone, e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
                                                         <span>{zone}</span>
@@ -459,7 +468,8 @@ const UserManagement = () => {
                                    <label className="block text-sm font-medium text-muted-foreground mb-1">Referred By (Optional)</label>
                                    <select name="referrerId" value={formData.referrerId || ''} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background">
                                        <option value="">No Referrer</option>
-                                       {users.filter(u => (u.roles || []).includes(UserRole.COURIER)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                       {/* FIX: Added explicit type for parameter */}
+                                       {users.filter((u: User) => (u.roles || []).includes(UserRole.COURIER)).map((c: User) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                    </select>
                                </div>
                            )}
@@ -529,7 +539,8 @@ const UserManagement = () => {
                     className="w-full md:w-1/3 px-4 py-2 border border-border rounded-lg bg-background"
                 >
                     <option value="all">Filter by Role</option>
-                    {customRoles.map(role => (
+                    {/* FIX: Added explicit type for parameter */}
+                    {customRoles.map((role: CustomRole) => (
                         <option key={role.id} value={role.name}>{role.name}</option>
                     ))}
                 </select>
@@ -546,7 +557,8 @@ const UserManagement = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                        {filteredUsers.map(user => (
+                        {/* FIX: Added explicit type for parameter */}
+                        {filteredUsers.map((user: User) => (
                             <tr key={user.id}>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
@@ -562,7 +574,8 @@ const UserManagement = () => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex flex-wrap gap-1">
-                                        {(user.roles || []).map(role => (
+                                        {/* FIX: Added explicit type for parameter */}
+                                        {(user.roles || []).map((role: UserRole | string) => (
                                             <span key={role} className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">{role}</span>
                                         ))}
                                     </div>
