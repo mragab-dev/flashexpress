@@ -24,7 +24,13 @@ async function main() {
     const httpServer = http.createServer(app);
     const io = new Server(httpServer, {
         cors: {
-            origin: "*", // Allow all origins for simplicity
+            origin: process.env.NODE_ENV === 'production' 
+                ? [
+                    process.env.RAILWAY_STATIC_URL,
+                    /\.up\.railway\.app$/,
+                    /\.railway\.app$/
+                  ]
+                : "*", // Allow all origins in development
             methods: ["GET", "POST"]
         }
     });
@@ -44,7 +50,13 @@ async function main() {
 
     // Explicitly configure CORS for better proxy compatibility
     app.use(cors({
-        origin: '*', // Allow all origins
+        origin: process.env.NODE_ENV === 'production' 
+            ? [
+                process.env.RAILWAY_STATIC_URL,
+                /\.up\.railway\.app$/,
+                /\.railway\.app$/
+              ]
+            : '*', // Allow all origins in development
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
         allowedHeaders: ['Content-Type', 'Authorization'],
     }));
@@ -106,9 +118,14 @@ async function main() {
         try {
             await knex.transaction(async (trx) => {
                 const tierSettings = await trx('tier_settings').orderBy('shipmentThreshold', 'desc');
-                const clients = await trx('users')
-                    .where('manualTierAssignment', false)
-                    .andWhere('roles', 'like', '%"Client"%');
+                // PostgreSQL compatible JSON query
+                const clients = process.env.DATABASE_URL 
+                    ? await trx('users')
+                        .where('manualTierAssignment', false)
+                        .andWhereRaw("roles::text LIKE ?", ['%"Client"%'])
+                    : await trx('users')
+                        .where('manualTierAssignment', false)
+                        .andWhere('roles', 'like', '%"Client"%');
                 
                 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -588,7 +605,12 @@ async function main() {
         const { id } = req.params;
         const { flatRateFee } = req.body;
         try {
-            await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ flatRateFee });
+            // PostgreSQL compatible JSON query
+            if (process.env.DATABASE_URL) {
+                await knex('users').where({ id }).andWhereRaw("roles::text LIKE ?", ['%"Client"%']).update({ flatRateFee });
+            } else {
+                await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ flatRateFee });
+            }
             res.status(200).json({ success: true });
             io.emit('data_updated');
         }
@@ -599,7 +621,12 @@ async function main() {
         const { id } = req.params;
         const { taxCardNumber } = req.body;
         try {
-            await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ taxCardNumber });
+            // PostgreSQL compatible JSON query
+            if (process.env.DATABASE_URL) {
+                await knex('users').where({ id }).andWhereRaw("roles::text LIKE ?", ['%"Client"%']).update({ taxCardNumber });
+            } else {
+                await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ taxCardNumber });
+            }
             res.status(200).json({ success: true });
             io.emit('data_updated');
         }
@@ -1697,8 +1724,9 @@ async function main() {
 
     // Start the server
     const PORT = process.env.PORT || 3001;
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`Backend and WebSocket server listening on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 }
 
