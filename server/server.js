@@ -118,14 +118,18 @@ async function main() {
         try {
             await knex.transaction(async (trx) => {
                 const tierSettings = await trx('tier_settings').orderBy('shipmentThreshold', 'desc');
-                // PostgreSQL compatible JSON query
-                const clients = process.env.DATABASE_URL 
-                    ? await trx('users')
-                        .where('manualTierAssignment', false)
-                        .andWhereRaw("roles::text LIKE ?", ['%"Client"%'])
-                    : await trx('users')
-                        .where('manualTierAssignment', false)
-                        .andWhere('roles', 'like', '%"Client"%');
+                // PostgreSQL compatible JSON query using JSON functions
+                const clients = await trx('users')
+                    .where('manualTierAssignment', false)
+                    .andWhere(function() {
+                        if (process.env.DATABASE_URL) {
+                            // PostgreSQL: Check if JSON array contains "Client"
+                            this.whereRaw("roles::jsonb ? ?", ['Client']);
+                        } else {
+                            // SQLite: Use LIKE operator
+                            this.where('roles', 'like', '%"Client"%');
+                        }
+                    });
                 
                 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
