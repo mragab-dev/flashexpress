@@ -205,24 +205,23 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
     }, [myDeliveryTasks, addToast]);
 
     const nextAction: Record<string, { label: string; nextStatus: ShipmentStatus } | null> = {
-        [ShipmentStatus.ASSIGNED_TO_COURIER]: null,
-        [ShipmentStatus.IN_TRANSIT]: null,
+        [ShipmentStatus.ASSIGNED_TO_COURIER]: { label: 'Start Delivery', nextStatus: ShipmentStatus.OUT_FOR_DELIVERY },
         [ShipmentStatus.OUT_FOR_DELIVERY]: null, // Special case with two buttons
     };
     
     const TaskCard: React.FC<{task: Shipment}> = ({ task }) => (
-         <div className="bg-white rounded-xl shadow-sm p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+         <div className="card p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-                <p className="font-mono text-sm text-slate-500">{task.id}</p>
-                <p className="text-lg font-bold text-slate-800">Deliver to: {task.recipientName}</p>
-                <p className="text-slate-600">{task.toAddress.street}, {task.toAddress.zone}</p>
-                 <p className="text-sm font-semibold text-slate-700 mt-1">Payment: {task.paymentMethod} ({task.price > 0 ? `${task.price.toFixed(2)} EGP` : 'Pre-Paid'})</p>
+                <p className="font-mono text-sm text-muted-foreground">{task.id}</p>
+                <p className="text-lg font-bold text-foreground">Deliver to: {task.recipientName}</p>
+                <p className="text-muted-foreground">{task.toAddress.street}, {task.toAddress.zone}</p>
+                 <p className="text-sm font-semibold text-foreground mt-1">Payment: {task.paymentMethod} ({task.price > 0 ? `${task.price.toFixed(2)} EGP` : 'Pre-Paid'})</p>
             </div>
             <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 w-full md:w-auto">
                 <div className="flex-grow"><ShipmentStatusBadge status={task.status} /></div>
                 <>
                     {nextAction[task.status] && (
-                        <button onClick={() => handleUpdateStatus(task.id, nextAction[task.status]!.nextStatus)} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition w-full md:w-auto">
+                        <button onClick={() => handleUpdateStatus(task.id, nextAction[task.status]!.nextStatus)} className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition w-full md:w-auto">
                            {nextAction[task.status]!.label}
                         </button>
                     )}
@@ -244,10 +243,10 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-slate-800">My Delivery Tasks</h2>
+                <h2 className="text-2xl font-bold text-foreground">My Delivery Tasks</h2>
                 <button 
                     onClick={() => setScannerOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition"
                 >
                     <QrcodeIcon className="w-5 h-5"/>
                     Scan Package
@@ -288,18 +287,18 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                 />
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 flex-wrap">
+            <div className="card p-4 flex flex-col md:flex-row gap-4 flex-wrap">
                 <input
                     type="text"
                     placeholder="Search by ID, recipient, address..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="flex-grow px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                 />
                 <select
                     value={selectedClientId}
                     onChange={(e) => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                    className="w-full md:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                    className="w-full md:w-auto px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                 >
                     <option value="all">Filter by Client</option>
                     {clients.map(client => (
@@ -310,18 +309,18 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full md:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full md:w-auto px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary"
                     aria-label="Filter by creation date"
                 />
             </div>
 
              <div className="space-y-4">
-                {myDeliveryTasks.length === 0 && <p className="text-slate-500 bg-white p-4 rounded-lg">You have no active tasks matching the current filters.</p>}
+                {myDeliveryTasks.length === 0 && <p className="text-muted-foreground card p-4">You have no active tasks matching the current filters.</p>}
                 {myDeliveryTasks.map(task => (
                     <div 
                         key={task.id} 
                         ref={el => { shipmentTaskRefs.current[task.id] = el; }}
-                        className={`rounded-xl transition-all duration-500 ${highlightedTask === task.id ? 'ring-4 ring-primary-400 ring-offset-2' : ''}`}
+                        className={`rounded-xl transition-all duration-500 ${highlightedTask === task.id ? 'ring-4 ring-primary ring-offset-2' : ''}`}
                     >
                         <TaskCard task={task} />
                     </div>
@@ -336,19 +335,19 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
              <Modal isOpen={isFailureModalOpen} onClose={() => setFailureModalOpen(false)} title="Delivery Failed - Please Provide Reason">
                 {failureShipment && (
                     <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-lg">
-                            <p className="font-semibold">Shipment: {failureShipment.id}</p>
-                            <p className="text-sm text-slate-600">To: {failureShipment.recipientName}</p>
-                            <p className="text-sm text-slate-600">{failureShipment.toAddress.street}, {failureShipment.toAddress.zone}</p>
+                        <div className="bg-secondary p-4 rounded-lg">
+                            <p className="font-semibold text-foreground">Shipment: {failureShipment.id}</p>
+                            <p className="text-sm text-muted-foreground">To: {failureShipment.recipientName}</p>
+                            <p className="text-sm text-muted-foreground">{failureShipment.toAddress.street}, {failureShipment.toAddress.zone}</p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Reason for delivery failure *
                             </label>
                              <select
                                 value={failureReason}
                                 onChange={(e) => setFailureReason(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                             >
                                 <option value="Recipient Unreachable">Recipient Unreachable</option>
                                 <option value="Cancelled by Client">Cancelled by Client</option>
@@ -357,12 +356,12 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                             </select>
                         </div>
                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                            <label className="block text-sm font-medium text-foreground mb-2">
                                 Evidence Photo (Optional)
                             </label>
-                            <div className="w-full p-4 bg-slate-100 rounded-lg">
+                            <div className="w-full p-4 bg-secondary rounded-lg">
                                 {!isCameraActive && !failurePhoto && (
-                                    <button type="button" onClick={startCamera} className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:bg-slate-200 hover:border-slate-400 transition">
+                                    <button type="button" onClick={startCamera} className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-lg text-muted-foreground hover:bg-accent hover:border-primary transition">
                                         <CameraIcon className="w-10 h-10 mb-2"/>
                                         <span className="font-semibold">Take Photo</span>
                                     </button>
@@ -372,15 +371,15 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                                         <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-lg bg-slate-900 aspect-video object-cover"></video>
                                         <canvas ref={canvasRef} className="hidden"></canvas>
                                         <div className="flex gap-3">
-                                            <button type="button" onClick={capturePhoto} className="flex-1 px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700">Capture</button>
-                                            <button type="button" onClick={stopCamera} className="px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300">Cancel</button>
+                                            <button type="button" onClick={capturePhoto} className="flex-1 px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90">Capture</button>
+                                            <button type="button" onClick={stopCamera} className="px-4 py-2 bg-secondary text-secondary-foreground font-semibold rounded-lg hover:bg-accent">Cancel</button>
                                         </div>
                                     </div>
                                 )}
                                 {!isCameraActive && failurePhoto && (
                                     <div className="space-y-3 text-center">
                                         <img src={failurePhoto} alt="Failure preview" className="rounded-lg max-h-64 mx-auto" />
-                                        <button type="button" onClick={handleRetakePhoto} className="px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg hover:bg-slate-700">Retake Photo</button>
+                                        <button type="button" onClick={handleRetakePhoto} className="px-4 py-2 bg-foreground text-background font-semibold rounded-lg hover:bg-foreground/90">Retake Photo</button>
                                     </div>
                                 )}
                             </div>
@@ -388,14 +387,14 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                         <div className="flex justify-end gap-3">
                             <button 
                                 onClick={() => setFailureModalOpen(false)}
-                                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300"
+                                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-accent"
                             >
                                 Cancel
                             </button>
                             <button 
                                 onClick={handleSaveFailure}
                                 disabled={!failureReason}
-                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-slate-400 disabled:cursor-not-allowed"
+                                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-muted disabled:cursor-not-allowed"
                             >
                                 Mark as Failed
                             </button>
@@ -407,10 +406,10 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
             <Modal isOpen={!!verificationShipment} onClose={closeVerificationModal} title="Confirm Delivery with Recipient">
                 {verificationShipment && (
                     <div className="space-y-4">
-                        <div className="bg-slate-50 p-4 rounded-lg">
-                            <p className="font-semibold">Shipment: {verificationShipment.id}</p>
-                            <p className="text-sm text-slate-600">Recipient: {verificationShipment.recipientName}</p>
-                            <p className="text-sm text-slate-600">Phone: {verificationShipment.recipientPhone}</p>
+                        <div className="bg-secondary p-4 rounded-lg">
+                            <p className="font-semibold text-foreground">Shipment: {verificationShipment.id}</p>
+                            <p className="text-sm text-muted-foreground">Recipient: {verificationShipment.recipientName}</p>
+                            <p className="text-sm text-muted-foreground">Phone: {verificationShipment.recipientPhone}</p>
                         </div>
 
                         {verificationStep === 'send' ? (
@@ -419,7 +418,7 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                                 <button
                                     onClick={handleSendCode}
                                     disabled={isVerificationLoading}
-                                    className="w-full px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 disabled:bg-slate-400"
+                                    className="w-full px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 disabled:bg-muted"
                                 >
                                     {isVerificationLoading ? 'Sending...' : 'Send Code to Recipient'}
                                 </button>
@@ -433,12 +432,12 @@ const CourierTasks: React.FC<CourierTasksProps> = ({ setActiveView }) => {
                                     onChange={(e) => setVerificationCode(e.target.value)}
                                     maxLength={6}
                                     placeholder="123456"
-                                    className="w-full text-center tracking-[1em] font-mono text-2xl px-4 py-2 border border-slate-300 rounded-lg"
+                                    className="w-full text-center tracking-[1em] font-mono text-2xl px-4 py-2 border border-border rounded-lg bg-background"
                                 />
                                 <button
                                     onClick={handleVerifyAndDeliver}
                                     disabled={isVerificationLoading || verificationCode.length !== 6}
-                                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-slate-400"
+                                    className="w-full mt-4 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:bg-muted"
                                 >
                                     {isVerificationLoading ? 'Verifying...' : 'Confirm Delivery'}
                                 </button>

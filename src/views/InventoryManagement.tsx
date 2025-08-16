@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { InventoryItem, Permission } from '../types';
@@ -53,8 +54,8 @@ const InventoryManagement = () => {
     if (!canManageInventory) {
         return (
             <div className="text-center p-8">
-                <h2 className="text-2xl font-bold text-slate-800">Access Denied</h2>
-                <p className="text-slate-600">You do not have permission to manage inventory.</p>
+                <h2 className="text-2xl font-bold text-foreground">Access Denied</h2>
+                <p className="text-muted-foreground">You do not have permission to manage inventory.</p>
             </div>
         );
     }
@@ -120,7 +121,7 @@ const InventoryManagement = () => {
     // Stock Level Bar Component
     const StockLevelBar: React.FC<{ item: InventoryItem }> = ({ item }) => {
         if (!item.minStock) {
-            return <div className="font-mono text-slate-800">{item.quantity} <span className="text-slate-500">{item.unit}</span></div>;
+            return <div className="font-mono text-foreground">{item.quantity} <span className="text-muted-foreground">{item.unit}</span></div>;
         }
 
         const safeMinStock = item.minStock || 1;
@@ -135,10 +136,10 @@ const InventoryManagement = () => {
         return (
             <div>
                 <div className="flex justify-between items-baseline mb-1">
-                    <span className="font-mono text-slate-800 font-semibold">{item.quantity}</span>
-                    <span className="text-xs text-slate-500">min: {item.minStock}</span>
+                    <span className="font-mono text-foreground font-semibold">{item.quantity}</span>
+                    <span className="text-xs text-muted-foreground">min: {item.minStock}</span>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-1.5">
+                <div className="w-full bg-secondary rounded-full h-1.5">
                     <div className={`${barColor} h-1.5 rounded-full`} style={{ width: `${percentage}%` }}></div>
                 </div>
             </div>
@@ -149,12 +150,12 @@ const InventoryManagement = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800">Inventory Dashboard</h1>
-                    <p className="text-slate-500 mt-1">At-a-glance overview of your stock levels and value.</p>
+                    <h1 className="text-3xl font-bold text-foreground">Inventory Dashboard</h1>
+                    <p className="text-muted-foreground mt-1">At-a-glance overview of your stock levels and value.</p>
                 </div>
                 <button
                     onClick={() => openModal('add')}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition shadow-sm"
                 >
                     <PlusCircleIcon />
                     Add New Item
@@ -173,18 +174,18 @@ const InventoryManagement = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="card overflow-hidden">
+                <div className="p-4 border-b border-border flex flex-col sm:flex-row justify-between items-center gap-4">
                     <input
                         type="text"
                         placeholder="Search inventory items..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full md:w-1/3 px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     />
                      <button
                         onClick={handleExport}
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-100 text-green-800 font-semibold rounded-lg hover:bg-green-200 transition"
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 font-semibold rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition"
                     >
                         <DocumentDownloadIcon className="w-5 h-5"/>
                         <span>Export CSV</span>
@@ -193,28 +194,28 @@ const InventoryManagement = () => {
                 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Item Name</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase w-48">Stock Level</th>
-                                {canSeeFinancials && <th className="p-4 text-xs font-medium text-slate-500 uppercase">Unit Price</th>}
-                                {canSeeFinancials && <th className="p-4 text-xs font-medium text-slate-500 uppercase">Total Value</th>}
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Last Updated</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Actions</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Item Name</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase w-48">Stock Level</th>
+                                {canSeeFinancials && <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Unit Price</th>}
+                                {canSeeFinancials && <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Total Value</th>}
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Last Updated</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200">
+                        <tbody className="divide-y divide-border">
                             {filteredItems.map(item => (
                                 <tr key={item.id}>
-                                    <td className="p-4 font-semibold">{item.name}</td>
+                                    <td className="p-4 font-semibold text-foreground">{item.name}</td>
                                     <td className="p-4"><StockLevelBar item={item} /></td>
-                                    {canSeeFinancials && <td className="p-4 font-mono text-green-600">{(item.unitPrice || 0).toFixed(2)}</td>}
-                                    {canSeeFinancials && <td className="p-4 font-mono font-semibold text-slate-800">{(item.quantity * (item.unitPrice || 0)).toFixed(2)}</td>}
-                                    <td className="p-4 text-sm text-slate-600">{new Date(item.lastUpdated).toLocaleString()}</td>
+                                    {canSeeFinancials && <td className="p-4 font-mono text-green-600 dark:text-green-400">{(item.unitPrice || 0).toFixed(2)}</td>}
+                                    {canSeeFinancials && <td className="p-4 font-mono font-semibold text-foreground">{(item.quantity * (item.unitPrice || 0)).toFixed(2)}</td>}
+                                    <td className="p-4 text-sm text-muted-foreground">{new Date(item.lastUpdated).toLocaleString()}</td>
                                     <td className="p-4">
                                         <div className="flex items-center gap-2">
-                                            <button onClick={() => openModal('edit', item)} className="p-2 text-slate-500 hover:text-primary-600 hover:bg-slate-100 rounded-md"><PencilIcon /></button>
-                                            {canDeleteInventory && (<button onClick={() => handleDeleteClick(item)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-md"><TrashIcon /></button>)}
+                                            <button onClick={() => openModal('edit', item)} className="p-2 text-muted-foreground hover:text-primary hover:bg-accent rounded-md"><PencilIcon /></button>
+                                            {canDeleteInventory && (<button onClick={() => handleDeleteClick(item)} className="p-2 text-muted-foreground hover:text-red-500 hover:bg-accent rounded-md"><TrashIcon /></button>)}
                                         </div>
                                     </td>
                                 </tr>
@@ -222,43 +223,43 @@ const InventoryManagement = () => {
                         </tbody>
                     </table>
                 </div>
-                 {filteredItems.length === 0 && (<div className="text-center py-12 text-slate-500">No inventory items match your search.</div>)}
+                 {filteredItems.length === 0 && (<div className="text-center py-12 text-muted-foreground">No inventory items match your search.</div>)}
             </div>
 
             {/* Modals for Add/Edit and Delete */}
             <Modal isOpen={isModalOpen} onClose={closeModal} title={modalMode === 'add' ? 'Add New Inventory Item' : 'Edit Inventory Item'}>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Item Name</label>
-                        <input type="text" name="name" value={formData.name} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
+                        <label className="block text-sm font-medium text-muted-foreground mb-1">Item Name</label>
+                        <input type="text" name="name" value={formData.name} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background" required />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
-                            <input type="number" name="quantity" value={formData.quantity} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
+                            <label className="block text-sm font-medium text-muted-foreground mb-1">Quantity</label>
+                            <input type="number" name="quantity" value={formData.quantity} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background" required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
-                            <input type="text" name="unit" placeholder="e.g., sheets, boxes" value={formData.unit} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
+                            <label className="block text-sm font-medium text-muted-foreground mb-1">Unit</label>
+                            <input type="text" name="unit" placeholder="e.g., sheets, boxes" value={formData.unit} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background" required />
                         </div>
                     </div>
-                    <div className="p-4 border-t border-slate-200 mt-4 space-y-4">
+                    <div className="p-4 border-t border-border mt-4 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Minimum Stock</label>
-                                <input type="number" name="minStock" value={formData.minStock} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
+                                <label className="block text-sm font-medium text-muted-foreground mb-1">Minimum Stock</label>
+                                <input type="number" name="minStock" value={formData.minStock} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background" required />
                             </div>
                             {canSeeFinancials && (
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Unit Price (EGP)</label>
-                                    <input type="number" step="0.01" name="unitPrice" value={formData.unitPrice} onChange={handleFormChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg" required />
+                                    <label className="block text-sm font-medium text-muted-foreground mb-1">Unit Price (EGP)</label>
+                                    <input type="number" step="0.01" name="unitPrice" value={formData.unitPrice} onChange={handleFormChange} className="w-full px-4 py-2 border border-border rounded-lg bg-background" required />
                                 </div>
                             )}
                         </div>
                     </div>
                     <div className="flex justify-end gap-4 pt-4">
-                        <button type="button" onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
-                        <button type="submit" className="px-4 py-2 bg-primary-600 text-white rounded-lg font-semibold">Save Item</button>
+                        <button type="button" onClick={closeModal} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg font-semibold">Cancel</button>
+                        <button type="submit" className="px-4 py-2 bg-primary text-primary-foreground rounded-lg font-semibold">Save Item</button>
                     </div>
                 </form>
             </Modal>
@@ -269,7 +270,7 @@ const InventoryManagement = () => {
                         <p>Are you sure you want to delete <strong>{itemToDelete.name}</strong>?</p>
                         <p className="text-sm text-red-600 mt-2">This cannot be undone.</p>
                         <div className="flex justify-end gap-4 mt-6">
-                            <button onClick={() => setItemToDelete(null)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
+                            <button onClick={() => setItemToDelete(null)} className="px-4 py-2 bg-secondary rounded-lg font-semibold">Cancel</button>
                             <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Delete Item</button>
                         </div>
                     </div>

@@ -50,31 +50,31 @@ const DeliveredShipmentsView: React.FC<DeliveredShipmentsViewProps> = ({ onSelec
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-slate-800">Delivered Shipments</h2>
+                <h2 className="text-2xl font-bold text-foreground">Delivered Shipments</h2>
                 <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
                     <DocumentDownloadIcon className="w-5 h-5"/>
                     Export CSV
                 </button>
             </div>
             
-            <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center">
+            <div className="mb-6 card p-4 flex flex-col lg:flex-row gap-4 items-center">
                 <input 
                     type="text"
                     placeholder="Search by Shipment ID or Recipient..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full lg:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full lg:w-1/3 px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                 />
                 <input
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full lg:w-auto px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                    className="w-full lg:w-auto px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     aria-label="Filter by delivery date"
                 />
             </div>
             
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <ShipmentList 
                     shipments={deliveredShipments} 
                     onSelect={onSelectShipment}

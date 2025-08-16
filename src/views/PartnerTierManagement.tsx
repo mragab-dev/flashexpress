@@ -48,12 +48,12 @@ const PartnerTierManagement = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800">Partner Tier Management</h1>
-                    <p className="text-slate-500 mt-1">Configure the shipment thresholds and discount percentages for each loyalty tier.</p>
+                    <h1 className="text-3xl font-bold text-foreground">Partner Tier Management</h1>
+                    <p className="text-muted-foreground mt-1">Configure the shipment thresholds and discount percentages for each loyalty tier.</p>
                 </div>
                 <button
                     onClick={handleSaveChanges}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition shadow-sm"
                 >
                     Save Changes
                 </button>
@@ -61,14 +61,14 @@ const PartnerTierManagement = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {localSettings.map(setting => (
-                    <div key={setting.tierName} className="bg-white p-6 rounded-xl shadow-sm border-t-4" style={{ borderTopColor: setting.tierName === 'Bronze' ? '#B45309' : setting.tierName === 'Silver' ? '#6B7280' : '#FBBF24' }}>
+                    <div key={setting.tierName} className="card p-6 border-t-4" style={{ borderTopColor: setting.tierName === 'Bronze' ? '#B45309' : setting.tierName === 'Silver' ? '#6B7280' : '#FBBF24' }}>
                         <div className="flex items-center gap-4">
                             {tierIcons[setting.tierName]}
-                            <h2 className="text-2xl font-bold text-slate-800">{setting.tierName} Tier</h2>
+                            <h2 className="text-2xl font-bold text-foreground">{setting.tierName} Tier</h2>
                         </div>
                         <div className="mt-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <label className="block text-sm font-medium text-muted-foreground mb-1">
                                     Shipments per Month
                                 </label>
                                 <div className="relative">
@@ -76,16 +76,16 @@ const PartnerTierManagement = () => {
                                         type="number"
                                         value={setting.shipmentThreshold}
                                         onChange={e => handleInputChange(setting.tierName, 'shipmentThreshold', e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                                        className="w-full px-4 py-2 border border-border rounded-lg"
                                     />
-                                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-slate-500">
+                                    <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-muted-foreground">
                                         or more
                                     </span>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-1">Required shipments in the last 30 days.</p>
+                                <p className="text-xs text-muted-foreground mt-1">Required shipments in the last 30 days.</p>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                <label className="block text-sm font-medium text-muted-foreground mb-1">
                                     Discount Percentage
                                 </label>
                                 <div className="relative">
@@ -94,13 +94,13 @@ const PartnerTierManagement = () => {
                                         step="0.1"
                                         value={setting.discountPercentage}
                                         onChange={e => handleInputChange(setting.tierName, 'discountPercentage', e.target.value)}
-                                        className="w-full px-4 py-2 border border-slate-300 rounded-lg"
+                                        className="w-full px-4 py-2 border border-border rounded-lg"
                                     />
-                                     <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-slate-500">
+                                     <span className="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-muted-foreground">
                                         %
                                     </span>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-1">Discount applied to the shipping fee.</p>
+                                <p className="text-xs text-muted-foreground mt-1">Discount applied to the shipping fee.</p>
                             </div>
                         </div>
                     </div>

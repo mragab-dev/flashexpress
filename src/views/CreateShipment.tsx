@@ -2,14 +2,14 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, User, Permission, UserRole } from '../types';
+import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, User, Permission, UserRole, PartnerTier } from '../types';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
 import Papa from 'papaparse';
 
 type BulkShipment = Omit<Shipment, 'id' | 'clientId' | 'clientName' | 'fromAddress' | 'status' | 'creationDate' | 'isLargeOrder' | 'price' | 'clientFlatRateFee' | 'courierCommission'>;
 
 const CreateShipment = () => {
-    const { currentUser, users, addShipment, addToast, calculatePriorityPrice, hasPermission } = useAppContext();
+    const { currentUser, users, addShipment, addToast, calculatePriorityPrice, hasPermission, tierSettings } = useAppContext();
     const [activeTab, setActiveTab] = useState('single');
 
     const canCreateForOthers = hasPermission(Permission.CREATE_SHIPMENTS_FOR_OTHERS);
@@ -24,6 +24,8 @@ const CreateShipment = () => {
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.COD);
     const [priority, setPriority] = useState<ShipmentPriority>(ShipmentPriority.STANDARD);
     const [packageValue, setPackageValue] = useState('');
+    const [amountReceived, setAmountReceived] = useState('');
+    const [amountToCollect, setAmountToCollect] = useState('');
 
     // State for Bulk Upload
     const [bulkSelectedClientId, setBulkSelectedClientId] = useState<string>(canCreateForOthers ? '' : String(currentUser?.id));
@@ -32,7 +34,7 @@ const CreateShipment = () => {
     const [verificationResults, setVerificationResults] = useState<{ isValid: boolean, errors: string[] }[]>([]);
 
     useEffect(() => {
-        if (paymentMethod === PaymentMethod.INSTAPAY) {
+        if (paymentMethod === PaymentMethod.TRANSFER) {
             setPackageValue('0');
         }
     }, [paymentMethod]);
@@ -44,16 +46,31 @@ const CreateShipment = () => {
         return currentUser;
     }, [canCreateForOthers, selectedClientId, clients, currentUser]);
 
-    const baseFee = clientForShipment?.flatRateFee || 0;
-    const priorityAdjustedFee = clientForShipment ? calculatePriorityPrice(baseFee, priority, clientForShipment) : baseFee;
+    // --- Price Calculation with Discount ---
     const numericPackageValue = parseFloat(packageValue) || 0;
     
+    const { feeBeforeDiscount, discountPercentage, discountAmount, finalFee } = useMemo(() => {
+        if (!clientForShipment) return { feeBeforeDiscount: 0, discountPercentage: 0, discountAmount: 0, finalFee: 0 };
+    
+        const fee = calculatePriorityPrice(clientForShipment.flatRateFee || 0, priority, clientForShipment);
+        
+        const applicableTier = clientForShipment.partnerTier
+            ? tierSettings.find(t => t.tierName === clientForShipment.partnerTier)
+            : null;
+        
+        const discountPerc = applicableTier ? applicableTier.discountPercentage : 0;
+        const discountAmt = fee * (discountPerc / 100);
+        const final = fee - discountAmt;
+
+        return { feeBeforeDiscount: fee, discountPercentage: discountPerc, discountAmount: discountAmt, finalFee: final };
+    }, [clientForShipment, priority, tierSettings, calculatePriorityPrice]);
+    
     const totalPrice = useMemo(() => {
-        if (paymentMethod === PaymentMethod.INSTAPAY) {
-            return 0; // For pre-paid, the COD amount is 0. The fee is separate.
+        if (paymentMethod === PaymentMethod.TRANSFER) {
+            return parseFloat(amountToCollect) || 0;
         }
-        return numericPackageValue + priorityAdjustedFee;
-    }, [paymentMethod, priorityAdjustedFee, numericPackageValue]);
+        return numericPackageValue + finalFee;
+    }, [paymentMethod, finalFee, numericPackageValue, amountToCollect]);
 
 
     const handleSingleSubmit = (e: React.FormEvent) => {
@@ -80,7 +97,9 @@ const CreateShipment = () => {
             paymentMethod,
             priority,
             packageValue: numericPackageValue,
-            clientFlatRateFee: priorityAdjustedFee,
+            clientFlatRateFee: finalFee,
+            amountReceived: paymentMethod === PaymentMethod.TRANSFER ? (parseFloat(amountReceived) || 0) : undefined,
+            amountToCollect: paymentMethod === PaymentMethod.TRANSFER ? (parseFloat(amountToCollect) || 0) : undefined,
         };
 
         addShipment(shipment);
@@ -95,6 +114,8 @@ const CreateShipment = () => {
         setPaymentMethod(PaymentMethod.COD);
         setPriority(ShipmentPriority.STANDARD);
         setPackageValue('');
+        setAmountReceived('');
+        setAmountToCollect('');
     };
 
     const handleZoneChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -148,11 +169,13 @@ const CreateShipment = () => {
     const verifyData = (shipments: BulkShipment[]) => {
         const results = shipments.map(shipment => {
             const errors: string[] = [];
+            const validPaymentMethods: string[] = [PaymentMethod.COD, PaymentMethod.TRANSFER];
+
             if (!shipment.recipientName) errors.push('Recipient Name is required.');
             if (!shipment.recipientPhone) errors.push('Recipient Phone is required.');
             if (!shipment.toAddress.street) errors.push('Recipient Street is required.');
             if (!allZones.includes(shipment.toAddress.zone)) errors.push('Invalid Zone.');
-            if (!Object.values(PaymentMethod).filter(m => m !== PaymentMethod.WALLET).includes(shipment.paymentMethod)) errors.push('Invalid Payment Method.');
+            if (!validPaymentMethods.includes(shipment.paymentMethod)) errors.push('Invalid Payment Method. Must be COD or Transfer.');
             if (!Object.values(ShipmentPriority).includes(shipment.priority)) errors.push('Invalid Priority.');
             if (isNaN(shipment.packageValue) || (shipment.paymentMethod === PaymentMethod.COD && shipment.packageValue <= 0)) {
                 errors.push('Invalid Package Value for COD.');
@@ -187,7 +210,7 @@ const CreateShipment = () => {
              const priorityAdjustedFee = calculatePriorityPrice(baseFee, shipment.priority, clientForBulk);
              
              let calculatedPrice;
-             if (shipment.paymentMethod === PaymentMethod.INSTAPAY) {
+             if (shipment.paymentMethod === PaymentMethod.TRANSFER) {
                  calculatedPrice = 0;
              } else { // COD
                  calculatedPrice = (shipment.packageValue || 0) + priorityAdjustedFee;
@@ -238,7 +261,7 @@ const CreateShipment = () => {
                 'Describe package contents',
                 paymentMethodOptions,
                 `Standard (${standardFee.toFixed(2)} EGP), Urgent (${urgentFee.toFixed(2)} EGP), Express (${expressFee.toFixed(2)} EGP)`,
-                'Package value in EGP (optional for InstaPay)'
+                'Package value in EGP (optional for Transfer)'
             ],
             [
                 'Ahmed Mohamed',
@@ -269,15 +292,15 @@ const CreateShipment = () => {
 
 
     return (
-        <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm max-w-6xl mx-auto">
-            <h2 className="text-2xl font-bold text-slate-800 mb-6">Create Shipments</h2>
+        <div className="card max-w-6xl mx-auto">
+            <h2 className="text-2xl font-bold text-foreground mb-6">Create Shipments</h2>
 
-            <div className="border-b border-slate-200 mb-6">
+            <div className="border-b border-border mb-6">
                 <nav className="-mb-px flex space-x-6">
-                    <button onClick={() => setActiveTab('single')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'single' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                    <button onClick={() => setActiveTab('single')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'single' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'}`}>
                         Create Single Shipment
                     </button>
-                    <button onClick={() => setActiveTab('bulk')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'bulk' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>
+                    <button onClick={() => setActiveTab('bulk')} className={`py-3 px-1 border-b-2 font-semibold text-sm ${activeTab === 'bulk' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'}`}>
                         Bulk Upload Shipments
                     </button>
                 </nav>
@@ -286,9 +309,9 @@ const CreateShipment = () => {
             {activeTab === 'single' && (
                 <form onSubmit={handleSingleSubmit} className="space-y-6">
                     {canCreateForOthers && (
-                         <div className="p-4 bg-slate-50 rounded-lg">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Create Shipment For Client</label>
-                            <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required>
+                         <div className="p-4 bg-secondary rounded-lg">
+                            <label className="block text-sm font-medium text-foreground mb-1">Create Shipment For Client</label>
+                            <select value={selectedClientId} onChange={e => setSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary" required>
                                 <option value="" disabled>Select a client...</option>
                                 {clients.map(client => (
                                     <option key={client.id} value={client.id}>{client.name}</option>
@@ -299,258 +322,178 @@ const CreateShipment = () => {
                     {/* Recipient Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Name</label>
-                            <input type="text" value={recipientName} onChange={e => setRecipientName(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required />
+                            <label className="block text-sm font-medium text-foreground mb-1">Recipient Name</label>
+                            <input type="text" value={recipientName} onChange={e => setRecipientName(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary" required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Phone</label>
-                            <input type="text" inputMode="numeric" pattern="[0-9]*" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" placeholder="01xxxxxxxxx" required />
-                            <p className="text-xs text-slate-500 mt-1">Example for Egyptian number: 01012345678</p>
+                            <label className="block text-sm font-medium text-foreground mb-1">Recipient Phone</label>
+                            <input type="text" inputMode="numeric" pattern="[0-9]*" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value.replace(/[^0-9]/g, ''))} className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary" placeholder="01xxxxxxxxx" required />
+                            <p className="text-xs text-muted-foreground mt-1">Example for Egyptian number: 01012345678</p>
                         </div>
                     </div>
                     {/* Address Info */}
                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Recipient Street Address</label>
-                        <input
-                            type="text"
-                            value={toAddress.street}
-                            onChange={(e) => setToAddress((prev) => ({ ...prev, street: e.target.value }))}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                            placeholder="e.g., 123 Main St"
-                            required
-                        />
+                        <label className="block text-sm font-medium text-foreground mb-1">Recipient Street Address</label>
+                        <input type="text" value={toAddress.street} onChange={e => setToAddress(prev => ({ ...prev, street: e.target.value }))} className="w-full px-4 py-2 border border-border rounded-lg" required />
                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Zone (Greater Cairo)</label>
-                            <select value={toAddress.zone} onChange={handleZoneChange} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               <optgroup label="Cairo">
-                                   {ZONES.GreaterCairo.Cairo.map(z => <option key={z} value={z}>{z}</option>)}
-                               </optgroup>
-                               <optgroup label="Giza">
-                                   {ZONES.GreaterCairo.Giza.map(z => <option key={z} value={z}>{z}</option>)}
-                               </optgroup>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-foreground mb-1">Zone</label>
+                            <select value={toAddress.zone} onChange={handleZoneChange} className="w-full px-4 py-2 border border-border rounded-lg">
+                                <optgroup label="Cairo">
+                                    {ZONES.GreaterCairo.Cairo.map(z => <option key={z} value={z}>{z}</option>)}
+                                </optgroup>
+                                <optgroup label="Giza">
+                                    {ZONES.GreaterCairo.Giza.map(z => <option key={z} value={z}>{z}</option>)}
+                                </optgroup>
+                                <optgroup label="Alexandria">
+                                     {ZONES.Alexandria.map(z => <option key={z} value={z}>{z}</option>)}
+                                </optgroup>
+                                <optgroup label="Other">
+                                     {ZONES.Other.map(z => <option key={z} value={z}>{z}</option>)}
+                                </optgroup>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Address Details</label>
-                            <input
-                                type="text"
-                                value={toAddress.details}
-                                onChange={(e) => setToAddress((prev) => ({ ...prev, details: e.target.value }))}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-                                placeholder="Apt, suite, floor, etc."
-                            />
-                        </div>
-                     </div>
-                     {/* Package Info */}
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Package Description</label>
-                        <textarea value={packageDescription} onChange={e => setPackageDescription(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" rows={3}></textarea>
-                    </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Package Priority</label>
-                            <select value={priority} onChange={e => setPriority(e.target.value as ShipmentPriority)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500">
-                               {Object.values(ShipmentPriority).map(p => (
-                                   <option key={p} value={p}>{p}</option>
-                               ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Price of Package Contents (EGP)</label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                pattern="^\d*(\.\d{0,2})?$"
-                                value={packageValue}
-                                onChange={e => setPackageValue(e.target.value.replace(/[^0-9.]/g, ''))}
-                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 disabled:bg-slate-100"
-                                placeholder="e.g. 500"
-                                required={paymentMethod === PaymentMethod.COD}
-                                disabled={paymentMethod === PaymentMethod.INSTAPAY}
-                            />
+                            <label className="block text-sm font-medium text-foreground mb-1">Address Details (Apt, Floor, etc.)</label>
+                            <input type="text" value={toAddress.details} onChange={e => setToAddress(prev => ({ ...prev, details: e.target.value }))} className="w-full px-4 py-2 border border-border rounded-lg" />
                         </div>
                     </div>
-                     {/* Payment Method */}
+
+                    {/* Package Info */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
-                        <div className="flex gap-4">
-                           {Object.values(PaymentMethod)
-                                .filter(method => method !== PaymentMethod.WALLET)
-                                .map(method => (
-                               <button type="button" key={method} onClick={() => setPaymentMethod(method)} className={`px-4 py-2 rounded-lg border-2 transition font-semibold ${paymentMethod === method ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-slate-700 border-slate-300 hover:border-primary-500'}`}>
-                                   {method}
-                               </button>
-                           ))}
+                        <label className="block text-sm font-medium text-foreground mb-1">Package Description</label>
+                        <textarea value={packageDescription} onChange={e => setPackageDescription(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg" rows={2} required></textarea>
+                    </div>
+
+                     {/* Financial Info */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-foreground mb-1">Payment Method</label>
+                            <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="w-full px-4 py-2 border border-border rounded-lg">
+                                <option value={PaymentMethod.COD}>Cash on Delivery (COD)</option>
+                                <option value={PaymentMethod.TRANSFER}>InstaPay (Pre-paid)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-foreground mb-1">Priority</label>
+                            <select value={priority} onChange={e => setPriority(e.target.value as ShipmentPriority)} className="w-full px-4 py-2 border border-border rounded-lg">
+                                {Object.values(ShipmentPriority).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-foreground mb-1">Package Value (EGP)</label>
+                            <input type="number" step="0.01" value={packageValue} onChange={e => setPackageValue(e.target.value)} disabled={paymentMethod === PaymentMethod.TRANSFER} className="w-full px-4 py-2 border border-border rounded-lg" required />
                         </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                        {/* Shipping Fees Breakdown */}
-                        <div className="p-4 bg-slate-50 rounded-lg">
-                            <h4 className="font-semibold text-slate-800 mb-2">Shipping Fees</h4>
-                            <div className="space-y-2 text-sm">
-                                {Object.values(ShipmentPriority).map(p => {
-                                    const fee = clientForShipment ? calculatePriorityPrice(baseFee, p, clientForShipment) : 0;
-                                    return (
-                                        <div key={p} className={`flex justify-between p-2 rounded-md transition-colors ${priority === p ? 'bg-primary-100' : ''}`}>
-                                            <span className={`font-medium ${priority === p ? 'text-primary-700' : 'text-slate-600'}`}>{p}</span>
-                                            <span className={`font-bold ${priority === p ? 'text-primary-700' : 'text-slate-800'}`}>{fee.toFixed(2)} EGP</span>
-                                        </div>
-                                    )
-                                })}
+                    {paymentMethod === PaymentMethod.TRANSFER && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">Amount Received from Client</label>
+                                <input type="number" step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg" placeholder="e.g., 500" required />
+                                <p className="text-xs text-muted-foreground mt-1">The amount you already collected.</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">Amount to Collect from Recipient</label>
+                                <input type="number" step="0.01" value={amountToCollect} onChange={e => setAmountToCollect(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg" placeholder="e.g., 200" required />
+                                <p className="text-xs text-muted-foreground mt-1">Amount courier will collect (0 if none).</p>
                             </div>
                         </div>
-
-                        {/* Total Price Summary */}
-                        <div className="p-4 bg-slate-100 rounded-lg text-right">
-                            <h4 className="font-semibold text-slate-800 mb-2">Total Calculation</h4>
-                            {paymentMethod === PaymentMethod.INSTAPAY ? (
-                                 <>
-                                    <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                    <div className="text-lg font-bold text-slate-800 mt-1">Amount to Pay (via InstaPay): <span className="text-red-600">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                    <p className="text-xs text-slate-500 mt-1">You must transfer this amount to cover the shipping fee.</p>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-sm text-slate-600">Price of Contents: <span className="font-semibold">{numericPackageValue.toFixed(2)} EGP</span></div>
-                                    <div className="text-sm text-slate-600">Shipping Fee: <span className="font-semibold">{priorityAdjustedFee.toFixed(2)} EGP</span></div>
-                                    <div className="text-lg font-bold text-slate-800 mt-1">Total COD Amount: <span className="text-primary-600">{totalPrice.toFixed(2)} EGP</span></div>
-                                    {paymentMethod === PaymentMethod.COD && <p className="text-xs text-slate-500 mt-1">Total amount to be collected by courier.</p>}
-                                </>
-                            )}
+                    )}
+                    
+                    {/* Pricing Summary */}
+                    <div className="p-4 bg-secondary rounded-lg space-y-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Base Shipping Fee:</span>
+                            <span className="font-semibold text-foreground">{feeBeforeDiscount.toFixed(2)} EGP</span>
+                        </div>
+                        {discountAmount > 0 && (
+                            <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
+                                <div>
+                                    <span className="text-muted-foreground">Partner Discount </span>
+                                    <span className="font-semibold">({clientForShipment?.partnerTier} - {discountPercentage}%)</span>
+                                </div>
+                                <span className="font-semibold">- {discountAmount.toFixed(2)} EGP</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground font-bold">Final Shipping Fee:</span>
+                            <span className="font-bold text-foreground">{finalFee.toFixed(2)} EGP</span>
+                        </div>
+                         <div className="flex justify-between text-sm pt-2 border-t border-border">
+                            <span className="text-muted-foreground">Package Value:</span>
+                            <span className="font-semibold text-foreground">{numericPackageValue.toFixed(2)} EGP</span>
+                        </div>
+                        <div className="flex justify-between text-lg font-bold border-t border-border pt-2 mt-2">
+                            <span className="text-foreground">Total to Collect (COD):</span>
+                            <span className="text-primary">{totalPrice.toFixed(2)} EGP</span>
                         </div>
                     </div>
 
-                    <div className="text-right pt-2">
-                        <button type="submit" disabled={!clientForShipment} className="inline-flex items-center justify-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition disabled:bg-slate-400">
-                           <PlusCircleIcon className="w-5 h-5 mr-2" />
+                    {/* Submit */}
+                    <div className="flex justify-end">
+                        <button type="submit" className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg hover:bg-primary/90 transition shadow-lg">
+                            <PlusCircleIcon />
                             Create Shipment
                         </button>
                     </div>
                 </form>
             )}
-
             {activeTab === 'bulk' && (
-                <div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Upload Section */}
-                        <div className="space-y-4">
-                             {canCreateForOthers && (
-                                <div className="p-4 bg-slate-50 rounded-lg">
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Create Bulk Shipment For Client</label>
-                                    <select value={bulkSelectedClientId} onChange={e => setBulkSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500" required>
-                                        <option value="" disabled>Select a client...</option>
-                                        {clients.map(client => (
-                                            <option key={client.id} value={client.id}>{client.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-                            <div className="p-6 border-2 border-dashed border-slate-300 rounded-lg text-center">
-                                <UploadIcon className="mx-auto h-12 w-12 text-slate-400" />
-                                <label htmlFor="file-upload" className="mt-2 block text-sm font-medium text-slate-700">
-                                    Select a CSV file to upload
-                                </label>
-                                <input id="file-upload" type="file" accept=".csv" onChange={handleFileChange} className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"/>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <button onClick={downloadTemplate} className="inline-flex items-center px-4 py-2 bg-slate-600 text-white font-semibold rounded-lg shadow-sm hover:bg-slate-700">
-                                    <DownloadIcon className="w-5 h-5 mr-2" />
-                                    Download Template
-                                </button>
-                                <button onClick={handleParseAndVerify} disabled={!file} className="inline-flex items-center px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg shadow-sm hover:bg-primary-700 disabled:bg-slate-300">
-                                    Verify Data
-                                </button>
-                            </div>
+                <div className="space-y-6">
+                    {canCreateForOthers && (
+                        <div className="p-4 bg-secondary rounded-lg">
+                            <label className="block text-sm font-medium text-foreground mb-1">Upload Shipments For Client</label>
+                            <select value={bulkSelectedClientId} onChange={e => setBulkSelectedClientId(e.target.value)} className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary" required>
+                                <option value="" disabled>Select a client...</option>
+                                {clients.map(client => (
+                                    <option key={client.id} value={client.id}>{client.name}</option>
+                                ))}
+                            </select>
                         </div>
+                    )}
 
-                        {/* Verification Results */}
-                        <div className="bg-slate-50 p-4 rounded-lg">
-                            <h3 className="font-bold text-lg text-slate-800 mb-2">Verification Status</h3>
-                            {parsedData.length === 0 && <p className="text-sm text-slate-500">Upload a file and click "Verify Data" to see the results.</p>}
-                            {parsedData.length > 0 && (
-                                <>
-                                    <div className={`p-3 rounded-lg mb-4 ${allVerified ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                        <p className="font-semibold">{allVerified ? 'All rows are valid and ready for upload.' : 'Some rows have errors. Please fix them before uploading.'}</p>
-                                    </div>
-                                    <button onClick={handleBulkUpload} disabled={!allVerified} className="w-full inline-flex items-center justify-center px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-sm hover:bg-green-700 disabled:bg-slate-300">
-                                        Upload Valid Shipments
-                                    </button>
-                                </>
-                            )}
-                        </div>
+                    <div className="flex flex-col md:flex-row items-center gap-4 p-4 border-2 border-dashed border-border rounded-lg">
+                        <input type="file" accept=".csv" onChange={handleFileChange} className="text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
+                        <button onClick={downloadTemplate} className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground font-semibold rounded-lg hover:bg-accent transition text-sm">
+                            <DownloadIcon className="w-4 h-4" /> Download Template
+                        </button>
+                         <button onClick={handleParseAndVerify} disabled={!file} className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition text-sm disabled:bg-muted">
+                            <UploadIcon className="w-4 h-4" /> Verify File
+                        </button>
                     </div>
 
-                    {/* Data Table */}
-                    {parsedData.length > 0 && (
-                        <div className="mt-8">
-                            {/* Desktop Table */}
-                            <div className="overflow-x-auto hidden lg:block">
-                                <table className="min-w-full divide-y divide-slate-200">
-                                    <thead className="bg-slate-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                                            {Object.keys(parsedData[0]).map(key => (
-                                                <th key={key} className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{key.replace(/([A-Z])/g, ' $1').trim()}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-slate-200">
-                                        {parsedData.map((row, index) => (
-                                            <tr key={index} className={verificationResults[index]?.isValid ? '' : 'bg-red-50'}>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                    {verificationResults[index]?.isValid ? (
-                                                        <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                                                    ) : (
-                                                        <div className="relative group">
-                                                            <XCircleIcon className="w-6 h-6 text-red-500" />
-                                                            <div className="absolute z-10 hidden group-hover:block bg-slate-800 text-white text-xs rounded py-1 px-2 bottom-full left-1/2 -translate-x-1/2 w-48">
-                                                                {verificationResults[index]?.errors.join(' ')}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                {Object.values(row).map((value, i) => (
-                                                    <td key={i} className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">
-                                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    {verificationResults.length > 0 && (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-secondary rounded-lg">
+                                <h3 className="font-bold text-lg">Verification Results</h3>
+                                <p>{parsedData.length} rows found. {parsedData.length - verificationResults.filter(r => !r.isValid).length} valid shipments.</p>
                             </div>
-                            {/* Mobile Cards */}
-                            <div className="lg:hidden space-y-4">
-                                {parsedData.map((row, index) => (
-                                    <div key={index} className={`responsive-card ${!verificationResults[index]?.isValid && 'border-red-300 bg-red-50'}`}>
-                                        <div className="responsive-card-header">
-                                            <div className="font-semibold text-slate-800">{row.recipientName}</div>
-                                            {verificationResults[index]?.isValid ? (
-                                                <CheckCircleIcon className="w-6 h-6 text-green-500" />
-                                            ) : (
-                                                <XCircleIcon className="w-6 h-6 text-red-500" />
-                                            )}
-                                        </div>
-                                        {!verificationResults[index]?.isValid && (
-                                            <p className="text-xs text-red-700">{verificationResults[index].errors.join(', ')}</p>
-                                        )}
-                                        <div className="responsive-card-item">
-                                            <div className="responsive-card-label">Phone</div>
-                                            <div className="responsive-card-value">{row.recipientPhone}</div>
-                                        </div>
-                                        <div className="responsive-card-item">
-                                            <div className="responsive-card-label">Address</div>
-                                            <div className="responsive-card-value">{row.toAddress.street}, {row.toAddress.zone}</div>
-                                        </div>
-                                         <div className="responsive-card-item">
-                                            <div className="responsive-card-label">Package Value</div>
-                                            <div className="responsive-card-value">{row.packageValue} EGP</div>
+
+                            <div className="max-h-80 overflow-y-auto space-y-2">
+                                {parsedData.map((shipment, index) => (
+                                    <div key={index} className={`p-3 rounded-lg border ${verificationResults[index].isValid ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                        <div className="flex items-start gap-3">
+                                            {verificationResults[index].isValid ? <CheckCircleIcon className="w-5 h-5 text-green-600 mt-0.5"/> : <XCircleIcon className="w-5 h-5 text-red-600 mt-0.5"/>}
+                                            <div>
+                                                <p className="font-semibold">{shipment.recipientName} - {shipment.toAddress.zone}</p>
+                                                {!verificationResults[index].isValid && (
+                                                    <ul className="list-disc list-inside text-sm text-red-700 mt-1">
+                                                        {verificationResults[index].errors.map((err, i) => <li key={i}>{err}</li>)}
+                                                    </ul>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+
+                            <div className="flex justify-end">
+                                 <button onClick={handleBulkUpload} disabled={!allVerified} className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-bold rounded-lg hover:bg-primary/90 transition shadow-lg disabled:bg-muted">
+                                    <PlusCircleIcon />
+                                    Upload Valid Shipments
+                                </button>
                             </div>
                         </div>
                     )}

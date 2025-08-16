@@ -73,8 +73,8 @@ const Financials = () => {
         <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <div>
-                     <h1 className="text-3xl font-bold text-slate-800">My Financials</h1>
-                     <p className="text-slate-500 mt-1">
+                     <h1 className="text-3xl font-bold text-foreground">My Financials</h1>
+                     <p className="text-muted-foreground mt-1">
                          {isClient 
                              ? 'Your order history and financial summary.' 
                              : 'An overview of the company\'s financial performance.'}
@@ -88,9 +88,9 @@ const Financials = () => {
 
             {/* Tax Card Number for Clients */}
             {isClient && taxCardNumber && (
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
-                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Tax Information</h3>
-                    <p className="text-blue-800">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl">
+                    <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-200 mb-2">Tax Information</h3>
+                    <p className="text-blue-800 dark:text-blue-300">
                         Tax Card Number: <span className="font-mono font-bold">{taxCardNumber}</span>
                     </p>
                 </div>
@@ -104,59 +104,59 @@ const Financials = () => {
             </div>
 
             {/* Revenue Chart */}
-            <div className="bg-white p-6 rounded-xl shadow-sm">
-                <h2 className="text-xl font-bold text-slate-800 mb-4">Daily Revenue (Last 30 Days)</h2>
-                <div className="h-64 flex items-end gap-2 border-l border-b border-slate-200 pl-4 pb-4">
+            <div className="card">
+                <h2 className="text-xl font-bold text-foreground mb-4">Daily Revenue (Last 30 Days)</h2>
+                <div className="h-64 flex items-end gap-2 border-l border-b border-border pl-4 pb-4">
                    {chartData.map(({ date, revenue }) => (
                        <div key={date} className="flex-1 h-full flex flex-col justify-end items-center group">
                             <div 
-                                className="w-full bg-primary-400 hover:bg-primary-500 transition-colors rounded-t-md"
+                                className="w-full bg-primary/60 hover:bg-primary/80 transition-colors rounded-t-md"
                                 style={{ height: `${(revenue / maxRevenue) * 100}%` }}
                                 title={`Day ${date}: ${revenue.toFixed(2)} EGP`}
                             ></div>
-                            <span className="text-xs text-slate-500 mt-1">{date}</span>
+                            <span className="text-xs text-muted-foreground mt-1">{date}</span>
                        </div>
                    ))}
                 </div>
             </div>
 
             {/* Transactions Table */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <div className="p-5">
-                    <h2 className="text-xl font-bold text-slate-800">All Transactions</h2>
+                    <h2 className="text-xl font-bold text-foreground">All Transactions</h2>
                 </div>
                 {/* Desktop Table */}
                 <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-200">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Shipment ID</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Delivery Date</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Client</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Payment Method</th>
-                                <th className="px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider text-right">Revenue</th>
+                                <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shipment ID</th>
+                                <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Delivery Date</th>
+                                <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Client</th>
+                                <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Payment Method</th>
+                                <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right">Revenue</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200">
+                        <tbody className="divide-y divide-border">
                            {filteredShipments.sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime()).map(s => (
                                <tr key={s.id}>
-                                   <td className="px-6 py-4 font-mono text-sm text-slate-600">{s.id}</td>
-                                   <td className="px-6 py-4 text-slate-800">{new Date(s.deliveryDate!).toLocaleDateString()}</td>
-                                   <td className="px-6 py-4 text-slate-600">{s.clientName}</td>
-                                   <td className="px-6 py-4 text-slate-600">{s.paymentMethod}</td>
-                                   <td className="px-6 py-4 font-semibold text-slate-800 text-right">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</td>
+                                   <td className="px-6 py-4 font-mono text-sm text-muted-foreground">{s.id}</td>
+                                   <td className="px-6 py-4 text-foreground">{new Date(s.deliveryDate!).toLocaleDateString()}</td>
+                                   <td className="px-6 py-4 text-muted-foreground">{s.clientName}</td>
+                                   <td className="px-6 py-4 text-muted-foreground">{s.paymentMethod}</td>
+                                   <td className="px-6 py-4 font-semibold text-foreground text-right">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</td>
                                </tr>
                            ))}
                         </tbody>
                     </table>
                 </div>
                 {/* Mobile Cards */}
-                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                <div className="lg:hidden p-4 space-y-4 bg-secondary">
                      {filteredShipments.sort((a,b) => new Date(b.deliveryDate!).getTime() - new Date(a.deliveryDate!).getTime()).map(s => (
-                        <div key={s.id} className="responsive-card">
+                        <div key={s.id} className="responsive-card !bg-card">
                             <div className="responsive-card-header">
-                                <span className="font-mono text-sm text-slate-700">{s.id}</span>
-                                <span className="font-semibold text-slate-800">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</span>
+                                <span className="font-mono text-sm text-muted-foreground">{s.id}</span>
+                                <span className="font-semibold text-foreground">{(s.clientFlatRateFee || 0).toFixed(2)} EGP</span>
                             </div>
                             <div className="responsive-card-item">
                                 <span className="responsive-card-label">Client</span>
@@ -174,7 +174,7 @@ const Financials = () => {
                      ))}
                 </div>
                 {filteredShipments.length === 0 && (
-                    <div className="text-center py-16 text-slate-500">
+                    <div className="text-center py-16 text-muted-foreground">
                         <p className="font-semibold">No Delivered Shipments</p>
                         <p className="text-sm">There are no financial transactions to display yet.</p>
                     </div>

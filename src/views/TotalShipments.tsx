@@ -1,191 +1,152 @@
 // src/views/TotalShipments.tsx
 
-
-
 import React, { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Shipment, ShipmentStatus, Permission, UserRole } from '../types';
+import { Shipment, ShipmentStatus, Permission } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { PackageIcon, CheckCircleIcon, ClockIcon, XCircleIcon, TruckIcon, DocumentDownloadIcon } from '../components/Icons';
-import { exportToCsv } from '../utils/pdf';
 import { ShipmentList } from '../components/specific/ShipmentList';
+import { exportToCsv } from '../utils/pdf';
 
-const TotalShipments = () => {
-    const { shipments: allShipments, users, hasPermission, shipmentFilter, setShipmentFilter: setContextFilter } = useAppContext();
+export const TotalShipments = () => {
+    const { shipments, hasPermission, getCourierName, updateShipmentFees } = useAppContext();
     
-    // Local filter state
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedClientId, setSelectedClientId] = useState<'all' | number>('all');
-    const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
-    const [selectedDate, setSelectedDate] = useState<string>('');
-    const clients = users.filter(u => u.roles.includes(UserRole.CLIENT));
-    
-    if (!hasPermission(Permission.VIEW_TOTAL_SHIPMENTS_OVERVIEW)) {
-        return <div className="text-center py-8">Access denied. You do not have permission to view this page.</div>;
-    }
+    const [selectedStatus, setSelectedStatus] = useState<'all' | 'Overdue' | ShipmentStatus>('all');
+    const [selectedDate, setSelectedDate] = useState('');
 
-    const visibleShipments = useMemo(() => {
-        let baseShipments = shipmentFilter ? allShipments.filter(shipmentFilter) : allShipments;
-        
-        let filtered = baseShipments;
-        // Apply local filters
+    const canSeeAdminFinancials = hasPermission(Permission.VIEW_ADMIN_FINANCIALS);
+
+    const isShipmentOverdue = (shipment: Shipment) => {
+        if ([ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(shipment.status)) {
+            return false;
+        }
+        // A shipment is overdue if it's been more than 2.5 days since creation and not yet delivered.
+        const twoAndHalfDaysAgo = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000);
+        return new Date(shipment.creationDate) < twoAndHalfDaysAgo;
+    };
+
+    const stats = useMemo(() => {
+        const total = shipments.length;
+        const delivered = shipments.filter(s => s.status === ShipmentStatus.DELIVERED).length;
+        const failed = shipments.filter(s => s.status === ShipmentStatus.DELIVERY_FAILED).length;
+        const outForDelivery = shipments.filter(s => s.status === ShipmentStatus.OUT_FOR_DELIVERY).length;
+        const overdue = shipments.filter(isShipmentOverdue).length;
+        return { total, delivered, failed, outForDelivery, overdue };
+    }, [shipments]);
+
+    const filteredShipments = useMemo(() => {
+        let filtered = [...shipments];
+
         if (selectedDate) {
             filtered = filtered.filter(s => s.creationDate.startsWith(selectedDate));
         }
+
         if (searchTerm.trim()) {
             const lowerCaseSearch = searchTerm.trim().toLowerCase();
-            filtered = filtered.filter(s => 
+            filtered = filtered.filter(s =>
                 s.id.toLowerCase().includes(lowerCaseSearch) ||
-                s.recipientName.toLowerCase().includes(lowerCaseSearch)
+                s.recipientName.toLowerCase().includes(lowerCaseSearch) ||
+                s.clientName.toLowerCase().includes(lowerCaseSearch)
             );
         }
-        if (selectedStatus !== 'all') {
-            filtered = filtered.filter(s => s.status === selectedStatus);
-        }
-        if (selectedClientId !== 'all') {
-            filtered = filtered.filter(s => s.clientId === selectedClientId);
-        }
-        return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
-    }, [allShipments, shipmentFilter, selectedDate, searchTerm, selectedClientId, selectedStatus]);
 
-    // Calculate shipment statistics based on visible shipments
-    const totalShipments = visibleShipments.length;
-    const deliveredShipments = visibleShipments.filter(s => s.status === ShipmentStatus.DELIVERED);
-    const inTransitShipments = visibleShipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status));
-    const pendingShipments = visibleShipments.filter(s => s.status === ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT);
-    const deliveryRate = totalShipments > 0 ? (deliveredShipments.length / totalShipments * 100) : 0;
-    
+        if (selectedStatus !== 'all') {
+            if (selectedStatus === 'Overdue') {
+                filtered = filtered.filter(isShipmentOverdue);
+            } else {
+                filtered = filtered.filter(s => s.status === selectedStatus);
+            }
+        }
+
+        return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
+    }, [shipments, selectedDate, searchTerm, selectedStatus]);
+
     const handleExport = () => {
-        const headers = ['Shipment ID', 'Status', 'Client', 'Courier', 'Creation Date', 'Delivery Date', 'Package Value', 'Shipping Fee'];
-        const body = visibleShipments
-            .sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime())
-            .map(s => [
-                s.id,
-                s.status,
-                s.clientName,
-                s.courierId ? `Courier ${s.courierId}` : 'Unassigned',
-                new Date(s.creationDate).toLocaleDateString(),
-                s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : 'N/A',
-                s.packageValue.toFixed(2),
-                (s.clientFlatRateFee || 0).toFixed(2)
-            ]);
+        const headers = ['ID', 'Client', 'Recipient', 'Date', 'Status', 'Courier', 'Total COD (EGP)', 'Package Value (EGP)'];
+        if (canSeeAdminFinancials) {
+            headers.push('Client Fee (EGP)', 'Courier Commission (EGP)', 'Net Profit (EGP)');
+        }
         
-        exportToCsv(headers, body, 'Filtered_Shipments_Report');
+        const body = filteredShipments.map(s => {
+            const row: (string | number)[] = [
+                s.id, s.clientName, s.recipientName,
+                new Date(s.creationDate).toLocaleDateString(), s.status,
+                getCourierName(s.courierId), s.price.toFixed(2), s.packageValue.toFixed(2)
+            ];
+
+            if (canSeeAdminFinancials) {
+                const clientFee = s.clientFlatRateFee || 0;
+                const courierCommission = s.courierCommission || 0;
+                let netProfit = 0;
+                if (s.courierId && s.clientFlatRateFee && s.courierCommission) {
+                    netProfit = clientFee - courierCommission;
+                }
+                row.push(clientFee.toFixed(2), courierCommission.toFixed(2), netProfit.toFixed(2));
+            }
+            return row;
+        });
+        exportToCsv(headers, body, 'Total_Shipments_Report');
     };
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-start">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-800">Shipments Overview</h1>
-                    <p className="text-slate-500 mt-1">
-                        {shipmentFilter ? 'Filtered view of shipments.' : 'Comprehensive view of all shipments.'}
-                    </p>
-                </div>
-                <div className="flex items-center gap-4">
-                    {shipmentFilter && (
-                         <button onClick={() => setContextFilter(null)} className="flex items-center gap-2 px-4 py-2 bg-slate-200 text-slate-800 font-semibold rounded-lg hover:bg-slate-300 transition">
-                            <XCircleIcon className="w-5 h-5"/>
-                            Clear Filter
-                        </button>
-                    )}
-                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">
-                        <DocumentDownloadIcon className="w-5 h-5"/>
-                        Export as CSV
-                    </button>
-                </div>
+        <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-foreground">Shipments Overview</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <StatCard title="Total Shipments" value={stats.total} icon={<PackageIcon />} color="#3b82f6" />
+                <StatCard title="Delivered" value={stats.delivered} icon={<CheckCircleIcon />} color="#16a34a" />
+                <StatCard title="Out for Delivery" value={stats.outForDelivery} icon={<TruckIcon />} color="#06b6d4" />
+                <StatCard title="Failed" value={stats.failed} icon={<XCircleIcon />} color="#ef4444" />
+                <StatCard title="Overdue" value={stats.overdue} icon={<ClockIcon />} color="#f97316" />
             </div>
 
-            {/* KPI Cards for filtered data */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard 
-                    title="Total Shipments" 
-                    value={totalShipments} 
-                    icon={<PackageIcon className="w-7 h-7"/>} 
-                    color="#3b82f6" 
-                    subtitle={shipmentFilter ? "Matching filter" : "All time"}
-                />
-                <StatCard 
-                    title="Delivered" 
-                    value={deliveredShipments.length} 
-                    icon={<CheckCircleIcon className="w-7 h-7"/>} 
-                    color="#16a34a"
-                    subtitle={`${deliveryRate.toFixed(1)}% success rate`}
-                />
-                <StatCard 
-                    title="In Transit" 
-                    value={inTransitShipments.length} 
-                    icon={<TruckIcon className="w-7 h-7"/>} 
-                    color="#f59e0b"
-                />
-                <StatCard 
-                    title="Pending Assignment" 
-                    value={pendingShipments.length} 
-                    icon={<ClockIcon className="w-7 h-7"/>} 
-                    color="#8b5cf6"
-                />
-            </div>
-            
-             <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center flex-wrap">
-                <div className="flex-grow w-full lg:w-auto">
-                    <input 
+            <div className="card">
+                <div className="p-4 border-b border-border flex flex-col lg:flex-row gap-4 items-center flex-wrap">
+                    <input
                         type="text"
-                        placeholder="Search by ID or Recipient..."
+                        placeholder="Search ID, Recipient, Client..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="flex-grow w-full lg:w-auto px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     />
-                </div>
-                <div className="flex-grow w-full lg:w-auto">
-                    <select
-                        value={selectedClientId}
-                        onChange={e => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
-                    >
-                        <option value="all">All Clients</option>
-                        {clients.map(client => (
-                            <option key={client.id} value={client.id}>{client.name}</option>
-                        ))}
-                    </select>
-                </div>
-                 <div className="flex-grow w-full lg:w-auto">
                     <select
                         value={selectedStatus}
-                        onChange={e => setSelectedStatus(e.target.value as 'all' | ShipmentStatus)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        onChange={e => setSelectedStatus(e.target.value as any)}
+                        className="w-full lg:w-auto px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     >
                         <option value="all">All Statuses</option>
+                        <option value="Overdue">Overdue</option>
                         {Object.values(ShipmentStatus).map(status => (
                             <option key={status} value={status}>{status}</option>
                         ))}
                     </select>
-                </div>
-                
-                <div className="flex items-center gap-2 w-full lg:w-auto">
                     <input
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        className="w-full lg:w-auto px-4 py-2 border border-border rounded-lg"
                         aria-label="Filter by creation date"
                     />
-                    {selectedDate && (
-                        <button
-                            onClick={() => setSelectedDate('')}
-                            className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
-                            aria-label="Clear date filter"
-                        >
-                            Clear
-                        </button>
-                    )}
+                     <button 
+                        onClick={handleExport}
+                        className="w-full lg:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition"
+                    >
+                        <DocumentDownloadIcon className="w-5 h-5"/>
+                        Export CSV
+                    </button>
                 </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <ShipmentList shipments={visibleShipments} showClientFee showCourierCommission showNetProfit />
+                <ShipmentList
+                    shipments={filteredShipments}
+                    showPackageValue={true}
+                    priceColumnTitle="Total COD"
+                    showClientFee={canSeeAdminFinancials}
+                    showCourierCommission={canSeeAdminFinancials}
+                    showNetProfit={canSeeAdminFinancials}
+                    showEditableFees={canSeeAdminFinancials}
+                    updateShipmentFees={canSeeAdminFinancials ? updateShipmentFees : undefined}
+                />
             </div>
         </div>
     );
 };
-
-export default TotalShipments;

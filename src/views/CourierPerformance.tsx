@@ -4,39 +4,43 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType, ShipmentStatus, Shipment } from '../types';
+import { User, CourierStats, CommissionType, CourierTransaction, CourierTransactionStatus, CourierTransactionType, ShipmentStatus, Shipment, UserRole } from '../types';
 import { Modal } from '../components/common/Modal';
 import { ShipmentList } from '../components/specific/ShipmentList';
-import { DocumentDownloadIcon, UploadIcon } from '../components/Icons';
+import { DocumentDownloadIcon, UploadIcon, TruckIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
+import { StatCard } from '../components/common/StatCard';
 
 interface CourierPerformanceProps {
     onSelectShipment: (shipment: Shipment) => void;
 }
 
 const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipment }) => {
-    const { users, shipments, courierStats, courierTransactions, updateCourierSettings, applyManualPenalty, processCourierPayout } = useAppContext();
+    const { users, shipments, courierStats, courierTransactions, updateCourierSettings, applyManualPenalty, processCourierPayout, declineCourierPayout, getAdminFinancials } = useAppContext();
     const [selectedCourier, setSelectedCourier] = useState<CourierStats | null>(null);
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
 
     // New state for shipment list modal
     const [modalShipments, setModalShipments] = useState<Shipment[] | null>(null);
     const [modalTitle, setModalTitle] = useState('');
+    
+    const adminFinancials = getAdminFinancials();
 
     const courierData = useMemo(() => {
-        const data = users.filter(u => (u.roles || []).includes('Courier')).map(user => {
+        let data = users.filter(u => (u.roles || []).includes(UserRole.COURIER)).map(user => {
             const stats = courierStats.find(cs => cs.courierId === user.id);
             const pendingPayouts = courierTransactions.filter(t => t.courierId === user.id && t.type === CourierTransactionType.WITHDRAWAL_REQUEST && t.status === CourierTransactionStatus.PENDING);
             
             const pendingCount = shipments.filter(s => 
                 s.courierId === user.id && 
-                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
+                [ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.ASSIGNED_TO_COURIER].includes(s.status)
             ).length;
 
             const totalAssigned = shipments.filter(s => s.courierId === user.id).length;
-            const totalCompleted = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERED).length;
-            const totalFailed = shipments.filter(s => s.courierId === user.id && s.status === ShipmentStatus.DELIVERY_FAILED).length;
+            const totalCompleted = stats?.deliveriesCompleted || 0;
+            const totalFailed = stats?.deliveriesFailed || 0;
 
             return {
                 user,
@@ -49,13 +53,29 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
             };
         });
         
-        if (!searchTerm.trim()) {
-            return data;
+        if (searchTerm.trim()) {
+            data = data.filter(({ user }) => user.name.toLowerCase().includes(searchTerm.trim().toLowerCase()));
         }
         
-        return data.filter(({ user }) => user.name.toLowerCase().includes(searchTerm.trim().toLowerCase()));
+        return data.sort((a, b) => {
+            const key = sortConfig.key as keyof (typeof a.user & typeof a.stats);
+            const aValue = (key in a.user) ? a.user[key as keyof typeof a.user] : a.stats?.[key as keyof typeof a.stats];
+            const bValue = (key in b.user) ? b.user[key as keyof typeof b.user] : b.stats?.[key as keyof typeof b.stats];
+            
+            if (aValue === undefined || aValue === null) return 1;
+            if (bValue === undefined || bValue === null) return -1;
+        
+            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
 
-    }, [users, courierStats, courierTransactions, shipments, searchTerm]);
+    }, [users, courierStats, courierTransactions, shipments, searchTerm, sortConfig]);
+
+    const requestSort = (key: string) => {
+        const direction = sortConfig.key === key && sortConfig.direction === 'asc' ? 'desc' : 'asc';
+        setSortConfig({ key, direction });
+    };
     
     const handleExport = () => {
         const headers = [
@@ -103,7 +123,7 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
         } else if (type === 'pending') {
             filteredShipments = shipments.filter(s => 
                 s.courierId === courierId && 
-                [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.ASSIGNED_TO_COURIER].includes(s.status)
+                [ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.ASSIGNED_TO_COURIER].includes(s.status)
             );
             setModalTitle(`Pending Shipments for ${courierName}`);
         } else if (type === 'assigned') {
@@ -122,8 +142,8 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800">Courier Performance</h1>
-                    <p className="text-slate-500 mt-1">Manage courier financials, restrictions, and view performance metrics.</p>
+                    <h1 className="text-3xl font-bold text-foreground">Courier Performance</h1>
+                    <p className="text-muted-foreground mt-1">Manage courier financials, restrictions, and view performance metrics.</p>
                 </div>
                  <button 
                     onClick={handleExport}
@@ -133,40 +153,50 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                     Export CSV
                 </button>
             </div>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200">
+            <StatCard
+                title="Total Owed to Couriers"
+                value={`${adminFinancials.totalOwedToCouriers.toFixed(2)} EGP`}
+                icon={<TruckIcon className="w-7 h-7" />}
+                color="#8b5cf6"
+                subtitle="Sum of all courier current balances"
+            />
+            <div className="card overflow-hidden">
+                <div className="p-4 border-b border-border">
                     <input
                         type="text"
                         placeholder="Filter couriers by name..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full md:w-1/3 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full md:w-1/3 px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     />
                 </div>
                  {/* Desktop Table */}
                 <div className="overflow-x-auto hidden lg:block">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-secondary">
                             <tr>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Courier</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Total Assigned</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Completed</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Failed</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase text-center">Pending</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Earnings (Total / Balance)</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Commission</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Status</th>
-                                <th className="p-4 text-xs font-medium text-slate-500 uppercase">Actions</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase cursor-pointer" onClick={() => requestSort('name')}>Courier</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase text-center cursor-pointer" onClick={() => requestSort('totalAssigned')}>Assigned</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase text-center cursor-pointer" onClick={() => requestSort('totalCompleted')}>Completed</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase text-center cursor-pointer" onClick={() => requestSort('totalFailed')}>Failed</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase text-center cursor-pointer" onClick={() => requestSort('pendingCount')}>Pending</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase cursor-pointer" onClick={() => requestSort('currentBalance')}>Earnings (Balance)</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Commission</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Status</th>
+                                <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200">
+                        <tbody className="divide-y divide-border">
                             {courierData.map(({ user, stats, pendingPayouts, pendingCount, totalAssigned, totalCompleted, totalFailed }) => (
                                 <tr key={user.id}>
-                                    <td className="p-4 font-semibold">{user.name}</td>
+                                    <td className="p-4 font-semibold">
+                                        {user.name}
+                                        <p className="font-mono text-xs text-muted-foreground mt-1">{user.publicId}</p>
+                                    </td>
                                     <td className="p-4 font-mono text-center">
                                         <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'assigned')}
-                                            className="font-mono text-slate-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            className="font-mono text-muted-foreground hover:underline disabled:text-muted-foreground/50 disabled:no-underline"
                                             disabled={totalAssigned === 0}
                                         >
                                             {totalAssigned}
@@ -175,7 +205,7 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                                     <td className="p-4 font-mono text-center">
                                          <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'delivered')}
-                                            className="font-mono text-green-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            className="font-mono text-green-600 hover:underline disabled:text-muted-foreground/50 disabled:no-underline"
                                             disabled={totalCompleted === 0}
                                         >
                                             {totalCompleted}
@@ -185,24 +215,24 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                                     <td className="p-4 font-mono text-center">
                                          <button 
                                             onClick={() => handleCountClick(user.id, user.name, 'pending')}
-                                            className="font-mono text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                            className="font-mono text-blue-600 hover:underline disabled:text-muted-foreground/50 disabled:no-underline"
                                             disabled={pendingCount === 0}
                                         >
                                             {pendingCount}
                                         </button>
                                     </td>
-                                    <td className="p-4 font-mono">
+                                    <td className="p-4 font-mono text-sm">
                                         {stats ? `${stats.totalEarnings.toFixed(2)} / ${stats.currentBalance.toFixed(2)}` : 'N/A'}
                                     </td>
                                     <td className="p-4 text-sm">
                                         {stats?.commissionType === 'flat' ? `${stats.commissionValue} EGP` : `${stats?.commissionValue}%`}
                                     </td>
                                     <td className="p-4">
-                                        {stats?.isRestricted ? <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Restricted</span> : <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>}
-                                        {pendingPayouts.length > 0 && <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Payout Pending</span>}
+                                        {stats?.isRestricted ? <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Restricted</span> : <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Active</span>}
+                                        {pendingPayouts.length > 0 && <span className="ml-2 px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Payout Pending</span>}
                                     </td>
                                     <td className="p-4">
-                                        <button onClick={() => handleManageClick(user.id)} className="px-3 py-1.5 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 text-sm">Manage</button>
+                                        <button onClick={() => handleManageClick(user.id)} className="px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 text-sm">Manage</button>
                                     </td>
                                 </tr>
                             ))}
@@ -211,37 +241,38 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                 </div>
 
                 {/* Mobile Cards */}
-                <div className="lg:hidden p-4 space-y-4 bg-slate-50">
+                <div className="lg:hidden p-4 space-y-4 bg-secondary">
                     {courierData.map(({ user, stats, pendingPayouts, pendingCount, totalAssigned, totalCompleted, totalFailed }) => (
                          <div key={user.id} className="responsive-card">
                             <div className="responsive-card-header">
-                                <span className="font-semibold text-slate-800">{user.name}</span>
+                                <span className="font-semibold text-foreground">{user.name}</span>
                                 <div className="flex items-center gap-2">
-                                     {stats?.isRestricted ? <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Restricted</span> : <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>}
-                                    {pendingPayouts.length > 0 && <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Payout</span>}
+                                     {stats?.isRestricted ? <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Restricted</span> : <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Active</span>}
+                                    {pendingPayouts.length > 0 && <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">Payout</span>}
                                 </div>
                             </div>
+                            <p className="font-mono text-xs text-muted-foreground">{user.publicId}</p>
                             <div className="grid grid-cols-2 gap-4 pt-2">
                                 <div className="text-center">
                                     <button onClick={() => handleCountClick(user.id, user.name, 'assigned')} disabled={totalAssigned === 0} className="disabled:opacity-50">
-                                        <div className="font-bold text-lg text-slate-800">{totalAssigned}</div>
-                                        <div className="text-xs text-slate-500">Assigned</div>
+                                        <div className="font-bold text-lg text-foreground">{totalAssigned}</div>
+                                        <div className="text-xs text-muted-foreground">Assigned</div>
                                     </button>
                                 </div>
                                 <div className="text-center">
                                     <button onClick={() => handleCountClick(user.id, user.name, 'delivered')} disabled={totalCompleted === 0} className="disabled:opacity-50">
                                         <div className="font-bold text-lg text-green-600">{totalCompleted}</div>
-                                        <div className="text-xs text-slate-500">Completed</div>
+                                        <div className="text-xs text-muted-foreground">Completed</div>
                                     </button>
                                 </div>
                                 <div className="text-center">
                                     <div className="font-bold text-lg text-red-600">{totalFailed}</div>
-                                    <div className="text-xs text-slate-500">Failed</div>
+                                    <div className="text-xs text-muted-foreground">Failed</div>
                                 </div>
                                 <div className="text-center">
                                     <button onClick={() => handleCountClick(user.id, user.name, 'pending')} disabled={pendingCount === 0} className="disabled:opacity-50">
                                         <div className="font-bold text-lg text-blue-600">{pendingCount}</div>
-                                        <div className="text-xs text-slate-500">Pending</div>
+                                        <div className="text-xs text-muted-foreground">Pending</div>
                                     </button>
                                 </div>
                             </div>
@@ -253,7 +284,7 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                                 <span className="responsive-card-label">Commission</span>
                                 <span className="responsive-card-value">{stats?.commissionType === 'flat' ? `${stats.commissionValue} EGP` : `${stats?.commissionValue}%`}</span>
                             </div>
-                            <button onClick={() => handleManageClick(user.id)} className="mt-3 w-full px-3 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 text-sm">
+                            <button onClick={() => handleManageClick(user.id)} className="mt-3 w-full px-3 py-2 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 text-sm">
                                 Manage Courier
                             </button>
                          </div>
@@ -270,6 +301,7 @@ const CourierPerformance: React.FC<CourierPerformanceProps> = ({ onSelectShipmen
                     onUpdateSettings={updateCourierSettings}
                     onApplyPenalty={applyManualPenalty}
                     onProcessPayout={processCourierPayout}
+                    onDeclinePayout={declineCourierPayout}
                 />
             )}
              <Modal isOpen={!!modalShipments} onClose={() => setModalShipments(null)} title={modalTitle} size="4xl">
@@ -295,9 +327,10 @@ interface ManageCourierModalProps {
     onUpdateSettings: (courierId: number, settings: Partial<Pick<CourierStats, 'commissionType'|'commissionValue'>>) => void;
     onApplyPenalty: (courierId: number, amount: number, description: string) => void;
     onProcessPayout: (transactionId: string, processedAmount: number, transferEvidence?: string) => void;
+    onDeclinePayout: (transactionId: string) => void;
 }
 
-const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout }) => {
+const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout, onDeclinePayout }) => {
     const { shipments, addToast } = useAppContext();
     const [settings, setSettings] = useState({
         commissionType: courierStats.commissionType,
@@ -305,8 +338,6 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
     });
     const [penaltyAmount, setPenaltyAmount] = useState(0);
     const [penaltyReason, setPenaltyReason] = useState('');
-    const [selectedFailedShipment, setSelectedFailedShipment] = useState<string>('');
-    const [failedDeliveryPenaltyReason, setFailedDeliveryPenaltyReason] = useState('');
     const [transferEvidence, setTransferEvidence] = useState<Record<string, string>>({});
 
     const handleEvidenceUpload = (e: React.ChangeEvent<HTMLInputElement>, transactionId: string) => {
@@ -320,8 +351,6 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
         }
     };
 
-    const failedShipments = shipments.filter(s => s.courierId === courierUser.id && s.status === ShipmentStatus.DELIVERY_FAILED);
-
     useEffect(() => { setSettings({ commissionType: courierStats.commissionType, commissionValue: courierStats.commissionValue }); }, [courierStats]);
     const handleSettingsSave = () => { onUpdateSettings(courierUser.id, settings); onClose(); };
     const handlePenaltyApply = () => { if (penaltyAmount > 0 && penaltyReason) { onApplyPenalty(courierUser.id, penaltyAmount, penaltyReason); setPenaltyAmount(0); setPenaltyReason(''); onClose(); }};
@@ -330,74 +359,79 @@ const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose
             addToast('Please upload proof of transfer for this payout.', 'error');
             return;
         }
-        onProcessPayout(payout.id, -payout.amount, transferEvidence[payout.id]);
-        onClose();
+        onProcessPayout(payout.id, Math.abs(payout.amount), transferEvidence[payout.id]);
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={`Manage ${courierUser.name}`} size="4xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Left Side: Settings & Penalty */}
-                <div className="space-y-6">
-                    <div className="p-6 bg-slate-50 rounded-lg space-y-4">
-                        <h3 className="font-bold text-lg text-slate-800">Financial Settings</h3>
+        <Modal isOpen={isOpen} onClose={onClose} title={`Manage ${courierUser.name}`} size="2xl">
+            <div className="space-y-6">
+                {/* Commission Settings */}
+                <div className="p-4 bg-secondary rounded-lg">
+                    <h3 className="font-bold text-foreground mb-3">Commission Settings</h3>
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-700">Commission Type</label>
-                            <select value={settings.commissionType} onChange={(e) => setSettings(s => ({ ...s, commissionType: e.target.value as CommissionType }))} className="w-full mt-1 p-2 border border-slate-300 rounded-md">
-                                <option value={CommissionType.FLAT}>Flat Rate (EGP)</option>
-                                <option value={CommissionType.PERCENTAGE}>Percentage (%)</option>
+                            <label className="text-sm font-medium text-muted-foreground">Type</label>
+                            <select value={settings.commissionType} onChange={e => setSettings(s => ({ ...s, commissionType: e.target.value as CommissionType }))} className="w-full p-2 border border-border rounded-md bg-background">
+                                <option value="flat">Flat Rate</option>
+                                <option value="percentage">Percentage</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-700">Commission Value</label>
-                            <input type="number" value={settings.commissionValue} onChange={(e) => setSettings(s => ({ ...s, commissionValue: Number(e.target.value) }))} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
+                            <label className="text-sm font-medium text-muted-foreground">Value</label>
+                            <input type="number" value={settings.commissionValue} onChange={e => setSettings(s => ({ ...s, commissionValue: parseFloat(e.target.value) }))} className="w-full p-2 border border-border rounded-md bg-background" />
                         </div>
-                        <button onClick={handleSettingsSave} className="w-full bg-primary-600 text-white font-semibold py-2 rounded-lg">Save Settings</button>
                     </div>
-                     <div className="space-y-4 p-6 bg-red-50 rounded-lg">
-                        <h3 className="font-bold text-lg text-red-800">Apply Manual Penalty</h3>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700">Penalty Amount (EGP)</label>
-                            <input type="number" value={penaltyAmount} onChange={(e) => setPenaltyAmount(Number(e.target.value))} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700">Reason</label>
-                            <input type="text" placeholder="e.g., Damaged item" value={penaltyReason} onChange={(e) => setPenaltyReason(e.target.value)} className="w-full mt-1 p-2 border border-slate-300 rounded-md" />
-                        </div>
-                        <button onClick={handlePenaltyApply} disabled={penaltyAmount <= 0 || !penaltyReason} className="w-full bg-red-600 text-white font-semibold py-2 rounded-lg disabled:bg-red-300">Apply Penalty</button>
-                    </div>
+                    <button onClick={handleSettingsSave} className="mt-4 w-full bg-primary text-primary-foreground py-2 rounded-lg font-semibold">Save Settings</button>
                 </div>
-                {/* Right Side: Payouts */}
-                <div className="space-y-6">
-                    <div className="space-y-4 p-6 bg-green-50 rounded-lg">
-                        <h3 className="font-bold text-lg text-green-800">Process Payouts</h3>
-                        {payoutRequests.length > 0 ? (
-                            payoutRequests.map(payout => (
-                                <div key={payout.id} className="p-4 bg-white border rounded-md space-y-3">
-                                    <div className="flex justify-between items-center">
+                
+                {/* Manual Penalty */}
+                <div className="p-4 bg-secondary rounded-lg">
+                    <h3 className="font-bold text-foreground mb-3">Apply Manual Penalty</h3>
+                     <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <label className="text-sm font-medium text-muted-foreground">Amount (EGP)</label>
+                            <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(parseFloat(e.target.value))} className="w-full p-2 border border-border rounded-md bg-background" />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-muted-foreground">Reason</label>
+                            <input type="text" value={penaltyReason} onChange={e => setPenaltyReason(e.target.value)} className="w-full p-2 border border-border rounded-md bg-background" />
+                        </div>
+                    </div>
+                    <button onClick={handlePenaltyApply} className="mt-4 w-full bg-red-500 text-white py-2 rounded-lg font-semibold">Apply Penalty</button>
+                </div>
+                
+                {/* Payout Requests */}
+                {payoutRequests.length > 0 && (
+                    <div className="p-4 bg-secondary rounded-lg">
+                        <h3 className="font-bold text-foreground mb-3">Pending Payout Requests</h3>
+                        <div className="space-y-3">
+                            {payoutRequests.map(payout => (
+                                <div key={payout.id} className="bg-background p-3 rounded-lg border border-border">
+                                    <div className="flex justify-between items-start">
                                         <div>
-                                            <p>Request for <strong>{-payout.amount} EGP</strong></p>
-                                            <p className="text-xs text-slate-500">Method: {payout.paymentMethod || 'N/A'}</p>
+                                            <p className="font-semibold text-foreground">{(-payout.amount).toFixed(2)} EGP</p>
+                                            <p className="text-xs text-muted-foreground">{new Date(payout.timestamp).toLocaleString()}</p>
+                                            <p className="text-xs text-muted-foreground">{payout.paymentMethod}</p>
                                         </div>
-                                         <button onClick={() => handleProcessClick(payout)} className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-semibold">Process</button>
+                                         <div className="flex gap-2">
+                                            <button onClick={() => onDeclinePayout(payout.id)} className="px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded">Decline</button>
+                                            <button onClick={() => handleProcessClick(payout)} className="px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">Process</button>
+                                        </div>
                                     </div>
                                     {payout.paymentMethod === 'Bank Transfer' && (
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Upload Proof of Transfer</label>
-                                            {!transferEvidence[payout.id] ? (
-                                                <input type="file" onChange={(e) => handleEvidenceUpload(e, payout.id)} accept="image/*,.pdf" className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                                            ) : (
-                                                <p className="text-xs text-green-700 font-semibold">File ready for upload.</p>
-                                            )}
+                                        <div className="mt-2 pt-2 border-t border-border">
+                                            <label className="text-xs font-medium text-muted-foreground">Proof of Transfer</label>
+                                            <div className="flex items-center gap-2">
+                                                <input type="file" accept="image/*" onChange={(e) => handleEvidenceUpload(e, payout.id)} className="w-full text-xs" />
+                                                {transferEvidence[payout.id] && <UploadIcon className="w-4 h-4 text-green-500" />}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
-                            ))
-                        ) : (
-                            <p className="text-slate-600 text-sm text-center">No pending payout requests.</p>
-                        )}
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </Modal>
     );

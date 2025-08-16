@@ -1,34 +1,54 @@
+import React from 'react';
+
 // Using a type for props to be explicit
 type IconProps = {
   className?: string;
 };
+
+// --- NEW ICONS FOR BOLT DESIGN ---
+export const SidebarSimpleIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V200H40V56ZM96,56V200H40V56Z"></path></svg>
+);
+
+export const SignOutIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M112,216a8,8,0,0,1-8,8H48a16,16,0,0,1-16-16V48A16,16,0,0,1,48,32h56a8,8,0,0,1,0,16H48V208h56A8,8,0,0,1,112,216Zm109.66-92.69-48-48a8,8,0,0,0-11.32,11.32L196.69,120H104a8,8,0,0,0,0,16h92.69l-34.35,34.35a8,8,0,0,0,11.32,11.32l48-48A8,8,0,0,0,221.66,123.31Z"></path></svg>
+);
+
+export const GearSixIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M222.6,110.8l-27.42-10.32a8,8,0,0,1-4.48-11L200.25,66a8,8,0,0,0-2.45-9.28L174.4,33.28a8,8,0,0,0-9.28-2.45l-23.5,9.55a8,8,0,0,1-11-4.48L110.8,8.48A8,8,0,0,0,102.48,2H81.52a8,8,0,0,0-8.32,6.48l-10.32,27.42a8,8,0,0,1-11,4.48L28.4,30.83a8,8,0,0,0-9.28,2.45L.68,56.68a8,8,0,0,0,2.45,9.28l23.5,23.5a8,8,0,0,1,4.48,11L8.48,127.8A8,8,0,0,0,2,136.12v21.36a8,8,0,0,0,6.48,8.32l27.42,10.32a8,8,0,0,1,4.48,11L30.83,210.6a8,8,0,0,0,2.45,9.28l23.4,23.44a8,8,0,0,0,9.28,2.45l23.5-9.55a8,8,0,0,1,11,4.48l10.32,27.42A8,8,0,0,0,110.08,254h21.36a8,8,0,0,0,8.32-6.48l10.32-27.42a8,8,0,0,1,11-4.48l23.5,9.55a8,8,0,0,0,9.28-2.45l23.4-23.44a8,8,0,0,0,2.45-9.28l-9.55-23.5a8,8,0,0,1,4.48-11l27.42-10.32A8,8,0,0,0,238,157.48V136.12A8,8,0,0,0,232.2,127.8ZM128,168a40,40,0,1,1,40-40A40,40,0,0,1,128,168Z"></path></svg>
+);
+
+export const CreditCardIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M224,56H32A16,16,0,0,0,16,72V184a16,16,0,0,0,16,16H224a16,16,0,0,0,16-16V72A16,16,0,0,0,224,56Zm0,16V96H32V72ZM32,184V112H224V184Z"></path></svg>
+);
+// --- End New Icons ---
+
 
 export const LogoIcon = ({ className = 'w-10 h-10' }: IconProps) => (
   <svg viewBox="0 0 200 165" className={className} xmlns="http://www.w3.org/2000/svg">
     {/* Truck and Bolt Group */}
     <g transform="translate(0, 5)">
         {/* Truck outline */}
-        <path d="M17,67 v-20 h20 l15-20 h50 v40 h20 v-15 h15 v20 h10 v-20 h-5" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <path d="M37,47 v20" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
-        <path d="M17,57 H7" stroke="#005B9F" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M17,67 v-20 h20 l15-20 h50 v40 h20 v-15 h15 v20 h10 v-20 h-5" stroke="#061A40" strokeWidth="6" fill="#061A40" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M37,47 v20" stroke="#061A40" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M17,57 H7" stroke="#061A40" strokeWidth="6" fill="none" strokeLinejoin="round" strokeLinecap="round" />
         
         {/* Wheels */}
-        <circle cx="45" cy="67" r="12" stroke="#005B9F" strokeWidth="6" fill="none" />
-        <circle cx="125" cy="67" r="12" stroke="#005B9F" strokeWidth="6" fill="none" />
-        <circle cx="45" cy="67" r="5" fill="#94C93D" />
-        <circle cx="125" cy="67" r="5" fill="#94C93D" />
+        <circle cx="45" cy="67" r="12" stroke="#061A40" strokeWidth="6" fill="#FFFFFF" />
+        <circle cx="125" cy="67" r="12" stroke="#061A40" strokeWidth="6" fill="#FFFFFF" />
+        <circle cx="45" cy="67" r="5" fill="#FFD000" />
+        <circle cx="125" cy="67" r="5" fill="#FFD000" />
         
         {/* Lightning Bolt */}
-        <path d="M87,25 L70,48 L85,48 L75,70 L92,45 L77,45 Z" fill="#94C93D" stroke="none" />
+        <path d="M87,25 L70,48 L85,48 L75,70 L92,45 L77,45 Z" fill="#FFD000" stroke="none" />
     </g>
 
     {/* Text */}
-    <text x="100" y="115" fontFamily="Arial, Helvetica, sans-serif" fontSize="36" fontWeight="bold" fill="#005B9F" textAnchor="middle">FLASH</text>
-    <text x="100" y="140" fontFamily="Arial, Helvetica, sans-serif" fontSize="16" fontWeight="500" fill="#94C93D" textAnchor="middle" letterSpacing="0.5">EXPRESS SHIPPING</text>
+    <text x="100" y="115" fontFamily="Arial, Helvetica, sans-serif" fontSize="36" fontWeight="bold" fill="#061A40" textAnchor="middle">FLASH</text>
+    <text x="100" y="140" fontFamily="Arial, Helvetica, sans-serif" fontSize="16" fontWeight="500" fill="#FFD000" textAnchor="middle" letterSpacing="0.5">EXPRESS SHIPPING</text>
   </svg>
 );
-
-
+// ... keep existing icons ...
 export const DashboardIcon = ({ className = 'w-6 h-6' }: IconProps) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
 );
@@ -42,7 +62,7 @@ export const TruckIcon = ({ className = 'w-6 h-6' }: IconProps) => (
 );
 
 export const UsersIcon = ({ className = 'w-6 h-6' }: IconProps) => (
-  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.653-.122-1.28-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.653.122-1.28.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+  <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M240,128a113.33,113.33,0,0,1-48.84,92.51,16,16,0,0,1-19.82-24.64,80.1,80.1,0,0,0-86.68,0A16,16,0,0,1,64.84,220.51,112,112,0,1,1,240,128ZM128,144a40,40,0,1,0-40-40A40,40,0,0,0,128,144Z"></path></svg>
 );
 
 export const WalletIcon = ({ className = 'w-6 h-6' }: IconProps) => (
@@ -207,4 +227,12 @@ export const CrownIcon = ({ className = 'w-6 h-6' }: IconProps) => (
 
 export const WrenchIcon = ({ className = 'w-4 h-4' }: IconProps) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+);
+
+export const SunIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160ZM232,128A8,8,0,0,1,224,136H200a8,8,0,0,1,0-16h24A8,8,0,0,1,232,128ZM128,24a8,8,0,0,1-8-8V8a8,8,0,0,1,16,0V16A8,8,0,0,1,128,24Zm-80,42.34A8,8,0,0,0,59.31,77.66l17-17a8,8,0,0,0-11.32-11.32l-17,17A8,8,0,0,0,48,66.34ZM183,183a8,8,0,0,0-11.31-11.31l-17,17a8,8,0,0,0,11.31,11.31l17-17A8,8,0,0,0,183,183ZM128,232a8,8,0,0,1,8,8v8a8,8,0,0,1-16,0v-8A8,8,0,0,1,128,232ZM56,128a8,8,0,0,1-8-8V96a8,8,0,0,1,16,0v24A8,8,0,0,1,56,128ZM197.66,48a8,8,0,0,0-11.32,0l-17,17a8,8,0,0,0,11.32,11.32l17-17A8,8,0,0,0,197.66,48ZM76.34,197.66,59.31,180.69a8,8,0,0,0-11.31,11.31l17,17a8,8,0,0,0,11.31-11.31Z"></path></svg>
+);
+
+export const MoonIcon = ({ className = 'w-6 h-6' }: IconProps) => (
+    <svg className={className} fill="currentColor" viewBox="0 0 256 256"><path d="M216.7,152.61A95.82,95.82,0,0,1,103.39,39.3a8,8,0,0,0-10.9-10.9,111.94,111.94,0,0,0,16.5,152.91A112,112,0,0,0,227.6,227.6a8,8,0,0,0-10.9-10.9A95.82,95.82,0,0,1,216.7,152.61Z"></path></svg>
 );

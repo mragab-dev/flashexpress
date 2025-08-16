@@ -58,23 +58,23 @@ const CourierCompleted: React.FC<CourierCompletedProps> = ({ onSelectShipment })
 
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-800">My Completed Orders</h2>
+            <h2 className="text-2xl font-bold text-foreground">My Completed Orders</h2>
             
-            <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center flex-wrap">
+            <div className="mb-6 card p-4 flex flex-col lg:flex-row gap-4 items-center flex-wrap">
                 <div className="flex-grow w-full lg:w-auto">
                     <input 
                         type="text"
                         placeholder="Search by ID or Recipient..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     />
                 </div>
                 <div className="flex-grow w-full lg:w-auto">
                     <select
                         value={selectedClientId}
                         onChange={e => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     >
                         <option value="all">All Clients</option>
                         {clients.map(client => (
@@ -87,13 +87,13 @@ const CourierCompleted: React.FC<CourierCompletedProps> = ({ onSelectShipment })
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                         aria-label="Filter by delivery date"
                     />
                     {selectedDate && (
                         <button
                             onClick={() => setSelectedDate('')}
-                            className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
+                            className="px-4 py-2 text-sm font-semibold text-muted-foreground rounded-lg hover:bg-accent transition"
                             aria-label="Clear date filter"
                         >
                             Clear
@@ -108,7 +108,7 @@ const CourierCompleted: React.FC<CourierCompletedProps> = ({ onSelectShipment })
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <ShipmentList 
                     shipments={completedShipments} 
                     onSelect={onSelectShipment} 

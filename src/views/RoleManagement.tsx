@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Permission, CustomRole } from '../types';
@@ -22,8 +20,8 @@ const RoleManagement = () => {
     if (!hasPermission(Permission.MANAGE_ROLES)) {
         return (
             <div className="text-center p-8">
-                <h2 className="text-2xl font-bold text-slate-800">Access Denied</h2>
-                <p className="text-slate-600">You do not have permission to manage roles.</p>
+                <h2 className="text-2xl font-bold text-foreground">Access Denied</h2>
+                <p className="text-muted-foreground">You do not have permission to manage roles.</p>
             </div>
         );
     }
@@ -61,10 +59,10 @@ const RoleManagement = () => {
         <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold text-slate-800">Role Management</h2>
-                    <p className="text-slate-500 mt-1">Define roles and manage their permissions across the application.</p>
+                    <h2 className="text-3xl font-bold text-foreground">Role Management</h2>
+                    <p className="text-muted-foreground mt-1">Define roles and manage their permissions across the application.</p>
                 </div>
-                <button onClick={() => openModal('add')} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition shadow-sm">
+                <button onClick={() => openModal('add')} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-3 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary/90 transition shadow-sm">
                     <PlusCircleIcon className="w-5 h-5"/>
                     Create New Role
                 </button>
@@ -80,30 +78,30 @@ const RoleManagement = () => {
                 {customRoles.map(role => {
                     const userCount = users.filter(u => (u.roles || []).includes(role.name)).length;
                     return (
-                        <div key={role.id} className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+                        <div key={role.id} className="card flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                             <div className="p-5">
                                 <div className="flex justify-between items-start">
-                                    <h3 className="text-lg font-bold text-slate-800">{role.name}</h3>
-                                    {role.isSystemRole && <span title="System Role"><LockClosedIcon className="w-5 h-5 text-slate-400" /></span>}
+                                    <h3 className="text-lg font-bold text-foreground">{role.name}</h3>
+                                    {role.isSystemRole && <span title="System Role"><LockClosedIcon className="w-5 h-5 text-muted-foreground" /></span>}
                                 </div>
-                                <p className="text-sm text-slate-500 mt-2">A system-defined role with a set of permissions for core functionalities.</p>
+                                <p className="text-sm text-muted-foreground mt-2">A system-defined role with a set of permissions for core functionalities.</p>
                             </div>
-                            <div className="p-5 border-y border-slate-200 bg-slate-50 flex-grow grid grid-cols-2 gap-4">
+                            <div className="p-5 border-y border-border bg-secondary flex-grow grid grid-cols-2 gap-4">
                                 <div className="text-center">
-                                    <p className="text-2xl font-bold text-primary-600">{userCount}</p>
-                                    <p className="text-xs font-medium text-slate-500 uppercase">Users</p>
+                                    <p className="text-2xl font-bold text-primary">{userCount}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Users</p>
                                 </div>
                                 <div className="text-center">
-                                    <p className="text-2xl font-bold text-primary-600">{role.permissions.length}</p>
-                                    <p className="text-xs font-medium text-slate-500 uppercase">Permissions</p>
+                                    <p className="text-2xl font-bold text-primary">{role.permissions.length}</p>
+                                    <p className="text-xs font-medium text-muted-foreground uppercase">Permissions</p>
                                 </div>
                             </div>
                             <div className="p-3 flex items-center justify-end gap-2">
-                                <button onClick={() => openModal('edit', role)} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition text-sm">
+                                <button onClick={() => openModal('edit', role)} className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground font-semibold rounded-lg hover:bg-accent transition text-sm">
                                     <PencilIcon className="w-4 h-4"/>
                                     Edit
                                 </button>
-                                <button onClick={() => handleDeleteClick(role)} disabled={role.isSystemRole} className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-700 font-semibold rounded-lg hover:bg-red-100 transition text-sm disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed">
+                                <button onClick={() => handleDeleteClick(role)} disabled={role.isSystemRole} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-700 dark:text-red-400 font-semibold rounded-lg hover:bg-red-500/20 transition text-sm disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed">
                                     <TrashIcon className="w-4 h-4"/>
                                     Delete
                                 </button>
@@ -128,9 +126,9 @@ const RoleManagement = () => {
                  {roleToDelete && (
                     <div>
                         <p>Are you sure you want to delete the role <strong>{roleToDelete.name}</strong>?</p>
-                        <p className="text-sm text-slate-600 mt-2">Users with this role will lose their permissions. This action cannot be undone.</p>
+                        <p className="text-sm text-muted-foreground mt-2">Users with this role will lose their permissions. This action cannot be undone.</p>
                         <div className="flex justify-end gap-4 mt-6">
-                            <button onClick={() => setRoleToDelete(null)} className="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Cancel</button>
+                            <button onClick={() => setRoleToDelete(null)} className="px-4 py-2 bg-secondary rounded-lg font-semibold">Cancel</button>
                             <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Delete Role</button>
                         </div>
                     </div>
@@ -155,12 +153,12 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
     const [selectedPermissions, setSelectedPermissions] = useState<Permission[]>(role?.permissions || []);
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
-    const permissionGroups = useMemo(() => Object.values(Permission).reduce((acc, p) => {
+    const permissionGroups = useMemo(() => Object.values(Permission).reduce((acc: Record<string, Permission[]>, p) => {
         const group = p.split('_')[0];
         if (!acc[group]) acc[group] = [];
         acc[group].push(p);
         return acc;
-    }, {} as Record<string, Permission[]>), []);
+    }, {}), []);
 
     const toggleSection = (groupName: string) => {
         setOpenSections(prev => ({ ...prev, [groupName]: !prev[groupName] }));
@@ -177,16 +175,17 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
     
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const roleData = { name, permissions: selectedPermissions };
         if (mode === 'add') {
+            const roleData = { name, permissions: selectedPermissions, isSystemRole: false };
             addRole(roleData).then(onClose);
         } else if (role) {
+            const roleData = { name, permissions: selectedPermissions };
             updateRole(role.id, roleData).then(onClose);
         }
     };
 
     const ToggleSwitch: React.FC<{ checked: boolean; onChange: (checked: boolean) => void; }> = ({ checked, onChange }) => (
-        <button type="button" onClick={() => onChange(!checked)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${checked ? 'bg-primary-600' : 'bg-slate-300'}`}>
+        <button type="button" onClick={() => onChange(!checked)} className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${checked ? 'bg-primary' : 'bg-muted'}`}>
             <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
     );
@@ -195,40 +194,40 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
         <Modal isOpen={isOpen} onClose={onClose} title={mode === 'add' ? 'Create New Role' : `Edit Role: ${role?.name}`} size="4xl">
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Role Name</label>
+                    <label className="block text-sm font-medium text-muted-foreground mb-1">Role Name</label>
                     <input 
                         type="text" 
                         value={name} 
                         onChange={e => setName(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full px-4 py-2 border border-border rounded-lg bg-background"
                         required 
                         disabled={role?.isSystemRole}
                     />
-                     {role?.isSystemRole && <p className="text-xs text-slate-500 mt-2 p-2 bg-slate-100 rounded">Permissions for system roles can be modified, but the role name is fixed.</p>}
+                     {role?.isSystemRole && <p className="text-xs text-muted-foreground mt-2 p-2 bg-secondary rounded">Permissions for system roles can be modified, but the role name is fixed.</p>}
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Permissions</label>
-                    <div className="space-y-2 max-h-[60vh] overflow-y-auto p-4 bg-slate-50 rounded-lg border">
+                    <label className="block text-sm font-medium text-muted-foreground mb-2">Permissions</label>
+                    <div className="space-y-2 max-h-[60vh] overflow-y-auto p-4 bg-secondary rounded-lg border border-border">
                         {Object.entries(permissionGroups).map(([groupName, permissions]) => {
                             const isAllSelected = permissions.every(p => selectedPermissions.includes(p));
                             return (
-                                <div key={groupName} className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                                <div key={groupName} className="bg-background border border-border rounded-lg overflow-hidden">
                                     <button type="button" onClick={() => toggleSection(groupName)} className="w-full flex justify-between items-center p-4">
-                                        <h4 className="font-semibold text-slate-700 capitalize">{groupName}</h4>
-                                        <ChevronDownIcon className={`w-5 h-5 text-slate-500 transition-transform ${openSections[groupName] ? 'rotate-180' : ''}`} />
+                                        <h4 className="font-semibold text-foreground capitalize">{groupName}</h4>
+                                        <ChevronDownIcon className={`w-5 h-5 text-muted-foreground transition-transform ${openSections[groupName] ? 'rotate-180' : ''}`} />
                                     </button>
                                     {openSections[groupName] && (
-                                        <div className="p-4 border-t border-slate-200">
-                                            <div className="pb-3 mb-3 border-b border-slate-200">
+                                        <div className="p-4 border-t border-border">
+                                            <div className="pb-3 mb-3 border-b border-border">
                                                 <label className="flex items-center gap-3 w-full cursor-pointer">
-                                                    <input type="checkbox" checked={isAllSelected} onChange={(e) => handleSelectAll(groupName, e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-                                                    <span className="text-sm font-semibold text-slate-600">Select All</span>
+                                                    <input type="checkbox" checked={isAllSelected} onChange={(e) => handleSelectAll(groupName, e.target.checked)} className="h-4 w-4 rounded border-border text-primary focus:ring-primary" />
+                                                    <span className="text-sm font-semibold text-muted-foreground">Select All</span>
                                                 </label>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                                 {permissions.map(p => (
                                                     <label key={p} className="flex items-center justify-between">
-                                                        <span className="text-sm text-slate-700">{formatPermissionName(p)}</span>
+                                                        <span className="text-sm text-foreground">{formatPermissionName(p)}</span>
                                                         <ToggleSwitch
                                                             checked={selectedPermissions.includes(p)}
                                                             onChange={(isChecked) => {
@@ -250,8 +249,8 @@ const RoleModal: React.FC<RoleModalProps> = ({ isOpen, onClose, mode, role, addR
                     </div>
                 </div>
                 <div className="flex justify-end gap-4 pt-4">
-                    <button type="button" onClick={onClose} className="px-6 py-2 bg-slate-200 rounded-lg font-semibold text-slate-800 hover:bg-slate-300 transition">Cancel</button>
-                    <button type="submit" className="px-6 py-2 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition">{mode === 'add' ? 'Create Role' : 'Save Changes'}</button>
+                    <button type="button" onClick={onClose} className="px-6 py-2 bg-secondary text-secondary-foreground rounded-lg font-semibold hover:bg-accent transition">Cancel</button>
+                    <button type="submit" className="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition">{mode === 'add' ? 'Create Role' : 'Save Changes'}</button>
                 </div>
             </form>
         </Modal>

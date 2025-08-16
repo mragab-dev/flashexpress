@@ -12,6 +12,15 @@ interface ShipmentsViewProps {
     onSelectShipment: (shipment: Shipment) => void;
 }
 
+const isShipmentOverdue = (shipment: Shipment) => {
+    if ([ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(shipment.status)) {
+        return false;
+    }
+    const twoAndHalfDaysAgo = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000);
+    return new Date(shipment.creationDate) < twoAndHalfDaysAgo;
+};
+
+
 const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     const { currentUser, shipments, users, updateShipmentFees, getCourierName, hasPermission } = useAppContext();
     
@@ -20,6 +29,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     const [selectedClientId, setSelectedClientId] = useState<'all' | number>('all');
     const [selectedStatus, setSelectedStatus] = useState<'all' | ShipmentStatus>('all');
     const [selectedDate, setSelectedDate] = useState<string>('');
+    const [showOverdueOnly, setShowOverdueOnly] = useState(false);
     
     const clients = users.filter(u => (u.roles || []).includes(UserRole.CLIENT));
 
@@ -53,13 +63,17 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
             filtered = filtered.filter(s => s.status === selectedStatus);
         }
         
+        if (showOverdueOnly) {
+            filtered = filtered.filter(isShipmentOverdue);
+        }
+
         // Admin-only filter
         if (canViewAll && selectedClientId !== 'all') {
             filtered = filtered.filter(s => s.clientId === selectedClientId);
         }
         
         return filtered.sort((a, b) => new Date(b.creationDate).getTime() - new Date(a.creationDate).getTime());
-    }, [currentUser, shipments, selectedDate, searchTerm, selectedClientId, selectedStatus, canViewAll]);
+    }, [currentUser, shipments, selectedDate, searchTerm, selectedClientId, selectedStatus, canViewAll, showOverdueOnly]);
 
     const handleExport = () => {
         if (!currentUser) return;
@@ -111,19 +125,19 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
     return (
         <>
             <div className="flex justify-between items-center mb-4">
-                 <h2 className="text-2xl font-bold text-slate-800">
+                 <h2 className="text-2xl font-bold text-foreground">
                    {canViewAll ? 'All Shipments' : 'My Shipments'}
                </h2>
             </div>
             
-            <div className="mb-6 bg-white p-4 rounded-xl shadow-sm flex flex-col lg:flex-row gap-4 items-center flex-wrap">
+            <div className="mb-6 card flex flex-col lg:flex-row gap-4 items-center flex-wrap">
                 <div className="flex-grow w-full lg:w-auto">
                     <input 
                         type="text"
                         placeholder={canViewAll ? "Search by Shipment ID or Recipient..." : "Search by ID or Recipient..."}
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     />
                 </div>
                 {canViewAll && (
@@ -131,7 +145,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                         <select
                             value={selectedClientId}
                             onChange={e => setSelectedClientId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                            className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                         >
                             <option value="all">All Clients</option>
                             {clients.map(client => (
@@ -144,7 +158,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                     <select
                         value={selectedStatus}
                         onChange={e => setSelectedStatus(e.target.value as 'all' | ShipmentStatus)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                     >
                         <option value="all">All Statuses</option>
                         {Object.values(ShipmentStatus).map(status => (
@@ -158,18 +172,31 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                         aria-label="Filter by creation date"
                     />
                     {selectedDate && (
                         <button
                             onClick={() => setSelectedDate('')}
-                            className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-200 transition"
+                            className="px-4 py-2 text-sm font-semibold text-muted-foreground rounded-lg hover:bg-accent transition"
                             aria-label="Clear date filter"
                         >
                             Clear
                         </button>
                     )}
+                </div>
+
+                <div className="flex items-center">
+                    <input
+                        type="checkbox"
+                        id="overdue-filter"
+                        checked={showOverdueOnly}
+                        onChange={e => setShowOverdueOnly(e.target.checked)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    />
+                    <label htmlFor="overdue-filter" className="ml-2 text-sm font-medium text-foreground">
+                        Show Overdue Only
+                    </label>
                 </div>
                 
                 <div className="lg:ml-auto w-full lg:w-auto">
@@ -179,7 +206,7 @@ const ShipmentsView: React.FC<ShipmentsViewProps> = ({ onSelectShipment }) => {
                    </button>
                 </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="card overflow-hidden">
                 <ShipmentList 
                     shipments={visibleShipments} 
                     onSelect={onSelectShipment}

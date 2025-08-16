@@ -1,3 +1,5 @@
+// src/components/specific/TrackingTimeline.tsx
+
 
 
 import React from 'react';
@@ -10,9 +12,8 @@ const statusOrderMapping: Record<string, number> = {
     [ShipmentStatus.WAITING_FOR_PACKAGING]: 0,
     [ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT]: 1,
     [ShipmentStatus.ASSIGNED_TO_COURIER]: 2,
-    [ShipmentStatus.IN_TRANSIT]: 3,
-    [ShipmentStatus.OUT_FOR_DELIVERY]: 4,
-    [ShipmentStatus.DELIVERED]: 5,
+    [ShipmentStatus.OUT_FOR_DELIVERY]: 3,
+    [ShipmentStatus.DELIVERED]: 4,
     // This status is handled separately
     [ShipmentStatus.DELIVERY_FAILED]: -1,
 };
@@ -22,7 +23,6 @@ const timelineSteps = [
     { status: ShipmentStatus.WAITING_FOR_PACKAGING, icon: <ClipboardListIcon />, title: 'Shipment Created', description: 'The shipment request has been received.' },
     { status: ShipmentStatus.PACKAGED_AND_WAITING_FOR_ASSIGNMENT, icon: <ArchiveBoxIcon />, title: 'Packaged', description: 'Your shipment is packaged and awaiting a courier.' },
     { status: ShipmentStatus.ASSIGNED_TO_COURIER, icon: <UserCircleIcon />, title: 'Courier Assigned', description: 'A courier has been assigned to the package.' },
-    { status: ShipmentStatus.IN_TRANSIT, icon: <TruckIcon />, title: 'In Transit', description: 'The package is on its way to the destination city.' },
     { status: ShipmentStatus.OUT_FOR_DELIVERY, icon: <TruckIcon />, title: 'Out for Delivery', description: 'The package is on its final leg of the journey.' },
     { status: ShipmentStatus.DELIVERED, icon: <CheckCircleIcon />, title: 'Delivered', description: 'The package has been successfully delivered.' },
 ];
@@ -38,7 +38,7 @@ export const TrackingTimeline: React.FC<{ shipment: Shipment }> = ({ shipment })
     return (
         <div className="relative">
             {/* The vertical line */}
-            <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-slate-200"></div>
+            <div className="absolute left-4 top-4 bottom-4 w-0.5 bg-border"></div>
 
             <div className="space-y-8">
                 {timelineSteps.map((step, index) => {
@@ -49,13 +49,13 @@ export const TrackingTimeline: React.FC<{ shipment: Shipment }> = ({ shipment })
                     return (
                         <div key={step.status} className="relative flex items-start">
                             <div className={`absolute left-0 top-1 flex items-center justify-center w-8 h-8 rounded-full z-10 ${
-                                isCompleted ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-500'
+                                isCompleted ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'
                             }`}>
                                 {React.cloneElement(step.icon, { className: 'w-5 h-5' })}
                             </div>
                             <div className="pl-12">
-                                <p className={`font-bold pt-1 ${isCompleted ? 'text-slate-800' : 'text-slate-500'}`}>{step.title}</p>
-                                <p className="text-sm text-slate-600">{step.description}</p>
+                                <p className={`font-bold pt-1 ${isCompleted ? 'text-foreground' : 'text-muted-foreground'}`}>{step.title}</p>
+                                <p className="text-sm text-muted-foreground">{step.description}</p>
                                 {isCompleted && historyEntry && (
                                      <p className="text-xs text-green-600 font-medium mt-1">{new Date(historyEntry.timestamp).toLocaleString()}</p>
                                 )}
@@ -70,8 +70,8 @@ export const TrackingTimeline: React.FC<{ shipment: Shipment }> = ({ shipment })
                             <XCircleIcon className="w-5 h-5"/>
                         </div>
                         <div className="pl-12">
-                            <p className="font-bold pt-1 text-red-800">Delivery Attempt Failed</p>
-                            <p className="text-sm text-slate-600">{shipment.failureReason || 'The courier was unable to deliver the package.'}</p>
+                            <p className="font-bold pt-1 text-red-800 dark:text-red-300">Delivery Attempt Failed</p>
+                            <p className="text-sm text-muted-foreground">{shipment.failureReason || 'The courier was unable to deliver the package.'}</p>
                         </div>
                     </div>
                 )}

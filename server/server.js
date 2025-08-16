@@ -1,4 +1,4 @@
-// server.js - Your new backend file
+// server/server.js - Your new backend file
 
 // 1. Import necessary libraries
 const express = require('express');
@@ -69,7 +69,7 @@ async function main() {
         const twoAndHalfDaysAgo = new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000).toISOString();
         try {
             const overdueCandidates = await knex('shipments')
-                .whereIn('status', ['In Transit', 'Out for Delivery', 'Assigned to Courier'])
+                .whereIn('status', ['Out for Delivery', 'Assigned to Courier'])
                 .where('creationDate', '<', twoAndHalfDaysAgo);
 
             for (const shipment of overdueCandidates) {
@@ -247,6 +247,12 @@ async function main() {
     };
 
     const createNotification = async (trx, shipment, newStatus) => {
+        // Add guard clause to prevent crash on undefined status
+        if (!newStatus || typeof newStatus !== 'string') {
+            console.warn(`createNotification was called for shipment ${shipment.id} with an invalid status. Notification will be skipped.`);
+            return;
+        }
+
         const client = await trx('users').where({ id: shipment.clientId }).first();
         if (!client) return;
 
@@ -260,17 +266,10 @@ async function main() {
             message: message,
             date: new Date().toISOString(),
             status: newStatus,
-            sent: false,
+            sent: false, // Set to false, emails are now sent manually
         };
 
         await trx('notifications').insert(notification);
-        
-        sendEmail({ recipient: client.email, subject: `Shipment ${shipment.id} is now ${newStatus}`, message }).then(async sent => {
-            if (sent) {
-                await knex('notifications').where({ id: notification.id }).update({ sent: true });
-                io.emit('data_updated');
-            }
-        }).catch(err => console.error("Async email send failed:", err));
     };
 
     const processDeliveredShipment = async (trx, shipment) => {
@@ -544,10 +543,11 @@ async function main() {
 
     app.put('/api/users/:id', async (req, res) => {
         const { id } = req.params;
-        const { address, roles, zones, ...userData } = req.body;
+        const { address, roles, zones, priorityMultipliers, ...userData } = req.body;
         if (address) userData.address = JSON.stringify(address);
         if (roles) userData.roles = JSON.stringify(roles);
         if (zones) userData.zones = JSON.stringify(zones);
+        if (priorityMultipliers) userData.priorityMultipliers = JSON.stringify(priorityMultipliers);
         
         try {
             // Do not allow password to be changed via this generic endpoint
@@ -630,10 +630,14 @@ async function main() {
                     }
                 }
 
-                let finalPrice = shipmentData.packageValue + clientFee;
-                if (shipmentData.paymentMethod === 'InstaPay') {
-                    finalPrice = 0; // Pre-paid, no COD
+                let finalPrice;
+                if (shipmentData.paymentMethod === 'Transfer') {
+                    // For Transfer, COD amount is what's left to collect
+                    finalPrice = shipmentData.amountToCollect || 0; 
+                } else {
+                    finalPrice = shipmentData.packageValue + clientFee;
                 }
+
 
                 const govMap = { 'Cairo': 'CAI', 'Giza': 'GIZ', 'Alexandria': 'ALX' };
                 const govCode = govMap[shipmentData.toAddress.city] || 'GOV';
@@ -662,7 +666,9 @@ async function main() {
                     statusHistory: JSON.stringify(statusHistory),
                     creationDate: new Date().toISOString(),
                     fromAddress: JSON.stringify(shipmentData.fromAddress),
-                    toAddress: JSON.stringify(shipmentData.toAddress)
+                    toAddress: JSON.stringify(shipmentData.toAddress),
+                    amountReceived: shipmentData.paymentMethod === 'Transfer' ? shipmentData.amountReceived : null,
+                    amountToCollect: shipmentData.paymentMethod === 'Transfer' ? shipmentData.amountToCollect : null,
                 };
     
                 await trx('shipments').insert(newShipment);
@@ -679,81 +685,108 @@ async function main() {
 
     app.put('/api/shipments/:id/status', async (req, res) => {
         const { id } = req.params;
-        const { status, failureReason, failurePhoto } = req.body;
+        const { status, failureReason, failurePhoto, isRevert } = req.body;
     
         try {
             await knex.transaction(async (trx) => {
                 const shipment = await trx('shipments').where({ id }).first();
                 if (!shipment) {
-                    const err = new Error('Shipment not found');
-                    err.statusCode = 404;
-                    throw err;
-                }
-                
-                if (status === 'Delivered') {
-                    const err = new Error("Deliveries must be confirmed via the verification endpoint.");
-                    err.statusCode = 400;
-                    throw err;
+                    const err = new Error('Shipment not found'); err.statusCode = 404; throw err;
                 }
     
-                const updatePayload = { status };
-                if (req.body.hasOwnProperty('failureReason')) updatePayload.failureReason = failureReason || null;
-                
-                // Handle photo upload for failure
-                if (status === 'Delivery Failed' && failurePhoto) {
-                    try {
-                        const matches = failurePhoto.match(/^data:(.+?);base64,(.+)$/);
-                        if (matches && matches.length === 3) {
-                            const imageType = matches[1].split('/')[1];
-                            const buffer = Buffer.from(matches[2], 'base64');
-                            const fileName = `${shipment.id}_${Date.now()}.${imageType}`;
-                            const filePath = path.join(uploadsDir, fileName);
-                            
-                            fs.writeFileSync(filePath, buffer);
-                            updatePayload.failurePhotoPath = `uploads/${fileName}`;
-                        }
-                    } catch (e) { console.error('Could not save failure photo:', e); }
-                }
-
+                let newStatus;
+                let updatePayload = {};
                 const currentHistory = JSON.parse(shipment.statusHistory || '[]');
-                currentHistory.push({ status: status, timestamp: new Date().toISOString() });
-                updatePayload.statusHistory = JSON.stringify(currentHistory);
-
-                await trx('shipments').where({ id }).update(updatePayload);
     
-                await createNotification(trx, shipment, status);
+                if (isRevert) {
+                    // --- REVERT LOGIC ---
+                    if (currentHistory.length <= 1) {
+                        const err = new Error('Cannot revert initial status.'); err.statusCode = 400; throw err;
+                    }
+                    newStatus = currentHistory[currentHistory.length - 2]?.status;
+                    if (!newStatus) {
+                        const err = new Error('Could not determine previous status to revert to.'); err.statusCode = 400; throw err;
+                    }
     
-                if (status === 'Delivery Failed') {
-                    // Penalize courier
-                    if (shipment.courierId) {
-                        const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
-                        if (courierStats) {
-                            const newFailures = (courierStats.consecutiveFailures || 0) + 1;
-                            const failureLimit = 3;
-                            const shouldRestrict = newFailures >= failureLimit;
-                            await trx('courier_stats').where({ courierId: shipment.courierId }).update({
-                                consecutiveFailures: newFailures,
-                                isRestricted: shouldRestrict,
-                                restrictionReason: shouldRestrict ? `Exceeded failure limit of ${failureLimit}.` : null
+                    if (shipment.status === 'Packaged and Waiting for Assignment' && newStatus === 'Waiting for Packaging') {
+                        // When reverting from 'Packaged' to 'Waiting', we clear the packaging log from the shipment
+                        // but DO NOT return items to inventory, as the physical package is likely still packed.
+                        updatePayload = { status: newStatus, packagingLog: null, packagingNotes: null };
+                    } else if (shipment.status === 'Assigned to Courier' && newStatus === 'Packaged and Waiting for Assignment') {
+                        updatePayload = { status: newStatus, courierId: null, courierCommission: null };
+                    } else {
+                        const err = new Error(`Reverting from ${shipment.status} is not supported.`); err.statusCode = 400; throw err;
+                    }
+                    currentHistory.pop();
+                    updatePayload.statusHistory = JSON.stringify(currentHistory);
+    
+                } else {
+                    // --- STANDARD UPDATE LOGIC ---
+                    newStatus = status;
+                    if (typeof newStatus !== 'string' || !newStatus) {
+                        const err = new Error('A valid shipment status must be provided.'); err.statusCode = 400; throw err;
+                    }
+                    if (newStatus === 'Delivered') {
+                        const err = new Error("Deliveries must be confirmed via the verification endpoint."); err.statusCode = 400; throw err;
+                    }
+    
+                    updatePayload = { status: newStatus };
+                    if (req.body.hasOwnProperty('failureReason')) updatePayload.failureReason = failureReason || null;
+                    
+                    if (newStatus === 'Delivery Failed' && failurePhoto) {
+                        try {
+                            const matches = failurePhoto.match(/^data:(.+?);base64,(.+)$/);
+                            if (matches && matches.length === 3) {
+                                const imageType = matches[1].split('/')[1];
+                                const buffer = Buffer.from(matches[2], 'base64');
+                                const fileName = `${shipment.id}_${Date.now()}.${imageType}`;
+                                const filePath = path.join(uploadsDir, fileName);
+                                fs.writeFileSync(filePath, buffer);
+                                updatePayload.failurePhotoPath = `uploads/${fileName}`;
+                            }
+                        } catch (e) { console.error('Could not save failure photo:', e); }
+                    }
+    
+                    currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
+                    updatePayload.statusHistory = JSON.stringify(currentHistory);
+                    
+                    if (newStatus === 'Delivery Failed') {
+                        // Handle failure side-effects
+                        if (shipment.courierId) {
+                            const courierStats = await trx('courier_stats').where({ courierId: shipment.courierId }).first();
+                            if (courierStats) {
+                                const newFailures = (courierStats.consecutiveFailures || 0) + 1;
+                                const failureLimit = 3;
+                                const shouldRestrict = newFailures >= failureLimit;
+                                await trx('courier_stats').where({ courierId: shipment.courierId }).update({
+                                    consecutiveFailures: newFailures,
+                                    isRestricted: shouldRestrict,
+                                    restrictionReason: shouldRestrict ? `Exceeded failure limit of ${failureLimit}.` : null
+                                });
+                                await createInAppNotification(trx, shipment.courierId, `Delivery failed for shipment ${shipment.id}. A penalty may be applied.`, '/courier-financials');
+                            }
+                        }
+                        const clientFee = shipment.clientFlatRateFee || 0;
+                        if (shipment.clientId && clientFee > 0) {
+                            await trx('client_transactions').insert({
+                                id: generateId('TRN_FAIL'), userId: shipment.clientId, type: 'Payment',
+                                amount: -Math.abs(clientFee), date: new Date().toISOString(),
+                                description: `Fee for rejected shipment ${id}`, status: 'Processed'
                             });
-                            await createInAppNotification(trx, shipment.courierId, `Delivery failed for shipment ${shipment.id}. A penalty may be applied.`, '/courier-financials');
                         }
                     }
-                    // Deduct fee from client's wallet
-                    const clientFee = shipment.clientFlatRateFee || 0;
-                    if (shipment.clientId && clientFee > 0) {
-                        await trx('client_transactions').insert({
-                            id: generateId('TRN_FAIL'),
-                            userId: shipment.clientId,
-                            type: 'Payment',
-                            amount: -Math.abs(clientFee),
-                            date: new Date().toISOString(),
-                            description: `Fee for rejected shipment ${id}`,
-                            status: 'Processed'
-                        });
-                    }
                 }
+    
+                // --- COMMIT CHANGES & NOTIFY ---
+                // Ensure we have a valid status before proceeding
+                if (!newStatus || typeof newStatus !== 'string') {
+                    const err = new Error('Internal Server Error: Invalid status determined.'); err.statusCode = 500; throw err;
+                }
+    
+                await trx('shipments').where({ id }).update(updatePayload);
+                await createNotification(trx, shipment, newStatus);
             });
+    
             res.status(200).json({ success: true });
             io.emit('data_updated');
         } catch (error) {
@@ -831,7 +864,7 @@ async function main() {
                     .select('users.*');
 
                 const activeShipments = await trx('shipments')
-                    .whereIn('status', ['Assigned to Courier', 'In Transit', 'Out for Delivery'])
+                    .whereIn('status', ['Assigned to Courier', 'Out for Delivery'])
                     .select('id', 'courierId');
 
                 const courierWorkload = couriers.reduce((acc, c) => {
@@ -848,7 +881,6 @@ async function main() {
                     if (suitableCouriers.length > 0) {
                         const bestCourier = suitableCouriers[0];
                         
-                        // Perform assignment logic (copied from individual assign endpoint)
                         const client = await trx('users').where({ id: shipment.clientId }).first();
                         const courierStats = await trx('courier_stats').where({ courierId: bestCourier.id }).first();
                         const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
@@ -1082,6 +1114,30 @@ async function main() {
             io.emit('data_updated');
         }
         catch (error) { res.status(500).json({ error: 'Server error' }); }
+    });
+
+    app.put('/api/payouts/:id/decline', async (req, res) => {
+        const { id } = req.params;
+        try {
+            await knex.transaction(async trx => {
+                const payoutRequest = await trx('courier_transactions').where({ id }).first();
+                if (!payoutRequest) return res.status(404).json({ error: 'Payout request not found.' });
+
+                const updatePayload = {
+                    status: 'Failed',
+                    type: 'Withdrawal Declined',
+                    description: `Payout request for ${(-payoutRequest.amount).toFixed(2)} EGP declined by admin.`
+                };
+                
+                const [payout] = await trx('courier_transactions').where({ id }).update(updatePayload).returning('*');
+                await createInAppNotification(trx, payout.courierId, `Your payout request for ${(-payout.amount).toFixed(2)} EGP has been declined.`, '/courier-financials');
+            });
+            res.status(200).json({ success: true });
+            io.emit('data_updated');
+        } catch(error) {
+            console.error("Error declining payout:", error);
+            res.status(500).json({ error: 'Server error declining payout request' });
+        }
     });
 
     // --- NEW: Client Payouts ---

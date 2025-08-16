@@ -1,5 +1,358 @@
 // src/types.ts
 
+// --- ENUMS ---
+
+export enum UserRole {
+    ADMIN = 'Administrator',
+    SUPER_USER = 'Super User',
+    CLIENT = 'Client',
+    COURIER = 'Courier',
+    ASSIGNING_USER = 'Assigning User'
+}
+
+export enum ShipmentStatus {
+    WAITING_FOR_PACKAGING = 'Waiting for Packaging',
+    PACKAGED_AND_WAITING_FOR_ASSIGNMENT = 'Packaged and Waiting for Assignment',
+    ASSIGNED_TO_COURIER = 'Assigned to Courier',
+    OUT_FOR_DELIVERY = 'Out for Delivery',
+    DELIVERED = 'Delivered',
+    DELIVERY_FAILED = 'Delivery Failed',
+}
+
+export enum PaymentMethod {
+    COD = 'COD',
+    WALLET = 'Wallet',
+    TRANSFER = 'Transfer',
+}
+
+export enum ShipmentPriority {
+    STANDARD = 'Standard',
+    URGENT = 'Urgent',
+    EXPRESS = 'Express',
+}
+
+export enum CommissionType {
+    FLAT = 'flat',
+    PERCENTAGE = 'percentage',
+}
+
+export enum CourierTransactionType {
+    COMMISSION = 'Commission',
+    PENALTY = 'Penalty',
+    BONUS = 'Bonus',
+    WITHDRAWAL_REQUEST = 'Withdrawal Request',
+    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
+    WITHDRAWAL_DECLINED = 'Withdrawal Declined',
+    REFERRAL_BONUS = 'Referral Bonus',
+}
+
+export enum CourierTransactionStatus {
+    PENDING = 'Pending',
+    PROCESSED = 'Processed',
+    FAILED = 'Failed',
+}
+
+export enum TransactionType {
+    DEPOSIT = 'Deposit',
+    PAYMENT = 'Payment',
+    WITHDRAWAL_REQUEST = 'Withdrawal Request',
+    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
+}
+
+export type ClientTransactionStatus = 'Pending' | 'Processed' | 'Failed';
+
+
+export enum NotificationChannel {
+    EMAIL = 'Email',
+    SMS = 'SMS',
+    SYSTEM = 'System',
+}
+
+export enum AssetType {
+    VEHICLE = 'Vehicle',
+    DEVICE = 'Device',
+    EQUIPMENT = 'Equipment',
+    OTHER = 'Other',
+}
+
+export enum AssetStatus {
+    AVAILABLE = 'Available',
+    ASSIGNED = 'Assigned',
+    IN_REPAIR = 'In Repair',
+    RETIRED = 'Retired',
+}
+
+export enum PartnerTier {
+    BRONZE = 'Bronze',
+    SILVER = 'Silver',
+    GOLD = 'Gold',
+}
+
+// --- INTERFACES & TYPES ---
+
+export type Address = {
+    street: string;
+    city: string;
+    zone: string;
+    details?: string;
+};
+
+export type PackagingLogEntry = {
+    inventoryItemId: string;
+    itemName: string;
+    quantityUsed: number;
+};
+
+export type StatusHistoryEntry = {
+    status: ShipmentStatus | string; // Allow for legacy or custom statuses
+    timestamp: string;
+};
+
+
+export type Shipment = {
+    id: string;
+    clientId: number;
+    clientName: string;
+    recipientName: string;
+    recipientPhone: string;
+    fromAddress: Address;
+    toAddress: Address;
+    packageDescription: string;
+    isLargeOrder: boolean;
+    price: number;
+    paymentMethod: PaymentMethod;
+    status: ShipmentStatus;
+    courierId?: number;
+    creationDate: string;
+    deliveryDate?: string;
+    priority: ShipmentPriority;
+    packageValue: number;
+    clientFlatRateFee?: number;
+    courierCommission?: number;
+    failureReason?: string;
+    failurePhotoPath?: string;
+    packagingNotes?: string;
+    packagingLog?: PackagingLogEntry[];
+    statusHistory?: StatusHistoryEntry[];
+    amountReceived?: number;
+    amountToCollect?: number;
+};
+
+export type User = {
+    id: number;
+    publicId: string;
+    name: string;
+    email: string;
+    password?: string;
+    roles: UserRole[] | string[];
+    phone?: string;
+    address?: Address;
+    zones?: string[];
+    flatRateFee?: number;
+    taxCardNumber?: string;
+    priorityMultipliers?: {
+        [ShipmentPriority.STANDARD]: number;
+        [ShipmentPriority.URGENT]: number;
+        [ShipmentPriority.EXPRESS]: number;
+    };
+    walletBalance?: number; // Calculated on frontend
+    permissions?: Permission[]; // Calculated on frontend
+    location?: { lat: number; lng: number };
+    referrerId?: number;
+    referralCommission?: number;
+    partnerTier?: PartnerTier;
+    manualTierAssignment?: boolean;
+};
+
+export type ClientTransaction = {
+    id: string;
+    userId: number;
+    type: TransactionType;
+    amount: number;
+    date: string;
+    description: string;
+    status?: ClientTransactionStatus;
+};
+
+export type CourierStats = {
+    courierId: number;
+    commissionType: CommissionType;
+    commissionValue: number;
+    consecutiveFailures: number;
+    isRestricted: boolean;
+    restrictionReason?: string;
+    performanceRating: number;
+    // Calculated on frontend
+    totalEarnings: number;
+    currentBalance: number;
+    pendingEarnings: number;
+    deliveriesCompleted: number;
+    deliveriesFailed: number;
+};
+
+export type CourierTransaction = {
+    id: string;
+    courierId: number;
+    type: CourierTransactionType;
+    amount: number;
+    description?: string;
+    shipmentId?: string;
+    timestamp: string;
+    status: CourierTransactionStatus;
+    paymentMethod?: 'Cash' | 'Bank Transfer';
+    transferEvidencePath?: string;
+};
+
+export type Notification = {
+    id: string;
+    shipmentId: string;
+    channel: NotificationChannel;
+    recipient: string;
+    message: string;
+    date: string;
+    status: ShipmentStatus;
+    sent: boolean;
+};
+
+export type Toast = {
+    id: number;
+    message: string;
+    type: 'success' | 'error' | 'info';
+    duration?: number;
+};
+
+export type FinancialSettings = {
+    taxRate: number; // as percentage
+    defaultCommission: number; // flat rate
+};
+
+export type AdminFinancials = {
+    totalCollectedMoney: number;
+    undeliveredPackagesValue: number;
+    uncollectedTransferFees: number;
+    totalOwedToCouriers: number;
+    totalRevenue: number;
+    totalFees: number;
+    totalCommission: number;
+    netRevenue: number;
+    cashToCollect: number;
+    totalCODCollected: number;
+    totalOrders: number;
+};
+
+export type ClientFinancialSummary = {
+    clientId: number;
+    clientName: string;
+    totalOrders: number;
+    orderSum: number;
+    flatRateFee: number;
+    partnerTier?: PartnerTier;
+    manualTierAssignment?: boolean;
+};
+
+export const Permission = {
+    MANAGE_USERS: 'manage_users',
+    EDIT_USER_PROFILE: 'edit_user_profile',
+    MANAGE_ROLES: 'manage_roles',
+    CREATE_SHIPMENTS: 'create_shipments',
+    CREATE_SHIPMENTS_FOR_OTHERS: 'create_shipments_for_others',
+    VIEW_OWN_SHIPMENTS: 'view_own_shipments',
+    VIEW_ALL_SHIPMENTS: 'view_all_shipments',
+    ASSIGN_SHIPMENTS: 'assign_shipments',
+    VIEW_COURIER_TASKS: 'view_courier_tasks',
+    UPDATE_SHIPMENT_STATUS: 'update_shipment_status',
+    VIEW_OWN_WALLET: 'view_own_wallet',
+    VIEW_OWN_FINANCIALS: 'view_own_financials',
+    VIEW_ADMIN_FINANCIALS: 'view_admin_financials',
+    VIEW_CLIENT_ANALYTICS: 'view_client_analytics',
+    VIEW_COURIER_PERFORMANCE: 'view_courier_performance',
+    MANAGE_COURIER_PAYOUTS: 'manage_courier_payouts',
+    VIEW_COURIER_EARNINGS: 'view_courier_earnings',
+    VIEW_NOTIFICATIONS_LOG: 'view_notifications_log',
+    VIEW_DASHBOARD: 'view_dashboard',
+    VIEW_PROFILE: 'view_profile',
+    VIEW_TOTAL_SHIPMENTS_OVERVIEW: 'view_total_shipments_overview',
+    VIEW_COURIER_COMPLETED_ORDERS: 'view_courier_completed_orders',
+    MANAGE_INVENTORY: 'manage_inventory',
+    DELETE_INVENTORY_ITEM: 'delete_inventory_item',
+    MANAGE_ASSETS: 'manage_assets',
+    DELETE_ASSET: 'delete_asset',
+    VIEW_OWN_ASSETS: 'view_own_assets',
+    MANAGE_CLIENT_PAYOUTS: 'manage_client_payouts',
+    MANAGE_SUPPLIERS: 'manage_suppliers',
+    PRINT_LABELS: 'print_labels',
+    VIEW_DELIVERED_SHIPMENTS: 'view_delivered_shipments',
+    VIEW_COURIERS_BY_ZONE: 'view_couriers_by_zone',
+    MANAGE_PARTNER_TIERS: 'manage_partner_tiers',
+    EDIT_CLIENT_ADDRESS: 'edit_client_address',
+    VIEW_ADMIN_DELIVERY_MANAGEMENT: 'view_admin_delivery_management'
+} as const;
+
+export type Permission = typeof Permission[keyof typeof Permission];
+
+
+export type CustomRole = {
+    id: string;
+    name: string;
+    permissions: Permission[];
+    isSystemRole: boolean;
+};
+
+export type InventoryItem = {
+    id: string;
+    name: string;
+    quantity: number;
+    unit: string;
+    lastUpdated: string;
+    minStock?: number;
+    unitPrice?: number;
+};
+
+export type Asset = {
+    id: string;
+    type: AssetType;
+    name: string;
+    identifier?: string;
+    status: AssetStatus;
+    assignedToUserId?: number;
+    assignmentDate?: string;
+    purchaseDate?: string;
+    purchasePrice?: number;
+    usefulLifeMonths?: number;
+};
+
+export type Supplier = {
+    id: string;
+    name: string;
+    contact_person?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+};
+
+export type SupplierTransaction = {
+    id: string;
+    supplier_id: string;
+    date: string;
+    description?: string;
+    type: 'Payment' | 'Credit';
+    amount: number;
+};
+
+export type InAppNotification = {
+    id: string;
+    userId: number;
+    message: string;
+    link?: string;
+    isRead: boolean;
+    timestamp: string;
+};
+
+export type TierSetting = {
+    tierName: PartnerTier;
+    shipmentThreshold: number;
+    discountPercentage: number;
+};
 
 
 export const ZONES = {
@@ -69,390 +422,5 @@ export const ZONES = {
     "Other - Assiut",
     "Other - Marina",
     "Other - Hurghada",
-    "Other - Matrouh",
   ]
 };
-
-
-export enum UserRole {
-  CLIENT = 'Client',
-  COURIER = 'Courier',
-  ASSIGNING_USER = 'Assigning User',
-  SUPER_USER = 'Super User',
-  ADMIN = 'Administrator',
-}
-
-export enum ShipmentStatus {
-  WAITING_FOR_PACKAGING = 'Waiting for Packaging',
-  PACKAGED_AND_WAITING_FOR_ASSIGNMENT = 'Packaged and Waiting for Assignment',
-  ASSIGNED_TO_COURIER = 'Assigned to Courier',
-  IN_TRANSIT = 'In Transit',
-  OUT_FOR_DELIVERY = 'Out for Delivery',
-  DELIVERED = 'Delivered',
-  DELIVERY_FAILED = 'Delivery Failed',
-}
-
-export enum PaymentMethod {
-  COD = 'Cash on Delivery',
-  INSTAPAY = 'InstaPay',
-  WALLET = 'Wallet',
-}
-
-export enum ShipmentPriority {
-    STANDARD = 'Standard',
-    URGENT = 'Urgent',
-    EXPRESS = 'Express',
-}
-
-export interface Address {
-  street: string;
-  city: string; // e.g., 'Cairo', 'Giza', 'Alexandria', 'Other'
-  zone: string; // e.g., 'Nasr City', 'Mohandessin'
-  details: string;
-}
-
-export enum PartnerTier {
-    BRONZE = 'Bronze',
-    SILVER = 'Silver',
-    GOLD = 'Gold',
-}
-
-export interface TierSetting {
-    tierName: PartnerTier;
-    shipmentThreshold: number;
-    discountPercentage: number;
-}
-
-
-export interface User {
-  id: number;
-  publicId: string;
-  name: string;
-  email: string;
-  password?: string; // Made optional as it's not always present on the client
-  roles: string[]; // Replaced role: string
-  zones?: string[]; // For couriers
-  walletBalance?: number; // For clients
-  flatRateFee?: number; // For clients
-  phone?: string; // Phone number
-  
-  location?: { lat: number; lng: number };
-  
-  // Priority pricing multipliers for clients (defaults: Standard=1.0, Urgent=1.5, Express=2.0)
-  priorityMultipliers?: {
-    [ShipmentPriority.STANDARD]: number;
-    [ShipmentPriority.URGENT]: number;
-    [ShipmentPriority.EXPRESS]: number;
-  };
-  
-  address?: Address; // Optional default address for clients (pickup location)
-  taxCardNumber?: string; // Client-specific tax card number (only admins can set)
-  permissions?: Permission[]; // For RBAC, populated client-side
-
-  // For courier referrals
-  referrerId?: number; // ID of the courier who referred this one
-  referralCommission?: number; // Amount the referee gets per delivery
-
-  // For partner tiers
-  partnerTier?: PartnerTier;
-  manualTierAssignment?: boolean;
-}
-
-export interface PackagingLogEntry {
-    inventoryItemId: string;
-    itemName: string;
-    quantityUsed: number;
-}
-
-export interface StatusHistoryEntry {
-    status: ShipmentStatus;
-    timestamp: string;
-}
-
-export interface Shipment {
-  id: string;
-  clientId: number;
-  clientName: string;
-  recipientName: string;
-  recipientPhone: string;
-  fromAddress: Address;
-  toAddress: Address;
-  packageDescription: string;
-  isLargeOrder: boolean;
-  price: number;
-  paymentMethod: PaymentMethod;
-  status: ShipmentStatus;
-  courierId?: number;
-  creationDate: string;
-  deliveryDate?: string;
-  failureReason?: string; // reason for delivery failure
-  failurePhotoPath?: string; // path to the failure evidence photo
-  priority: ShipmentPriority;
-  packageValue: number;
-  clientFlatRateFee?: number; // Snapshot of client's fee at creation
-  courierCommission?: number; // Snapshot of courier's commission at assignment
-  packagingNotes?: string;
-  packagingLog?: PackagingLogEntry[];
-  statusHistory?: StatusHistoryEntry[];
-}
-
-export interface Toast {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info';
-  duration?: number; // Auto-dismiss duration in milliseconds (default: 10000)
-}
-
-export enum TransactionType {
-    DEPOSIT = 'Deposit',
-    PAYMENT = 'Payment',
-    WITHDRAWAL_REQUEST = 'Withdrawal Request',
-    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
-}
-
-export type ClientTransactionStatus = 'Pending' | 'Processed' | 'Failed';
-
-export interface ClientTransaction {
-    id: string;
-    userId: number;
-    type: TransactionType;
-    amount: number;
-    date: string;
-    description: string;
-    status?: ClientTransactionStatus;
-}
-
-export enum NotificationChannel {
-  EMAIL = 'Email',
-  SMS = 'SMS',
-}
-
-export interface Notification {
-  id: string;
-  shipmentId: string;
-  channel: NotificationChannel;
-  recipient: string;
-  message: string;
-  date: string;
-  status: ShipmentStatus;
-  sent: boolean; // Track if the notification has been actioned
-}
-
-// --- New Courier Financial System Types ---
-
-export interface FinancialSettings {
-  baseCommissionRate: number;
-  penaltyAmount: number;
-  consecutiveFailureLimit: number;
-  performanceThreshold: number;
-}
-
-export enum CommissionType {
-    FLAT = 'flat',
-    PERCENTAGE = 'percentage'
-}
-
-export interface CourierStats {
-  courierId: number;
-  deliveriesCompleted: number;
-  deliveriesFailed: number;
-  totalEarnings: number;
-  pendingEarnings: number; // For payouts
-  currentBalance: number; // totalEarnings - withdrawals
-  commissionType: CommissionType;
-  commissionValue: number;
-  consecutiveFailures: number;
-  lastDeliveryDate?: string;
-  isRestricted: boolean;
-  restrictionReason?: string;
-  performanceRating: number;
-}
-
-export enum CourierTransactionType {
-    COMMISSION = 'Commission',
-    PENALTY = 'Penalty',
-    BONUS = 'Bonus',
-    WITHDRAWAL_REQUEST = 'Withdrawal Request',
-    WITHDRAWAL_PROCESSED = 'Withdrawal Processed',
-    REFERRAL_BONUS = 'Referral Bonus', // New type
-}
-
-export enum CourierTransactionStatus {
-    PENDING = 'Pending',
-    PROCESSED = 'Processed',
-    FAILED = 'Failed',
-}
-
-export interface CourierTransaction {
-  id: string;
-  courierId: number;
-  type: CourierTransactionType;
-  amount: number;
-  description: string;
-  shipmentId?: string;
-  timestamp: string;
-  status: CourierTransactionStatus;
-  paymentMethod?: 'Cash' | 'Bank Transfer';
-  transferEvidencePath?: string;
-}
-
-// Admin Financial System Types
-export interface AdminFinancials {
-  // New enhanced metrics
-  totalCollectedMoney: number; // Money collected by couriers (delivered packages)
-  undeliveredPackagesValue: number; // Value of packages not yet delivered
-  failedDeliveriesValue: number; // Value of packages that failed to deliver
-  totalRevenue: number; // Sum of packageValue for all delivered packages
-  totalFees: number; // Sum of flat rates of all orders
-  totalCommission: number; // Total commission paid for all orders
-  netRevenue: number; // Total Revenue + Total Fees - Total Commission
-  cashToCollect: number; // COD amount for packages currently in transit
-  totalCODCollected: number; // COD amount for delivered packages
-  
-  // Legacy fields (keeping for backward compatibility)
-  grossRevenue: number;
-  totalClientFees: number;
-  totalCourierPayouts: number;
-  totalOrders: number;
-  taxCarNumber: string;
-}
-
-export interface ClientFinancialSummary {
-  clientId: number;
-  clientName: string;
-  totalOrders: number;
-  orderSum: number;
-  flatRateFee: number;
-  partnerTier?: PartnerTier;
-  manualTierAssignment?: boolean;
-}
-
-// --- Role-Based Access Control (RBAC) Types ---
-
-export enum Permission {
-  // User Management
-  MANAGE_USERS = 'manage_users', // Create, edit, delete users
-  EDIT_USER_PROFILE = 'edit_user_profile', // Granular permission to edit user profiles
-  EDIT_CLIENT_ADDRESS = 'edit_client_address', // New permission for admins
-  MANAGE_ROLES = 'manage_roles', // Create, edit, delete roles and permissions
-  
-  // Shipment Management
-  CREATE_SHIPMENTS = 'create_shipments',
-  VIEW_OWN_SHIPMENTS = 'view_own_shipments',
-  VIEW_ALL_SHIPMENTS = 'view_all_shipments',
-  ASSIGN_SHIPMENTS = 'assign_shipments',
-  CREATE_SHIPMENTS_FOR_OTHERS = 'create_shipments_for_others',
-  PRINT_LABELS = 'print_labels',
-  
-  // Courier-specific tasks
-  VIEW_COURIER_TASKS = 'view_courier_tasks',
-  UPDATE_SHIPMENT_STATUS = 'update_shipment_status',
-  VIEW_COURIER_COMPLETED_ORDERS = 'view_courier_completed_orders',
-  
-  // Financials
-  VIEW_OWN_WALLET = 'view_own_wallet',
-  VIEW_OWN_FINANCIALS = 'view_own_financials',
-  VIEW_ADMIN_FINANCIALS = 'view_admin_financials', // Top-level company financials
-  VIEW_CLIENT_ANALYTICS = 'view_client_analytics',
-  VIEW_COURIER_PERFORMANCE = 'view_courier_performance',
-  MANAGE_COURIER_PAYOUTS = 'manage_courier_payouts',
-  MANAGE_CLIENT_PAYOUTS = 'manage_client_payouts',
-  VIEW_COURIER_EARNINGS = 'view_courier_earnings',
-  MANAGE_PARTNER_TIERS = 'manage_partner_tiers',
-  
-  // System & Logs
-  VIEW_NOTIFICATIONS_LOG = 'view_notifications_log',
-  VIEW_DASHBOARD = 'view_dashboard',
-  VIEW_PROFILE = 'view_profile',
-  VIEW_TOTAL_SHIPMENTS_OVERVIEW = 'view_total_shipments_overview',
-
-  // Inventory Management
-  MANAGE_INVENTORY = 'manage_inventory',
-  DELETE_INVENTORY_ITEM = 'delete_inventory_item',
-
-  // Asset Management
-  MANAGE_ASSETS = 'manage_assets',
-  VIEW_OWN_ASSETS = 'view_own_assets',
-  DELETE_ASSET = 'delete_asset',
-
-  // Supplier Management
-  MANAGE_SUPPLIERS = 'manage_suppliers',
-
-  // Assigner Specific
-  VIEW_DELIVERED_SHIPMENTS = 'view_delivered_shipments',
-  VIEW_COURIERS_BY_ZONE = 'view_couriers_by_zone',
-}
-
-export interface CustomRole {
-  id: string;
-  name: string;
-  permissions: Permission[];
-  isSystemRole?: boolean; // System roles cannot be deleted
-}
-
-// --- Inventory Management Types ---
-export interface InventoryItem {
-    id: string;
-    name: string;
-    quantity: number;
-    unit: string;
-    lastUpdated: string;
-    minStock?: number;
-    unitPrice?: number;
-}
-
-// --- Asset Management Types ---
-export enum AssetType {
-    MOTORCYCLE = 'Motorcycle',
-    BOX = 'Delivery Box',
-    TSHIRT = 'T-Shirt',
-    DEVICE = 'Device',
-}
-
-export enum AssetStatus {
-    AVAILABLE = 'Available',
-    ASSIGNED = 'Assigned',
-    IN_REPAIR = 'In Repair',
-}
-
-export interface Asset {
-    id: string;
-    type: AssetType;
-    name: string;
-    identifier?: string; // e.g., license plate, serial number
-    status: AssetStatus;
-    assignedToUserId?: number;
-    assignmentDate?: string;
-    purchaseDate?: string;
-    purchasePrice?: number;
-    usefulLifeMonths?: number;
-}
-
-// --- Supplier Management Types ---
-export interface Supplier {
-    id: string;
-    name: string;
-    contact_person?: string;
-    phone?: string;
-    email?: string;
-    address?: string;
-}
-
-export interface SupplierTransaction {
-    id: string;
-    supplier_id: string;
-    date: string;
-    description?: string;
-    type: 'Payment' | 'Credit';
-    amount: number;
-}
-
-// --- In-App Notification System ---
-export interface InAppNotification {
-    id: string;
-    userId: number;
-    message: string;
-    link?: string;
-    isRead: boolean;
-    timestamp: string;
-}

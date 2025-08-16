@@ -7,6 +7,7 @@ import type { User, Shipment, Toast, ClientTransaction, Notification, CourierSta
 import { UserRole, ShipmentStatus, CommissionType, CourierTransactionType, CourierTransactionStatus, ShipmentPriority, PaymentMethod } from '../types';
 import { apiFetch } from '../api/client';
 import { io, Socket } from 'socket.io-client';
+import { getFromStorage, saveToStorage } from '../utils/storage';
 
 type NotificationStatus = 'sending' | 'sent' | 'failed';
 type ShipmentFilter = (shipment: Shipment) => boolean;
@@ -29,10 +30,13 @@ export type AppContextType = {
     inAppNotifications: InAppNotification[];
     tierSettings: TierSetting[];
     isLoading: boolean;
+    theme: 'light' | 'dark';
+    setTheme: (theme: 'light' | 'dark') => void;
     login: (email: string, password: string) => Promise<boolean>;
     logout: () => void;
     addShipment: (shipment: Omit<Shipment, 'id' | 'creationDate' | 'status' | 'statusHistory' | 'packagingLog'>) => Promise<void>;
     updateShipmentStatus: (shipmentId: string, status: ShipmentStatus, details?: { failureReason?: string; failurePhoto?: string | null; }) => Promise<boolean>;
+    revertShipmentStatus: (shipmentId: string) => Promise<void>;
     updateShipmentFees: (shipmentId: string, fees: { clientFlatRateFee?: number; courierCommission?: number }) => Promise<void>;
     updateShipmentPackaging: (shipmentId: string, packagingLog: PackagingLogEntry[], packagingNotes: string) => Promise<void>;
     assignShipmentToCourier: (shipmentId: string, courierId: number) => Promise<boolean>;
@@ -48,6 +52,7 @@ export type AppContextType = {
     updateCourierSettings: (courierId: number, newSettings: Partial<Pick<CourierStats, 'commissionType' | 'commissionValue'>>) => Promise<void>;
     applyManualPenalty: (courierId: number, amount: number, description: string) => Promise<void>;
     processCourierPayout: (transactionId: string, processedAmount: number, transferEvidence?: string) => Promise<void>;
+    declineCourierPayout: (transactionId: string) => Promise<void>;
     requestCourierPayout: (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => Promise<void>;
     requestClientPayout: (userId: number, amount: number) => Promise<void>;
     processClientPayout: (transactionId: string) => Promise<void>;
@@ -117,8 +122,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
     const [tierSettings, setTierSettings] = useState<TierSetting[]>([]);
     const [shipmentFilter, setShipmentFilter] = useState<ShipmentFilter | null>(null);
+    const [theme, setThemeState] = useState<'light' | 'dark'>(() => getFromStorage('app-theme', 'dark'));
     
     const [isLoading, setIsLoading] = useState(false);
+
+    const setTheme = (newTheme: 'light' | 'dark') => {
+        setThemeState(newTheme);
+        saveToStorage('app-theme', newTheme);
+    };
+    
+    useEffect(() => {
+        const root = window.document.documentElement;
+        root.classList.remove('light', 'dark');
+        root.classList.add(theme);
+    }, [theme]);
 
     const courierStats = useMemo(() => {
         return rawCourierStats.map(stat => {
@@ -324,6 +341,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [addToast]);
 
+    const revertShipmentStatus = useCallback(async (shipmentId: string) => {
+        try {
+            // Use the existing, working status update endpoint with a special flag.
+            await apiFetch(`/api/shipments/${shipmentId}/status`, {
+                method: 'PUT',
+                body: JSON.stringify({ isRevert: true }),
+            });
+            addToast(`Shipment ${shipmentId} status has been reverted.`, 'success');
+        } catch (error: any) {
+            addToast(`Error reverting status: ${error.message}`, 'error');
+            console.error("Revert status failed:", error);
+        }
+    }, [addToast]);
+
     const sendDeliveryVerificationCode = useCallback(async (shipmentId: string) => {
         try {
             await apiFetch(`/api/shipments/${shipmentId}/send-delivery-code`, { method: 'POST' });
@@ -422,15 +453,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return !stats?.isRestricted;
     }, [courierStats]);
     
-    const getAdminFinancials = useCallback(() => {
+    const getAdminFinancials = useCallback((): AdminFinancials => {
         const deliveredShipments = shipments.filter(s => s.status === ShipmentStatus.DELIVERED);
         const undeliveredShipments = shipments.filter(s => ![ShipmentStatus.DELIVERED, ShipmentStatus.DELIVERY_FAILED].includes(s.status));
-        const inTransitCOD = shipments.filter(s => [ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status) && s.paymentMethod === PaymentMethod.COD);
+        const inTransitCOD = shipments.filter(s => [ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status) && s.paymentMethod === PaymentMethod.COD);
         const deliveredCOD = shipments.filter(s => s.status === ShipmentStatus.DELIVERED && s.paymentMethod === PaymentMethod.COD);
     
         const totalCollectedMoney = deliveredShipments.reduce((sum, s) => sum + s.price, 0);
         const undeliveredPackagesValue = undeliveredShipments.reduce((sum, s) => sum + s.price, 0);
         
+        const uncollectedTransferFees = undeliveredShipments
+            .filter(s => s.paymentMethod === PaymentMethod.TRANSFER)
+            .reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
+
         const allShipmentsWithFees = shipments.filter(s => s.status === ShipmentStatus.DELIVERED || s.status === ShipmentStatus.DELIVERY_FAILED);
         
         const potentialFeesFromPending = undeliveredShipments.reduce((sum, s) => sum + (s.clientFlatRateFee || 0), 0);
@@ -441,26 +476,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const cashToCollect = inTransitCOD.reduce((sum, s) => sum + s.price, 0);
         const totalCODCollected = deliveredCOD.reduce((sum, s) => sum + s.price, 0);
         
+        const totalOwedToCouriers = courierStats.reduce((sum, stat) => sum + (stat.currentBalance || 0), 0);
+
         return {
             totalCollectedMoney,
             undeliveredPackagesValue,
-            failedDeliveriesValue: 0, // This has been removed as per user request
+            uncollectedTransferFees,
+            totalOwedToCouriers,
             totalRevenue,
             totalFees: potentialFeesFromPending,
             totalCommission,
             netRevenue,
             cashToCollect,
             totalCODCollected,
-            grossRevenue: totalRevenue, // legacy
-            totalClientFees: totalRevenue, // legacy
-            totalCourierPayouts: totalCommission, // legacy
             totalOrders: deliveredShipments.length,
-            taxCarNumber: '',
         };
-    }, [shipments]);
+    }, [shipments, courierStats]);
     
     const getClientFinancials = useCallback((): ClientFinancialSummary[] => {
-        const clients = users.filter(u => u.roles.includes(UserRole.CLIENT));
+        const clients = users.filter(u => (u.roles || []).includes(UserRole.CLIENT));
         return clients.map(client => {
             const clientShipments = shipments.filter(s => s.clientId === client.id);
             const totalOrders = clientShipments.length;
@@ -471,6 +505,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 totalOrders,
                 orderSum,
                 flatRateFee: client.flatRateFee || 0,
+                partnerTier: client.partnerTier,
+                manualTierAssignment: client.manualTierAssignment,
             };
         });
     }, [users, shipments]);
@@ -504,6 +540,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const processCourierPayout = async (transactionId: string, processedAmount: number, transferEvidence?: string) => {
         await apiFetch(`/api/payouts/${transactionId}/process`, { method: 'PUT', body: JSON.stringify({ transferEvidence, processedAmount }) });
+    };
+
+    const declineCourierPayout = async (transactionId: string) => {
+        await apiFetch(`/api/payouts/${transactionId}/decline`, { method: 'PUT' });
     };
     
     const requestCourierPayout = async (courierId: number, amount: number, paymentMethod: 'Cash' | 'Bank Transfer') => {
@@ -683,10 +723,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         inAppNotifications,
         tierSettings,
         isLoading,
+        theme,
+        setTheme,
         login,
         logout,
         addShipment,
         updateShipmentStatus,
+        revertShipmentStatus,
         updateShipmentFees,
         updateShipmentPackaging,
         assignShipmentToCourier,
@@ -702,6 +745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCourierSettings,
         applyManualPenalty,
         processCourierPayout,
+        declineCourierPayout,
         requestCourierPayout,
         requestClientPayout,
         processClientPayout,

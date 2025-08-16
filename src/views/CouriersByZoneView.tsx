@@ -32,7 +32,7 @@ const CouriersByZoneView = () => {
             .map(courier => {
                 const pendingTasks = shipments.filter(s => 
                     s.courierId === courier.id && 
-                    [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
+                    [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
                 ).length;
                 
                 const stats = { isRestricted: false }; // Simplified for now
@@ -43,7 +43,7 @@ const CouriersByZoneView = () => {
     const handleViewTasks = (courierId: number, courierName: string) => {
         const tasks = shipments.filter(s => 
             s.courierId === courierId && 
-            [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
+            [ShipmentStatus.ASSIGNED_TO_COURIER, ShipmentStatus.OUT_FOR_DELIVERY].includes(s.status)
         );
         setModalShipments(tasks);
         setModalTitle(`Pending Tasks for ${courierName}`);
@@ -65,26 +65,26 @@ const CouriersByZoneView = () => {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800">Couriers by Zone</h1>
-                    <p className="text-slate-500 mt-1">View available couriers and their workload in a specific zone.</p>
+                    <h1 className="text-3xl font-bold text-foreground">Couriers by Zone</h1>
+                    <p className="text-muted-foreground mt-1">View available couriers and their workload in a specific zone.</p>
                 </div>
                  <button 
                     onClick={handleExport}
                     disabled={!selectedZone}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:bg-slate-400"
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition disabled:bg-muted"
                 >
                     <DocumentDownloadIcon className="w-5 h-5"/>
                     Export CSV
                 </button>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm">
-                <label htmlFor="zone-select" className="block text-sm font-medium text-slate-700 mb-2">Select a Zone to View Couriers</label>
+            <div className="card p-4">
+                <label htmlFor="zone-select" className="block text-sm font-medium text-foreground mb-2">Select a Zone to View Couriers</label>
                 <select 
                     id="zone-select"
                     value={selectedZone || ''} 
                     onChange={e => setSelectedZone(e.target.value)}
-                    className="w-full md:w-1/2 px-4 py-2 border border-slate-300 rounded-lg focus:ring-primary-500 focus:border-primary-500 bg-white"
+                    className="w-full md:w-1/2 px-4 py-2 border border-border rounded-lg focus:ring-primary focus:border-primary bg-background"
                 >
                     <option value="" disabled>-- Select a Zone --</option>
                     {allZones.map(zone => <option key={zone} value={zone}>{zone}</option>)}
@@ -92,46 +92,46 @@ const CouriersByZoneView = () => {
             </div>
             
             {!selectedZone ? (
-                <div className="text-center py-16 text-slate-500 bg-white rounded-xl shadow-sm">
-                    <TruckIcon className="w-16 h-16 mx-auto text-slate-300" />
+                <div className="text-center py-16 text-muted-foreground card">
+                    <TruckIcon className="w-16 h-16 mx-auto text-muted-foreground/30" />
                     <p className="mt-4 font-semibold">Please select a zone</p>
                     <p className="text-sm">Choose a zone from the dropdown to see assigned couriers.</p>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-slate-200">
-                        <h3 className="text-lg font-bold text-slate-800">Available Couriers in {selectedZone}</h3>
+                <div className="card overflow-hidden">
+                    <div className="p-4 border-b border-border">
+                        <h3 className="text-lg font-bold text-foreground">Available Couriers in {selectedZone}</h3>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
-                            <thead className="bg-slate-50">
+                            <thead className="bg-secondary">
                                 <tr>
-                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Courier</th>
-                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Phone</th>
-                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Status</th>
-                                    <th className="p-4 text-xs font-medium text-slate-500 uppercase">Pending Tasks</th>
+                                    <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Courier</th>
+                                    <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Phone</th>
+                                    <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Status</th>
+                                    <th className="p-4 text-xs font-medium text-muted-foreground uppercase">Pending Tasks</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200">
+                            <tbody className="divide-y divide-border">
                                 {couriersInZone.map(courier => (
                                     <tr key={courier.id}>
-                                        <td className="p-4 font-semibold">{courier.name}</td>
-                                        <td className="p-4 text-sm text-slate-600">
-                                            <a href={`tel:${courier.phone}`} className="flex items-center gap-2 hover:text-primary-600">
+                                        <td className="p-4 font-semibold text-foreground">{courier.name}</td>
+                                        <td className="p-4 text-sm text-muted-foreground">
+                                            <a href={`tel:${courier.phone}`} className="flex items-center gap-2 hover:text-primary">
                                                 <PhoneIcon className="w-4 h-4" />
                                                 {courier.phone || 'N/A'}
                                             </a>
                                         </td>
                                         <td className="p-4">
                                             {courier.isRestricted ? 
-                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Restricted</span> : 
-                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">Restricted</span> : 
+                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">Active</span>
                                             }
                                         </td>
                                         <td className="p-4 font-mono font-semibold text-center">
                                             <button
                                                 onClick={() => handleViewTasks(courier.id, courier.name)}
-                                                className="font-mono font-semibold text-primary-600 hover:underline disabled:text-slate-400 disabled:no-underline"
+                                                className="font-mono font-semibold text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
                                                 disabled={courier.pendingTasks === 0}
                                             >
                                                 {courier.pendingTasks}
@@ -142,7 +142,7 @@ const CouriersByZoneView = () => {
                             </tbody>
                         </table>
                          {couriersInZone.length === 0 && (
-                            <div className="text-center py-12 text-slate-500">
+                            <div className="text-center py-12 text-muted-foreground">
                                 No couriers are assigned to this zone.
                             </div>
                         )}

@@ -44,6 +44,7 @@ const ALL_NAV_ITEMS: NavItemConfig[] = [
     // Management
     { name: 'All Shipments', icon: <PackageIcon />, view: 'shipments', permission: Permission.VIEW_ALL_SHIPMENTS },
     { name: 'Packaging & Assignment', icon: <ArchiveBoxIcon />, view: 'packaging-and-assignment', permission: Permission.ASSIGN_SHIPMENTS },
+    { name: 'Delivery Management', icon: <SwitchHorizontalIcon />, view: 'admin-delivery-management', permission: Permission.VIEW_ADMIN_DELIVERY_MANAGEMENT },
     { name: 'User Management', icon: <UsersIcon />, view: 'users', permission: Permission.MANAGE_USERS },
     { name: 'Role Management', icon: <CogIcon />, view: 'roles', permission: Permission.MANAGE_ROLES },
     { name: 'Partner Tiers', icon: <CrownIcon />, view: 'partner-tier-management', permission: Permission.MANAGE_PARTNER_TIERS },
@@ -101,32 +102,35 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen, se
             ></div>
             
             <aside 
-                className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-800 text-slate-300 flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out
+                className={`fixed inset-y-0 left-0 z-40 w-64 bg-card text-card-foreground flex flex-col flex-shrink-0 transition-transform duration-300 ease-in-out
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
                 lg:relative lg:translate-x-0 lg:w-64`}
             >
-                <div className="p-4 flex items-center justify-between border-b border-slate-700">
+                <div className="p-4 flex items-center justify-between border-b border-border">
                     <div className="flex items-center gap-3">
-                        <LogoIcon className="w-9 h-9"/>
+                        <div className="bg-primary/10 p-1.5 rounded-lg">
+                            <LogoIcon className="w-8 h-8"/>
+                        </div>
                         <div>
-                            <h1 className="text-lg font-bold text-white">Flash Express</h1>
+                            <h1 className="text-lg font-bold text-foreground">Flash Express</h1>
                         </div>
                     </div>
-                     <button onClick={() => setIsOpen(false)} className="p-1 text-slate-400 hover:text-white lg:hidden">
+                     <button onClick={() => setIsOpen(false)} className="p-1 text-muted-foreground hover:text-foreground lg:hidden">
                         <XIcon className="w-6 h-6"/>
                     </button>
                 </div>
-                <nav className="flex-1 p-4 space-y-1.5">
+                <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
                     {availableNavItems.map(item => (
                         <button 
                             key={item.view + item.name} 
                             onClick={() => handleItemClick(item.view)}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition ${
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-all duration-200 group relative ${
                                 activeView === item.view 
-                                ? 'bg-primary-600 text-white font-semibold' 
-                                : 'hover:bg-slate-700 hover:text-white'
+                                ? 'bg-primary/10 text-primary font-semibold' 
+                                : 'hover:bg-accent hover:text-accent-foreground'
                             }`}
                         >
+                            <div className={`absolute left-0 top-0 h-full w-1 rounded-r-full transition-all duration-200 ${activeView === item.view ? 'bg-primary' : 'bg-transparent'}`}></div>
                             {React.cloneElement(item.icon, { className: 'w-6 h-6' })}
                             <span className="text-sm font-medium">{item.name}</span>
                         </button>

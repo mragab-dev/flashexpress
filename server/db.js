@@ -106,7 +106,7 @@ async function setupDatabase() {
         'view_courier_completed_orders', 'manage_inventory', 'manage_assets', 'view_own_assets',
         'delete_inventory_item', 'delete_asset', 'manage_client_payouts', 'manage_suppliers',
         'create_shipments_for_others', 'print_labels', 'view_delivered_shipments', 'view_couriers_by_zone',
-        'manage_partner_tiers', 'edit_client_address'
+        'manage_partner_tiers', 'edit_client_address', 'view_admin_delivery_management'
     ];
     const clientPermissions = ['create_shipments', 'view_own_shipments', 'view_own_wallet', 'view_own_financials', 'view_dashboard', 'view_profile', 'view_own_assets'];
     const courierPermissions = ['view_courier_tasks', 'update_shipment_status', 'view_courier_earnings', 'view_dashboard', 'view_profile', 'view_courier_completed_orders', 'view_own_assets'];
@@ -168,6 +168,8 @@ async function setupDatabase() {
             table.text('packagingNotes');
             table.json('packagingLog');
             table.json('statusHistory');
+            table.decimal('amountReceived', 10, 2);
+            table.decimal('amountToCollect', 10, 2);
         });
     } else {
        if (!(await knex.schema.hasColumn('shipments', 'packagingNotes'))) {
@@ -179,6 +181,12 @@ async function setupDatabase() {
        if (!(await knex.schema.hasColumn('shipments', 'statusHistory'))) {
          await knex.schema.alterTable('shipments', t => t.json('statusHistory'));
        }
+       if (!(await knex.schema.hasColumn('shipments', 'amountReceived'))) {
+        await knex.schema.alterTable('shipments', t => t.decimal('amountReceived', 10, 2));
+      }
+      if (!(await knex.schema.hasColumn('shipments', 'amountToCollect'))) {
+        await knex.schema.alterTable('shipments', t => t.decimal('amountToCollect', 10, 2));
+      }
     }
     
     const hasShipmentCountersTable = await knex.schema.hasTable('shipment_counters');
