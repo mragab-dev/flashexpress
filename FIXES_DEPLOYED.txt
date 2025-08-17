@@ -1,0 +1,94 @@
+🔧 FLASH EXPRESS - CRITICAL FIXES DEPLOYED
+
+═══════════════════════════════════════════════════════════════════
+🚀 DEPLOYMENT: b8f6a522-5a95-4229-b046-6df4629dc1c2
+═══════════════════════════════════════════════════════════════════
+
+✅ ISSUES FIXED:
+
+1. 🔑 LOGIN PROBLEMS
+   - Added comprehensive test users with proper data structure
+   - Enhanced database seeding with debug logs
+   - Fixed JSON field parsing for PostgreSQL
+
+2. 💰 SHIPPING FEE CALCULATIONS  
+   - Fixed priority multiplier application (Standard: 1.0x, Urgent: 1.5x, Express: 2.0x)
+   - Ensured backend recalculation overrides frontend values
+   - Applied partner tier discounts correctly
+
+3. 🏷️ SHIPPING LABEL PRICES
+   - Fixed price display to use actual clientFlatRateFee
+   - Corrected COD amount calculation on labels
+   - Improved shipping fee breakdown display
+
+4. 💳 WALLET BALANCE CALCULATIONS
+   - Fixed delivered shipment credits for Wallet payments
+   - Now credits total amount collected (package value + shipping fee)
+   - Corrected transaction descriptions and amounts
+
+═══════════════════════════════════════════════════════════════════
+🧪 TEST USERS CREATED:
+
+ADMIN USER:
+- Email: admin@flash.com
+- Password: password123
+- Role: Administrator
+- Features: Full system access
+
+TEST CLIENT:
+- Email: client@test.com  
+- Password: password123
+- Role: Client
+- Flat Rate Fee: 75 EGP
+- Priority Multipliers: Standard (1.0x), Urgent (1.5x), Express (2.0x)
+- Sample Address: Cairo, Downtown
+
+TEST COURIER:
+- Email: courier@test.com
+- Password: password123
+- Role: Courier  
+- Zones: Downtown, Heliopolis, Nasr City
+
+═══════════════════════════════════════════════════════════════════
+🔍 TESTING CHECKLIST:
+
+1. LOGIN TEST:
+   ✓ Try logging in with admin@flash.com / password123
+   ✓ Try logging in with client@test.com / password123
+   ✓ Try logging in with courier@test.com / password123
+
+2. SHIPPING FEE TEST:
+   ✓ Create shipment with Standard priority → Fee should be 75 EGP
+   ✓ Create shipment with Urgent priority → Fee should be 112.5 EGP (75 × 1.5)
+   ✓ Create shipment with Express priority → Fee should be 150 EGP (75 × 2.0)
+
+3. LABEL PRINTING TEST:
+   ✓ Create a COD shipment and print label
+   ✓ Verify COD amount shows: Package Value + Shipping Fee
+   ✓ Verify shipping fee breakdown is displayed correctly
+
+4. WALLET BALANCE TEST:
+   ✓ Create Wallet payment shipment
+   ✓ Mark as delivered
+   ✓ Check client wallet shows total amount (package + shipping fee)
+
+═══════════════════════════════════════════════════════════════════
+🌐 ACCESS YOUR APP:
+
+1. Go to Railway Dashboard:
+   https://railway.app/project/4a13f477-87b2-4d0f-b2ac-2d35107882fd
+
+2. Find your service and click the domain URL
+
+3. Navigate to /login and test with the credentials above
+
+═══════════════════════════════════════════════════════════════════
+🚨 IF ISSUES PERSIST:
+
+Check Railway logs for any remaining errors:
+- PostgreSQL connection issues
+- Environment variable problems  
+- Database seeding failures
+
+The application should now work correctly with proper calculations!
+═══════════════════════════════════════════════════════════════════

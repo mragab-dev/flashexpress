@@ -1760,7 +1760,7 @@ async function main() {
     cleanupExpiredEvidence();
 
     // Start the server
-    const PORT = process.env.PORT || 3001;
+    const PORT = process.env.PORT || 8080;
     httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`Backend and WebSocket server listening on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
