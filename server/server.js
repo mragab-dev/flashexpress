@@ -116,10 +116,10 @@ async function main() {
                 // PostgreSQL compatible JSON query using JSON functions
                 let clients;
                 if (process.env.DATABASE_URL) {
-                    // PostgreSQL: Check if JSON array contains "Client"
+                    // PostgreSQL: Check if JSON array contains "Client" using jsonb_array_elements_text
                     clients = await trx('users')
                         .where('manualTierAssignment', false)
-                        .whereRaw("roles::jsonb ? ?", ['Client']);
+                        .whereRaw("EXISTS (SELECT 1 FROM jsonb_array_elements_text(roles::jsonb) AS elem WHERE elem = 'Client')");
                 } else {
                     // SQLite: Use LIKE operator
                     clients = await trx('users')
@@ -342,16 +342,34 @@ async function main() {
                 }
             }
         }
-    
-        if (shipment.paymentMethod === 'Wallet') {
-            const client = await trx('users').where({ id: shipment.clientId }).first();
-            if (client) {
+        // Client wallet transactions for delivered shipments
+        const client = await trx('users').where({ id: shipment.clientId }).first();
+        if (client) {
+            const shippingFee = shipment.clientFlatRateFee || 0;
+            
+            if (shipment.paymentMethod === 'COD') {
+                // For COD: Credit package value, deduct shipping fee
+                const packageValue = shipment.packageValue || 0;
+                if (packageValue > 0) {
+                    await trx('client_transactions').insert([
+                        { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: packageValue, date: new Date().toISOString(), description: `Package value collected for delivered shipment ${shipment.id}`, status: 'Processed' },
+                        { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shippingFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}`, status: 'Processed' }
+                    ]);
+                }
+            } else if (shipment.paymentMethod === 'Transfer') {
+                // For Transfer: Client already paid shipping fee, just get amount to collect if any
+                const amountToCollect = shipment.amountToCollect || 0;
+                if (amountToCollect > 0) {
+                    await trx('client_transactions').insert([
+                        { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: amountToCollect, date: new Date().toISOString(), description: `Amount collected from recipient for delivered shipment ${shipment.id}`, status: 'Processed' }
+                    ]);
+                }
+            } else if (shipment.paymentMethod === 'Wallet') {
                 // For Wallet payments, credit the total amount collected (package value + shipping fee)
-                const totalAmountCollected = shipment.price || (shipment.packageValue + (shipment.clientFlatRateFee || 0));
-                const shippingFee = shipment.clientFlatRateFee || 0;
+                const totalAmountCollected = shipment.price || (shipment.packageValue + shippingFee);
                 await trx('client_transactions').insert([
-                    { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: totalAmountCollected, date: new Date().toISOString(), description: `Total amount collected for delivered shipment ${shipment.id}` },
-                    { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shippingFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}` }
+                    { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: totalAmountCollected, date: new Date().toISOString(), description: `Total amount collected for delivered shipment ${shipment.id}`, status: 'Processed' },
+                    { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shippingFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}`, status: 'Processed' }
                 ]);
             }
         }
@@ -626,7 +644,7 @@ async function main() {
         try {
             // PostgreSQL compatible JSON query
             if (process.env.DATABASE_URL) {
-                await knex('users').where({ id }).whereRaw("roles::jsonb ? ?", ['Client']).update({ flatRateFee });
+                await knex('users').where({ id }).whereRaw("EXISTS (SELECT 1 FROM jsonb_array_elements_text(roles::jsonb) AS elem WHERE elem = 'Client')").update({ flatRateFee });
             } else {
                 await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ flatRateFee });
             }
@@ -642,7 +660,7 @@ async function main() {
         try {
             // PostgreSQL compatible JSON query
             if (process.env.DATABASE_URL) {
-                await knex('users').where({ id }).whereRaw("roles::jsonb ? ?", ['Client']).update({ taxCardNumber });
+                await knex('users').where({ id }).whereRaw("EXISTS (SELECT 1 FROM jsonb_array_elements_text(roles::jsonb) AS elem WHERE elem = 'Client')").update({ taxCardNumber });
             } else {
                 await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ taxCardNumber });
             }
