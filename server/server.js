@@ -511,7 +511,7 @@ async function main() {
                     const finalUser = {
                         ...userWithoutPassword,
                         roles: safeJsonParse(userWithoutPassword.roles, []),
-                        address: safeJsonParse(userWithoutpassword.address, null),
+                        address: safeJsonParse(userWithoutPassword.address, null),
                         zones: safeJsonParse(userWithoutPassword.zones, [])
                     };
                     console.log('🚀 Sending user data:', finalUser.name, finalUser.roles);
