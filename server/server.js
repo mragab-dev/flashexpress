@@ -119,17 +119,18 @@ async function main() {
             await knex.transaction(async (trx) => {
                 const tierSettings = await trx('tier_settings').orderBy('shipmentThreshold', 'desc');
                 // PostgreSQL compatible JSON query using JSON functions
-                const clients = await trx('users')
-                    .where('manualTierAssignment', false)
-                    .andWhere(function() {
-                        if (process.env.DATABASE_URL) {
-                            // PostgreSQL: Check if JSON array contains "Client"
-                            this.whereRaw("roles::jsonb ? ?", ['Client']);
-                        } else {
-                            // SQLite: Use LIKE operator
-                            this.where('roles', 'like', '%"Client"%');
-                        }
-                    });
+                let clients;
+                if (process.env.DATABASE_URL) {
+                    // PostgreSQL: Check if JSON array contains "Client"
+                    clients = await trx('users')
+                        .where('manualTierAssignment', false)
+                        .whereRaw("roles::jsonb ? ?", ['Client']);
+                } else {
+                    // SQLite: Use LIKE operator
+                    clients = await trx('users')
+                        .where('manualTierAssignment', false)
+                        .where('roles', 'like', '%"Client"%');
+                }
                 
                 const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -612,7 +613,7 @@ async function main() {
         try {
             // PostgreSQL compatible JSON query
             if (process.env.DATABASE_URL) {
-                await knex('users').where({ id }).andWhereRaw("roles::text LIKE ?", ['%"Client"%']).update({ flatRateFee });
+                await knex('users').where({ id }).whereRaw("roles::jsonb ? ?", ['Client']).update({ flatRateFee });
             } else {
                 await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ flatRateFee });
             }
@@ -628,7 +629,7 @@ async function main() {
         try {
             // PostgreSQL compatible JSON query
             if (process.env.DATABASE_URL) {
-                await knex('users').where({ id }).andWhereRaw("roles::text LIKE ?", ['%"Client"%']).update({ taxCardNumber });
+                await knex('users').where({ id }).whereRaw("roles::jsonb ? ?", ['Client']).update({ taxCardNumber });
             } else {
                 await knex('users').where({ id }).andWhereJsonSupersetOf('roles', ['Client']).update({ taxCardNumber });
             }
