@@ -245,57 +245,6 @@ async function main() {
         return value; // For other primitive types
     };
 
-    const parseUserRoles = (user) => {
-        if (user && user.roles) {
-            return { ...user, roles: safeJsonParse(user.roles, []) };
-        }
-        return user;
-    };
-
-    const parseJsonField = (item, field) => {
-        if (item && item[field] !== undefined) {
-            return { ...item, [field]: safeJsonParse(item[field], null) };
-        }
-        return item;
-    };
-    
-    // Twilio Client
-    const twilioClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
-        ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-        : null;
-
-
-    // --- Nodemailer Transporter ---
-    const transporter = nodemailer.createTransport({
-      host: 'smtpout.secureserver.net',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    async function sendEmail(notification) {
-        const { recipient, subject, message } = notification;
-
-        const mailOptions = {
-            from: `"Flash Express" <${process.env.EMAIL_USER}>`,
-            to: recipient,
-            subject: subject,
-            html: `<p>${message.replace(/\n/g, '<br>')}</p>`,
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-            console.log('Email sent successfully to:', recipient);
-            return true;
-        } catch (error) {
-            console.error('Failed to send email:', error);
-            return false;
-        }
-    }
-    
     const createInAppNotification = async (trx, userId, message, link = null) => {
         await trx('in_app_notifications').insert({
             id: generateId('INAPP'),
@@ -460,7 +409,10 @@ async function main() {
     app.get('/api/roles', async (req, res) => {
         try {
             const roles = await knex('custom_roles').select();
-            const parsedRoles = roles.map(r => parseJsonField(r, 'permissions'));
+            const parsedRoles = roles.map(r => ({
+                ...r,
+                permissions: safeJsonParse(r.permissions, [])
+            }));
             res.json(parsedRoles);
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch roles' });
@@ -475,7 +427,10 @@ async function main() {
         try {
             const newRole = { id: generateId('role'), name, permissions: JSON.stringify(permissions), isSystemRole: false };
             await knex('custom_roles').insert(newRole);
-            res.status(201).json(parseJsonField(newRole, 'permissions'));
+            res.status(201).json({
+                ...newRole,
+                permissions: permissions // Already in correct format
+            });
             io.emit('data_updated');
         } catch (error) {
             res.status(500).json({ error: 'Server error creating role' });
@@ -570,23 +525,29 @@ async function main() {
         ]);
 
         const safeUsers = users.map(u => {
-            let { password, ...user } = u;
-            user = parseUserRoles(user);
-            user = parseJsonField(user, 'address');
-            user = parseJsonField(user, 'zones');
-            return user;
+            const { password, ...user } = u;
+            return {
+                ...user,
+                roles: safeJsonParse(user.roles, []),
+                address: safeJsonParse(user.address, null),
+                zones: safeJsonParse(user.zones, [])
+            };
         });
         
         const parsedShipments = shipments.map(s => {
-            let shipment = s;
-            shipment = parseJsonField(shipment, 'fromAddress');
-            shipment = parseJsonField(shipment, 'toAddress');
-            shipment = parseJsonField(shipment, 'packagingLog');
-            shipment = parseJsonField(shipment, 'statusHistory');
-            return shipment;
+            return {
+                ...s,
+                fromAddress: safeJsonParse(s.fromAddress, null),
+                toAddress: safeJsonParse(s.toAddress, null),
+                packagingLog: safeJsonParse(s.packagingLog, []),
+                statusHistory: safeJsonParse(s.statusHistory, [])
+            };
         });
 
-        const parsedRoles = customRoles.map(r => parseJsonField(r, 'permissions'));
+        const parsedRoles = customRoles.map(r => ({
+            ...r,
+            permissions: safeJsonParse(r.permissions, [])
+        }));
 
         res.json({ users: safeUsers, shipments: parsedShipments, clientTransactions, courierStats, courierTransactions, notifications, customRoles: parsedRoles, inventoryItems, assets, suppliers, supplierTransactions, inAppNotifications, tierSettings });
       } catch (error) {
@@ -653,9 +614,12 @@ async function main() {
             });
             
             const { password: _, ...userWithoutPassword } = newUser;
-            let finalUser = parseUserRoles(userWithoutPassword);
-            finalUser = parseJsonField(finalUser, 'zones');
-            res.status(201).json(finalUser);
+            res.status(201).json({
+                ...userWithoutPassword,
+                roles: safeJsonParse(userWithoutPassword.roles, []),
+                address: safeJsonParse(userWithoutPassword.address, null),
+                zones: safeJsonParse(userWithoutPassword.zones, [])
+            });
             io.emit('data_updated');
         } catch (error) {
             console.error('Error creating user:', error);
@@ -813,7 +777,13 @@ async function main() {
             });
             
             const createdShipment = await knex('shipments').where({ id: newId }).first();
-            res.status(201).json(createdShipment);
+            res.status(201).json({
+                ...createdShipment,
+                fromAddress: safeJsonParse(createdShipment.fromAddress, null),
+                toAddress: safeJsonParse(createdShipment.toAddress, null),
+                packagingLog: safeJsonParse(createdShipment.packagingLog, []),
+                statusHistory: safeJsonParse(createdShipment.statusHistory, [])
+            });
             io.emit('data_updated');
         } catch (error) {
             console.error("Error creating shipment:", error);
@@ -1372,8 +1342,12 @@ async function main() {
             if (shipment) {
                  const client = await knex('users').where({ id: shipment.clientId }).first();
                  if (shipment.recipientPhone === phone || client?.phone === phone) {
-                    const parsedShipment = parseJsonField(parseJsonField(parseJsonField(shipment, 'fromAddress'), 'toAddress'), 'statusHistory');
-                    return res.json(parsedShipment);
+                    return res.json({
+                        ...shipment,
+                        fromAddress: safeJsonParse(shipment.fromAddress, null),
+                        toAddress: safeJsonParse(shipment.toAddress, null),
+                        statusHistory: safeJsonParse(shipment.statusHistory, [])
+                    });
                  }
             }
             return res.status(404).json({ error: 'Wrong shipment ID or phone number.' });
