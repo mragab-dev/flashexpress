@@ -147,13 +147,20 @@ async function setupDatabase() {
     const assigningUserPermissions = ['assign_shipments', 'view_dashboard', 'view_total_shipments_overview', 'manage_inventory', 'view_all_shipments', 'view_profile', 'print_labels', 'view_delivered_shipments', 'view_couriers_by_zone'];
 
     const rolesToSeed = [
-        { id: 'role_admin', name: 'Administrator', permissions: JSON.stringify(allPermissions), isSystemRole: true },
-        { id: 'role_super_user', name: 'Super User', permissions: JSON.stringify(superUserPermissions), isSystemRole: true },
-        { id: 'role_client', name: 'Client', permissions: JSON.stringify(clientPermissions), isSystemRole: true },
-        { id: 'role_courier', name: 'Courier', permissions: JSON.stringify(courierPermissions), isSystemRole: true },
-        { id: 'role_assigning_user', name: 'Assigning User', permissions: JSON.stringify(assigningUserPermissions), isSystemRole: true },
+        { id: 'role_admin', name: 'Administrator', permissions: allPermissions, isSystemRole: true },
+        { id: 'role_super_user', name: 'Super User', permissions: superUserPermissions, isSystemRole: true },
+        { id: 'role_client', name: 'Client', permissions: clientPermissions, isSystemRole: true },
+        { id: 'role_courier', name: 'Courier', permissions: courierPermissions, isSystemRole: true },
+        { id: 'role_assigning_user', name: 'Assigning User', permissions: assigningUserPermissions, isSystemRole: true },
     ];
-    await knex('custom_roles').insert(rolesToSeed);
+    
+    // For PostgreSQL, knex handles JSON stringification automatically.
+    // For SQLite, we need to do it manually.
+    const finalRolesToSeed = process.env.DATABASE_URL 
+        ? rolesToSeed 
+        : rolesToSeed.map(r => ({ ...r, permissions: JSON.stringify(r.permissions) }));
+
+    await knex('custom_roles').insert(finalRolesToSeed);
 
     // Seed admin user
     const adminExists = await knex('users').where({ email: 'admin@flash.com' }).first();
