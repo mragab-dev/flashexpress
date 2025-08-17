@@ -507,9 +507,13 @@ async function main() {
                 if (match) {
                     console.log('✅ Password match successful');
                     const { password, ...userWithoutPassword } = user;
-                    let finalUser = parseUserRoles(userWithoutPassword);
-                    finalUser = parseJsonField(finalUser, 'address'); // Ensure address is an object
-                    finalUser = parseJsonField(finalUser, 'zones'); // Ensure zones is an array
+                    // Ensure roles are parsed correctly from JSON string
+                    const finalUser = {
+                        ...userWithoutPassword,
+                        roles: safeJsonParse(userWithoutPassword.roles, []),
+                        address: safeJsonParse(userWithoutpassword.address, null),
+                        zones: safeJsonParse(userWithoutPassword.zones, [])
+                    };
                     console.log('🚀 Sending user data:', finalUser.name, finalUser.roles);
                     res.json(finalUser);
                 } else {
