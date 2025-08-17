@@ -50,15 +50,10 @@ async function main() {
 
     // Explicitly configure CORS for better proxy compatibility
     app.use(cors({
-        origin: process.env.NODE_ENV === 'production' 
-            ? [
-                process.env.RAILWAY_STATIC_URL,
-                /\.up\.railway\.app$/,
-                /\.railway\.app$/
-              ]
-            : '*', // Allow all origins in development
+        origin: true, // Allow all origins for now to debug
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
         allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true
     }));
     app.use(express.json({limit: '5mb'})); // To parse JSON request bodies, increased limit for photos
 
@@ -365,6 +360,17 @@ async function main() {
 
     // --- API Endpoints ---
 
+    // Health check endpoint
+    app.get('/api/health', (req, res) => {
+        console.log('🏥 Health check requested');
+        res.json({ 
+            status: 'OK', 
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development',
+            database: process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite'
+        });
+    });
+
     // Role Management
     app.get('/api/roles', async (req, res) => {
         try {
@@ -425,25 +431,32 @@ async function main() {
 
     // User Login
     app.post('/api/login', async (req, res) => {
+        console.log('📥 Login request received:', { email: req.body.email, hasPassword: !!req.body.password });
         const { email, password } = req.body;
         try {
+            console.log('🔍 Looking up user in database...');
             const user = await knex('users').where({ email: email.toLowerCase() }).first();
             if (user) {
+                console.log('👤 User found:', user.name, user.email);
                 const match = await bcrypt.compare(password, user.password);
                 if (match) {
+                    console.log('✅ Password match successful');
                     const { password, ...userWithoutPassword } = user;
                     let finalUser = parseUserRoles(userWithoutPassword);
                     finalUser = parseJsonField(finalUser, 'address'); // Ensure address is an object
                     finalUser = parseJsonField(finalUser, 'zones'); // Ensure zones is an array
+                    console.log('🚀 Sending user data:', finalUser.name, finalUser.roles);
                     res.json(finalUser);
                 } else {
+                    console.log('❌ Password mismatch');
                     res.status(401).json({ error: 'Invalid credentials' });
                 }
             } else {
+                console.log('❌ User not found for email:', email);
                 res.status(401).json({ error: 'Invalid credentials' });
             }
         } catch (error) {
-            console.error("Login error:", error);
+            console.error("🔥 Login error:", error);
             res.status(500).json({ error: 'Server error during login' });
         }
     });
