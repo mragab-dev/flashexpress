@@ -168,6 +168,50 @@ async function setupDatabase() {
           password: hashedPassword,
           roles: JSON.stringify(['Administrator']),
         });
+        console.log('Admin user created: admin@flash.com / password123');
+    } else {
+        console.log('Admin user already exists: admin@flash.com');
+    }
+
+    // Seed test client user with proper priority multipliers
+    const testClientExists = await knex('users').where({ email: 'client@test.com' }).first();
+    if (!testClientExists) {
+        console.log('Seeding test client user...');
+        const hashedPassword = await bcrypt.hash('password123', saltRounds);
+        await knex('users').insert({
+          id: 2,
+          publicId: 'CL-2',
+          name: 'Test Client',
+          email: 'client@test.com',
+          password: hashedPassword,
+          roles: JSON.stringify(['Client']),
+          flatRateFee: 75.0,
+          priorityMultipliers: JSON.stringify({ Standard: 1.0, Urgent: 1.5, Express: 2.0 }),
+          address: JSON.stringify({
+            street: "123 Test Street",
+            details: "Building A",
+            city: "Cairo",
+            zone: "Downtown"
+          })
+        });
+        console.log('Test client created: client@test.com / password123');
+    }
+
+    // Seed test courier user  
+    const testCourierExists = await knex('users').where({ email: 'courier@test.com' }).first();
+    if (!testCourierExists) {
+        console.log('Seeding test courier user...');
+        const hashedPassword = await bcrypt.hash('password123', saltRounds);
+        await knex('users').insert({
+          id: 3,
+          publicId: 'CO-3',
+          name: 'Test Courier',
+          email: 'courier@test.com',
+          password: hashedPassword,
+          roles: JSON.stringify(['Courier']),
+          zones: JSON.stringify(['Downtown', 'Heliopolis', 'Nasr City'])
+        });
+        console.log('Test courier created: courier@test.com / password123');
     }
 
 

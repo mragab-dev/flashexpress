@@ -38,7 +38,7 @@ const PartnerTierManagement = () => {
         addToast('Partner tier settings saved successfully!', 'success');
     };
 
-    const tierIcons: Record<PartnerTier, JSX.Element> = {
+    const tierIcons: Record<PartnerTier, React.ReactElement> = {
         [PartnerTier.BRONZE]: <ShieldIcon className="w-10 h-10 text-yellow-700" />,
         [PartnerTier.SILVER]: <AwardIcon className="w-10 h-10 text-gray-500" />,
         [PartnerTier.GOLD]: <CrownIcon className="w-10 h-10 text-yellow-500" />,

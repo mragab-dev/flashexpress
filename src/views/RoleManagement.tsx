@@ -76,7 +76,7 @@ const RoleManagement = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {customRoles.map(role => {
-                    const userCount = users.filter(u => (u.roles || []).includes(role.name)).length;
+                    const userCount = users.filter(u => (u.roles || []).includes(role.name as any)).length;
                     return (
                         <div key={role.id} className="card flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                             <div className="p-5">

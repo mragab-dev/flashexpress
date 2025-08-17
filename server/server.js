@@ -350,10 +350,11 @@ async function main() {
         if (shipment.paymentMethod === 'Wallet') {
             const client = await trx('users').where({ id: shipment.clientId }).first();
             if (client) {
-                const packageValue = shipment.packageValue || 0;
+                // For Wallet payments, credit the total amount collected (package value + shipping fee)
+                const totalAmountCollected = shipment.price || (shipment.packageValue + (shipment.clientFlatRateFee || 0));
                 const shippingFee = shipment.clientFlatRateFee || 0;
                 await trx('client_transactions').insert([
-                    { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: packageValue, date: new Date().toISOString(), description: `Credit for delivered shipment ${shipment.id}` },
+                    { id: generateId('TRN'), userId: client.id, type: 'Deposit', amount: totalAmountCollected, date: new Date().toISOString(), description: `Total amount collected for delivered shipment ${shipment.id}` },
                     { id: generateId('TRN'), userId: client.id, type: 'Payment', amount: -shippingFee, date: new Date().toISOString(), description: `Shipping fee for ${shipment.id}` }
                 ]);
             }

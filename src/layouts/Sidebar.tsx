@@ -13,7 +13,7 @@ import {
 
 interface NavItemConfig {
     name: string;
-    icon: JSX.Element;
+    icon: React.ReactElement;
     view: string;
     permission: Permission;
 }
@@ -131,7 +131,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen, se
                             }`}
                         >
                             <div className={`absolute left-0 top-0 h-full w-1 rounded-r-full transition-all duration-200 ${activeView === item.view ? 'bg-primary' : 'bg-transparent'}`}></div>
-                            {React.cloneElement(item.icon, { className: 'w-6 h-6' })}
+                            <div className="w-6 h-6">{item.icon}</div>
                             <span className="text-sm font-medium">{item.name}</span>
                         </button>
                     ))}

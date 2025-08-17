@@ -53,7 +53,7 @@ const generateBarcodeSVG = (text: string) => {
 
 export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) => {
 
-    const shippingFee = shipment.price - shipment.packageValue;
+    const shippingFee = shipment.clientFlatRateFee || (shipment.price - shipment.packageValue);
     const serialNumber = shipment.id.split('-').slice(2).join('-');
 
     return (
