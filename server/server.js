@@ -723,7 +723,10 @@ async function main() {
 
 
                 const govMap = { 'Cairo': 'CAI', 'Giza': 'GIZ', 'Alexandria': 'ALX' };
-                const govCode = govMap[shipmentData.toAddress.city] || 'GOV';
+                
+                // Safely parse toAddress if it's a string
+                const toAddress = safeJsonParse(shipmentData.toAddress, shipmentData.toAddress);
+                const govCode = govMap[toAddress?.city] || 'GOV';
     
                 const [counter] = await trx('shipment_counters').where({ id: 'global' }).forUpdate().select('count');
                 const newCount = counter.count + 1;
