@@ -210,19 +210,39 @@ async function main() {
     // --- Helper Functions ---
     const generateId = (prefix) => `${prefix}_${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
     
-    // Safely parse JSON fields - handles both SQLite (string) and PostgreSQL (object) formats
+    // Safely parse JSON fields - handles SQLite (string), PostgreSQL (object),
+    // and double-stringified JSON that can occur during data migration.
     const safeJsonParse = (value, defaultValue = null) => {
-        if (value === null || value === undefined) return defaultValue;
-        if (typeof value === 'object') return value; // Already parsed by PostgreSQL
+        if (value === null || value === undefined) {
+            return defaultValue;
+        }
+        if (typeof value === 'object') {
+            return value; // Already parsed by PostgreSQL
+        }
+
         if (typeof value === 'string') {
             try {
-                return JSON.parse(value);
-            } catch (e) {
-                console.error('Failed to parse JSON:', e);
+                let parsed = JSON.parse(value);
+                // Handle double-stringified values
+                if (typeof parsed === 'string') {
+                    // The second parse can also fail
+                    try {
+                        return JSON.parse(parsed);
+                    } catch (innerError) {
+                        // If the inner parse fails, it means we have a string that's not JSON.
+                        // For example, JSON.parse('"hello"') results in the string "hello".
+                        // In this case, we should return the result of the first parse.
+                        return parsed;
+                    }
+                }
+                return parsed;
+            } catch (outerError) {
+                // The initial string was not valid JSON.
                 return defaultValue;
             }
         }
-        return defaultValue;
+        
+        return value; // For other primitive types
     };
 
     const parseUserRoles = (user) => {
