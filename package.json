@@ -6,11 +6,9 @@
   "scripts": {
     "start": "node server/server.js",
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "build:skip-check": "vite build",
+    "build": "npm install --prefix server && vite build",
     "lint": "vite lint",
-    "preview": "vite preview",
-    "postinstall": "npm install --prefix server && npm run build:skip-check"
+    "preview": "vite preview"
   },
   "engines": {
     "node": ">=18.0.0"

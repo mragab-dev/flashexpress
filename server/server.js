@@ -49,12 +49,40 @@ async function main() {
 
 
     // Explicitly configure CORS for better proxy compatibility
-    app.use(cors({
-        origin: true, // Allow all origins for now to debug
+    const corsOptions = {
+        origin: (origin, callback) => {
+            const isProduction = process.env.NODE_ENV === 'production';
+
+            if (!isProduction) {
+                // Allow any origin in development
+                return callback(null, true);
+            }
+
+            // Allow requests with no origin (like mobile apps or curl)
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            const allowedOrigins = [
+                process.env.RAILWAY_STATIC_URL,
+                'https://flash-express-app-production.up.railway.app'
+            ].filter(Boolean); // Remove any falsy values
+
+            const isAllowed = allowedOrigins.includes(origin) || /\.up\.railway\.app$/.test(origin);
+
+            if (isAllowed) {
+                callback(null, true);
+            } else {
+                console.warn(`CORS Blocked: Origin ${origin} is not allowed.`);
+                callback(new Error(`Origin ${origin} not allowed by CORS`));
+            }
+        },
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true
-    }));
+    };
+
+    app.use(cors(corsOptions));
     
     // Add request logging middleware
     app.use((req, res, next) => {
