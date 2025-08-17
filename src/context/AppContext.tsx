@@ -221,17 +221,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
             console.log('🔑 Starting login process...');
             
-            // First, try to get roles (but don't fail if this fails)
-            let rolesData: CustomRole[] = [];
-            try {
-                console.log('📋 Fetching roles...');
-                rolesData = await apiFetch('/api/roles');
-                console.log('✅ Roles fetched successfully');
-            } catch (rolesError) {
-                console.warn('⚠️ Failed to fetch roles, continuing with empty roles:', rolesError);
-                // Continue with empty roles rather than failing completely
-            }
-            setCustomRoles(rolesData);
+            // Fetch roles first, as they are needed to calculate permissions.
+            const rolesData: CustomRole[] = await apiFetch('/api/roles');
+            setCustomRoles(rolesData); // Set for global state
             
             console.log('👤 Attempting login...');
             const user: User = await apiFetch('/api/login', { 
@@ -239,11 +231,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 body: JSON.stringify({ email, password }) 
             });
             console.log('✅ Login API successful:', user.name);
+
+            // Calculate permissions for the logged-in user right away.
+            const userRoleNames = Array.isArray(user.roles) ? user.roles : [];
+            const allPermissions = userRoleNames.reduce((acc, roleName) => {
+                const role = rolesData.find(r => r.name === roleName);
+                if (role?.permissions) {
+                    return [...acc, ...role.permissions];
+                }
+                return acc;
+            }, [] as Permission[]);
+            const permissions = [...new Set(allPermissions)].sort();
+
+            // Create the complete user object with permissions.
+            const userWithPermissions = {
+                ...user,
+                permissions,
+            };
             
-            // Set the user immediately. The permissions will be calculated by the `userWithCalculatedData` memo.
-            setCurrentUser(user);
+            // Set the complete user object.
+            setCurrentUser(userWithPermissions);
             addToast(`Welcome back, ${user.name}!`, 'success');
-            console.log('🎉 Login completed successfully');
+            console.log('🎉 Login completed successfully with permissions');
             return true;
         } catch (error: any) {
             console.error('❌ Login failed:', error);
@@ -296,45 +305,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [currentUser, fetchData, addToast]);
 
     // This effect ensures the currentUser in context is always up-to-date
-    // with permissions and a calculated wallet balance.
-    const userWithCalculatedData = useMemo(() => {
-        if (!currentUser) return null;
+    // with a calculated wallet balance.
+    useEffect(() => {
+        if (!currentUser) return;
 
-        // 1. Recalculate permissions from the latest roles data
         const updatedUserFromList = users.find(u => u.id === currentUser.id);
-        const safeUserRoles = updatedUserFromList ? (Array.isArray(updatedUserFromList.roles) ? updatedUserFromList.roles : []) : (Array.isArray(currentUser.roles) ? currentUser.roles : []);
-        const allPermissions = safeUserRoles.reduce((acc, roleName) => {
-            const role = customRoles.find(r => r.name === roleName);
-            if (role?.permissions) {
-                return [...acc, ...role.permissions];
-            }
-            return acc;
-        }, [] as Permission[]);
-        const permissions = [...new Set(allPermissions)].sort();
-
-        // 2. Calculate wallet balance
         const myTransactions = clientTransactions.filter(t => t.userId === currentUser.id);
         const walletBalance = myTransactions.filter(t => t.status !== 'Pending').reduce((sum, t) => sum + t.amount, 0);
 
-        return {
-            ...currentUser,
-            ...(updatedUserFromList || {}), // Get latest user data like name, address, etc.
-            permissions,
-            walletBalance,
-        };
-
-    }, [currentUser, users, customRoles, clientTransactions]);
+        setCurrentUser(prevUser => {
+            if (!prevUser) return null;
+            const newUser = {
+                ...prevUser,
+                ...(updatedUserFromList || {}),
+                walletBalance,
+            };
+            // Avoid unnecessary re-renders if nothing important changed
+            if (JSON.stringify(prevUser) === JSON.stringify(newUser)) {
+                return prevUser;
+            }
+            return newUser;
+        });
+    }, [users, clientTransactions, currentUser?.id]);
 
 
     // --- App Functions ---
     const hasPermission = useCallback((permission: Permission) => {
-        return userWithCalculatedData?.permissions?.includes(permission) ?? false;
-    }, [userWithCalculatedData]);
+        return currentUser?.permissions?.includes(permission) ?? false;
+    }, [currentUser]);
 
     const addShipment = useCallback(async (shipmentData: Omit<Shipment, 'id' | 'creationDate' | 'status'>) => {
-        if (!userWithCalculatedData) return;
+        if (!currentUser) return;
         await apiFetch('/api/shipments', { method: 'POST', body: JSON.stringify(shipmentData) });
-    }, [userWithCalculatedData]);
+    }, [currentUser]);
     
     const updateShipmentStatus = useCallback(async (shipmentId: string, status: ShipmentStatus, details: { failureReason?: string; failurePhoto?: string | null } = {}) => {
         try {
@@ -715,7 +718,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     const value: AppContextType = {
-        currentUser: userWithCalculatedData,
+        currentUser,
         users,
         shipments,
         clientTransactions,
