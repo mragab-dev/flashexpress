@@ -55,6 +55,17 @@ async function main() {
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true
     }));
+    
+    // Add request logging middleware
+    app.use((req, res, next) => {
+        console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
+        console.log(`   Headers:`, req.headers);
+        if (req.body && Object.keys(req.body).length > 0) {
+            console.log(`   Body:`, req.body);
+        }
+        next();
+    });
+    
     app.use(express.json({limit: '5mb'})); // To parse JSON request bodies, increased limit for photos
 
     // Serve static files from the React app and uploaded images
