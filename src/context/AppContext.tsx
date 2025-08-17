@@ -219,13 +219,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const login = useCallback(async (email: string, password: string): Promise<boolean> => {
         setIsLoading(true);
         try {
-            const rolesData: CustomRole[] = await apiFetch('/api/roles');
+            console.log('🔑 Starting login process...');
+            
+            // First, try to get roles (but don't fail if this fails)
+            let rolesData: CustomRole[] = [];
+            try {
+                console.log('📋 Fetching roles...');
+                rolesData = await apiFetch('/api/roles');
+                console.log('✅ Roles fetched successfully');
+            } catch (rolesError) {
+                console.warn('⚠️ Failed to fetch roles, continuing with empty roles:', rolesError);
+                // Continue with empty roles rather than failing completely
+            }
             setCustomRoles(rolesData);
             
-            const user: User = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+            console.log('👤 Attempting login...');
+            const user: User = await apiFetch('/api/login', { 
+                method: 'POST', 
+                body: JSON.stringify({ email, password }) 
+            });
+            console.log('✅ Login API successful:', user.name);
             
             // Augment user with permissions based on all their roles
             const safeUserRoles = Array.isArray(user.roles) ? user.roles : [];
+            console.log('🔐 Processing user roles:', safeUserRoles);
+            
             const allPermissions = safeUserRoles.reduce((acc, roleName) => {
                 const role = rolesData.find(r => r.name === roleName);
                 if (role && Array.isArray(role.permissions)) {
@@ -234,12 +252,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return acc;
             }, [] as Permission[]);
             user.permissions = [...new Set(allPermissions)].sort(); // Ensure unique & sorted permissions
+            console.log('✅ User permissions processed:', user.permissions.length, 'permissions');
 
             setCurrentUser(user);
             addToast(`Welcome back, ${user.name}!`, 'success');
+            console.log('🎉 Login completed successfully');
             return true;
         } catch (error: any) {
-            addToast(error.message, 'error');
+            console.error('❌ Login failed:', error);
+            const errorMessage = error.message || 'Login failed - please try again';
+            addToast(errorMessage, 'error');
             setCurrentUser(null);
             return false;
         } finally {
