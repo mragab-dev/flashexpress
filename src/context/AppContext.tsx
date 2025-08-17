@@ -240,20 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
             console.log('✅ Login API successful:', user.name);
             
-            // Augment user with permissions based on all their roles
-            const safeUserRoles = Array.isArray(user.roles) ? user.roles : [];
-            console.log('🔐 Processing user roles:', safeUserRoles);
-            
-            const allPermissions = safeUserRoles.reduce((acc, roleName) => {
-                const role = rolesData.find(r => r.name === roleName);
-                if (role && Array.isArray(role.permissions)) {
-                    return [...acc, ...role.permissions];
-                }
-                return acc;
-            }, [] as Permission[]);
-            user.permissions = [...new Set(allPermissions)].sort(); // Ensure unique & sorted permissions
-            console.log('✅ User permissions processed:', user.permissions.length, 'permissions');
-
+            // Set the user immediately. The permissions will be calculated by the `userWithCalculatedData` memo.
             setCurrentUser(user);
             addToast(`Welcome back, ${user.name}!`, 'success');
             console.log('🎉 Login completed successfully');
