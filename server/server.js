@@ -182,23 +182,31 @@ async function main() {
     // --- Helper Functions ---
     const generateId = (prefix) => `${prefix}_${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
     
-    const parseUserRoles = (user) => {
-        if (user && typeof user.roles === 'string') {
+    // Safely parse JSON fields - handles both SQLite (string) and PostgreSQL (object) formats
+    const safeJsonParse = (value, defaultValue = null) => {
+        if (value === null || value === undefined) return defaultValue;
+        if (typeof value === 'object') return value; // Already parsed by PostgreSQL
+        if (typeof value === 'string') {
             try {
-                return { ...user, roles: JSON.parse(user.roles) };
-            } catch (e) { console.error(`Failed to parse roles for user ${user.id}`); }
+                return JSON.parse(value);
+            } catch (e) {
+                console.error('Failed to parse JSON:', e);
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    };
+
+    const parseUserRoles = (user) => {
+        if (user && user.roles) {
+            return { ...user, roles: safeJsonParse(user.roles, []) };
         }
         return user;
     };
 
     const parseJsonField = (item, field) => {
-        if (item && item[field] && typeof item[field] === 'string') {
-            try {
-                return { ...item, [field]: JSON.parse(item[field]) };
-            } catch (e) {
-                console.error(`Failed to parse JSON for field ${field}:`, e);
-                return { ...item, [field]: null }; // Return null or an empty object/array on failure
-            }
+        if (item && item[field] !== undefined) {
+            return { ...item, [field]: safeJsonParse(item[field], null) };
         }
         return item;
     };
@@ -257,7 +265,7 @@ async function main() {
         const shipment = await trx('shipments').where({ id: shipmentId }).first();
         if (!shipment) return;
 
-        const currentHistory = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : (JSON.parse(shipment.statusHistory || '[]'));
+        const currentHistory = safeJsonParse(shipment.statusHistory, []);
         
         // Avoid duplicate status entries
         if (currentHistory.length > 0 && currentHistory[currentHistory.length - 1].status === newStatus) {
@@ -307,7 +315,7 @@ async function main() {
             deliveryDate: new Date().toISOString() 
         };
         
-        const currentHistory = Array.isArray(shipment.statusHistory) ? shipment.statusHistory : (JSON.parse(shipment.statusHistory || '[]'));
+        const currentHistory = safeJsonParse(shipment.statusHistory, []);
         currentHistory.push({ status: newStatus, timestamp: updatePayload.deliveryDate });
         updatePayload.statusHistory = JSON.stringify(currentHistory);
 
@@ -694,7 +702,7 @@ async function main() {
                 }
 
                 // Recalculate fees on backend for security
-                const priorityMultipliers = client.priorityMultipliers ? JSON.parse(client.priorityMultipliers) : { Standard: 1.0, Urgent: 1.5, Express: 2.0 };
+                const priorityMultipliers = safeJsonParse(client.priorityMultipliers, { Standard: 1.0, Urgent: 1.5, Express: 2.0 });
                 let clientFee = (client.flatRateFee || 75) * (priorityMultipliers[shipmentData.priority] || 1.0);
                 
                 // Apply partner tier discount
@@ -771,7 +779,7 @@ async function main() {
     
                 let newStatus;
                 let updatePayload = {};
-                const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                const currentHistory = safeJsonParse(shipment.statusHistory, []);
     
                 if (isRevert) {
                     // --- REVERT LOGIC ---
@@ -902,7 +910,7 @@ async function main() {
                 const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
                 const newStatus = 'Assigned to Courier';
                 
-                const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                const currentHistory = safeJsonParse(shipment.statusHistory, []);
                 currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
 
                 await trx('shipments').where({ id }).update({
@@ -948,9 +956,9 @@ async function main() {
                 }, {});
 
                 for (const shipment of shipmentsToAssign) {
-                    const toAddress = JSON.parse(shipment.toAddress);
+                    const toAddress = safeJsonParse(shipment.toAddress, {});
                     const suitableCouriers = couriers
-                        .filter(c => (JSON.parse(c.zones || '[]')).includes(toAddress.zone))
+                        .filter(c => safeJsonParse(c.zones, []).includes(toAddress.zone))
                         .sort((a, b) => courierWorkload[a.id] - courierWorkload[b.id]);
                     
                     if (suitableCouriers.length > 0) {
@@ -960,7 +968,7 @@ async function main() {
                         const courierStats = await trx('courier_stats').where({ courierId: bestCourier.id }).first();
                         const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
                         const newStatus = 'Assigned to Courier';
-                        const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                        const currentHistory = safeJsonParse(shipment.statusHistory, []);
                         currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
 
                         await trx('shipments').where({ id: shipment.id }).update({
@@ -1379,7 +1387,7 @@ async function main() {
                 const shipment = await trx('shipments').where({ id }).first();
                 const newStatus = 'Packaged and Waiting for Assignment';
                 
-                const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                const currentHistory = safeJsonParse(shipment.statusHistory, []);
                 currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
                 
                 await trx('shipments').where({ id }).update({ 
@@ -1440,7 +1448,7 @@ async function main() {
                 })).filter(log => log.quantityUsed > 0);
 
                 for(const shipment of shipmentsToUpdate) {
-                    const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                    const currentHistory = safeJsonParse(shipment.statusHistory, []);
                     currentHistory.push({ status: newStatus, timestamp });
                     await trx('shipments').where({ id: shipment.id }).update({
                         status: newStatus,
@@ -1493,7 +1501,7 @@ async function main() {
                         ? courierStats.commissionValue 
                         : shipment.price * (courierStats.commissionValue / 100);
                     
-                    const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                    const currentHistory = safeJsonParse(shipment.statusHistory, []);
                     currentHistory.push({ status: newStatus, timestamp });
 
                     await trx('shipments').where({ id }).update({
@@ -1527,7 +1535,7 @@ async function main() {
                 for (const id of shipmentIds) {
                     const shipment = await trx('shipments').where({ id }).first();
                     if (shipment) {
-                        const currentHistory = JSON.parse(shipment.statusHistory || '[]');
+                        const currentHistory = safeJsonParse(shipment.statusHistory, []);
                         // Avoid adding duplicate status if somehow called multiple times
                         if (currentHistory.length === 0 || currentHistory[currentHistory.length - 1].status !== status) {
                             currentHistory.push({ status: status, timestamp: new Date().toISOString() });
@@ -1738,7 +1746,7 @@ async function main() {
 
             for (const shipment of shipmentsWithPhotos) {
                 try {
-                    const history = JSON.parse(shipment.statusHistory || '[]');
+                    const history = safeJsonParse(shipment.statusHistory, []);
                     const failureEntry = history.slice().reverse().find(h => h.status === 'Delivery Failed');
                     
                     if (failureEntry) {
