@@ -632,10 +632,16 @@ async function main() {
 
                 let finalPrice;
                 if (shipmentData.paymentMethod === 'Transfer') {
-                    // For Transfer, COD amount is what's left to collect
-                    finalPrice = shipmentData.amountToCollect || 0; 
-                } else {
-                    finalPrice = shipmentData.packageValue + clientFee;
+                    const amountToCollectFromRecipient = shipmentData.amountToCollect || 0;
+                    if (shipmentData.feeIncludedInTransfer) {
+                        // The amount the courier collects is exactly what's specified.
+                        finalPrice = amountToCollectFromRecipient;
+                    } else {
+                        // The courier needs to collect the specified amount PLUS the shipping fee.
+                        finalPrice = amountToCollectFromRecipient + clientFee;
+                    }
+                } else { // COD or Wallet
+                    finalPrice = (shipmentData.packageValue || 0) + clientFee;
                 }
 
 
@@ -669,6 +675,7 @@ async function main() {
                     toAddress: JSON.stringify(shipmentData.toAddress),
                     amountReceived: shipmentData.paymentMethod === 'Transfer' ? shipmentData.amountReceived : null,
                     amountToCollect: shipmentData.paymentMethod === 'Transfer' ? shipmentData.amountToCollect : null,
+                    feeIncludedInTransfer: shipmentData.feeIncludedInTransfer || false,
                 };
     
                 await trx('shipments').insert(newShipment);
@@ -816,15 +823,12 @@ async function main() {
                     throw err;
                 }
 
-                let courierStats = await trx('courier_stats').where({ courierId }).first();
-
-                if (!courierStats) {
-                    const defaultStats = { courierId: courierId, commissionType: 'flat', commissionValue: 30, consecutiveFailures: 0, isRestricted: false, performanceRating: 5.0 };
-                    await trx('courier_stats').insert(defaultStats);
-                    courierStats = defaultStats;
-                }
-
-                const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
+                const priorityCommissions = {
+                    'Urgent': 70,
+                    'Express': 50,
+                    'Standard': 30
+                };
+                const commission = priorityCommissions[shipment.priority] || 30; // Default to Standard
                 const newStatus = 'Assigned to Courier';
                 
                 const currentHistory = JSON.parse(shipment.statusHistory || '[]');
@@ -882,8 +886,12 @@ async function main() {
                         const bestCourier = suitableCouriers[0];
                         
                         const client = await trx('users').where({ id: shipment.clientId }).first();
-                        const courierStats = await trx('courier_stats').where({ courierId: bestCourier.id }).first();
-                        const commission = courierStats.commissionType === 'flat' ? courierStats.commissionValue : shipment.price * (courierStats.commissionValue / 100);
+                        const priorityCommissions = {
+                            'Urgent': 70,
+                            'Express': 50,
+                            'Standard': 30
+                        };
+                        const commission = priorityCommissions[shipment.priority] || 30; // Default to Standard
                         const newStatus = 'Assigned to Courier';
                         const currentHistory = JSON.parse(shipment.statusHistory || '[]');
                         currentHistory.push({ status: newStatus, timestamp: new Date().toISOString() });
@@ -1401,27 +1409,31 @@ async function main() {
 
         try {
             await knex.transaction(async trx => {
+                const courier = await trx('users').where({ id: courierId }).first();
+                if (!courier) {
+                    throw new Error('Courier not found');
+                }
+                const courierStats = await trx('courier_stats').where({ courierId }).first();
+                if (courierStats && courierStats.isRestricted) {
+                    throw new Error('Courier is restricted and cannot be assigned new shipments.');
+                }
+
+                const shipmentsToUpdate = await trx('shipments').whereIn('id', shipmentIds).andWhere('status', 'Packaged and Waiting for Assignment');
+
+                if (shipmentsToUpdate.length === 0) return;
+
                 const newStatus = 'Assigned to Courier';
                 const timestamp = new Date().toISOString();
 
-                let courierStats = await trx('courier_stats').where({ courierId }).first();
-                if (!courierStats) { // Should not happen but as a fallback
-                    courierStats = { commissionType: 'flat', commissionValue: 30 };
-                }
-
-                for (const id of shipmentIds) {
-                    const shipment = await trx('shipments').where({ id }).first();
-                    if (!shipment || shipment.status !== 'Packaged and Waiting for Assignment') continue;
-
+                for (const shipment of shipmentsToUpdate) {
                     const client = await trx('users').where({ id: shipment.clientId }).first();
-                    const commission = courierStats.commissionType === 'flat' 
-                        ? courierStats.commissionValue 
-                        : shipment.price * (courierStats.commissionValue / 100);
+                    const priorityCommissions = { 'Urgent': 70, 'Express': 50, 'Standard': 30 };
+                    const commission = priorityCommissions[shipment.priority] || 30;
                     
                     const currentHistory = JSON.parse(shipment.statusHistory || '[]');
                     currentHistory.push({ status: newStatus, timestamp });
 
-                    await trx('shipments').where({ id }).update({
+                    await trx('shipments').where({ id: shipment.id }).update({
                         courierId,
                         status: newStatus,
                         statusHistory: JSON.stringify(currentHistory),
@@ -1429,51 +1441,57 @@ async function main() {
                         courierCommission: commission
                     });
                     
-                    await createInAppNotification(trx, courierId, `You have a new shipment assigned: ${id}`, '/tasks');
+                    await createInAppNotification(trx, courierId, `You have a new shipment assigned: ${shipment.id}`, '/tasks');
                     await createNotification(trx, shipment, newStatus);
                 }
             });
-            res.json({ success: true, message: `${shipmentIds.length} shipments assigned.` });
+            res.json({ success: true, message: `${shipmentIds.length} shipments assigned successfully.` });
             io.emit('data_updated');
         } catch (e) {
             console.error('Error during bulk assignment:', e);
-            res.status(500).json({ error: 'Failed to bulk assign shipments.' });
+            res.status(500).json({ error: e.message || 'Failed to bulk assign shipments.' });
         }
     });
-
+    
     app.post('/api/shipments/bulk-status-update', async (req, res) => {
         const { shipmentIds, status } = req.body;
         if (!shipmentIds || !Array.isArray(shipmentIds) || shipmentIds.length === 0 || !status) {
             return res.status(400).json({ error: 'Missing shipment IDs or status.' });
         }
-    
+        
         try {
             await knex.transaction(async trx => {
-                for (const id of shipmentIds) {
-                    const shipment = await trx('shipments').where({ id }).first();
-                    if (shipment) {
-                        const currentHistory = JSON.parse(shipment.statusHistory || '[]');
-                        // Avoid adding duplicate status if somehow called multiple times
-                        if (currentHistory.length === 0 || currentHistory[currentHistory.length - 1].status !== status) {
-                            currentHistory.push({ status: status, timestamp: new Date().toISOString() });
-                            await trx('shipments').where({ id }).update({
-                                status: status,
-                                statusHistory: JSON.stringify(currentHistory)
-                            });
-                            await createNotification(trx, shipment, status);
-                        }
-                    }
+                const shipmentsToUpdate = await trx('shipments').whereIn('id', shipmentIds);
+                for(const shipment of shipmentsToUpdate) {
+                    await updateStatusAndHistory(trx, shipment.id, status);
                 }
             });
             res.json({ success: true, message: `${shipmentIds.length} shipments updated to ${status}.` });
             io.emit('data_updated');
         } catch (e) {
             console.error('Error during bulk status update:', e);
-            res.status(500).json({ error: 'Failed to bulk update shipment statuses.' });
+            res.status(500).json({ error: 'Failed to bulk update status.' });
         }
     });
 
     // Assets
+    app.post('/api/assets', async (req, res) => {
+        try {
+            const newAsset = { ...req.body, id: generateId('ast'), status: 'Available' };
+            await knex('assets').insert(newAsset);
+            res.status(201).json(newAsset);
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Failed to create asset' }); }
+    });
+
+    app.put('/api/assets/:id', async (req, res) => {
+        try {
+            await knex('assets').where({ id: req.params.id }).update(req.body);
+            res.json({ success: true });
+            io.emit('data_updated');
+        } catch (e) { res.status(500).json({ error: 'Failed to update asset' }); }
+    });
+    
     app.delete('/api/assets/:id', async (req, res) => {
         try {
             await knex('assets').where({ id: req.params.id }).del();
@@ -1482,40 +1500,11 @@ async function main() {
         } catch (e) { res.status(500).json({ error: 'Failed to delete asset' }); }
     });
 
-    app.post('/api/assets', async (req, res) => {
-      const { type, name, identifier, purchaseDate, purchasePrice, usefulLifeMonths } = req.body;
-      try {
-        const newAsset = { 
-            id: generateId('asset'), 
-            type, 
-            name, 
-            identifier, 
-            status: 'Available',
-            purchaseDate: purchaseDate || null,
-            purchasePrice: purchasePrice || null,
-            usefulLifeMonths: usefulLifeMonths || null
-        };
-        await knex('assets').insert(newAsset);
-        res.status(201).json(newAsset);
-        io.emit('data_updated');
-      } catch (e) { res.status(500).json({ error: 'Failed to create asset' }); }
-    });
-
-    app.put('/api/assets/:id', async (req, res) => {
-        const { id } = req.params;
-        try {
-            await knex('assets').where({ id }).update(req.body);
-            res.json({ success: true });
-            io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Failed to update asset' }); }
-    });
-
     app.post('/api/assets/:id/assign', async (req, res) => {
-        const { id } = req.params;
         const { userId } = req.body;
         try {
-            await knex('assets').where({ id }).update({ 
-                assignedToUserId: userId, 
+            await knex('assets').where({ id: req.params.id }).update({
+                assignedToUserId: userId,
                 status: 'Assigned',
                 assignmentDate: new Date().toISOString()
             });
@@ -1525,10 +1514,9 @@ async function main() {
     });
 
     app.post('/api/assets/:id/unassign', async (req, res) => {
-        const { id } = req.params;
         try {
-            await knex('assets').where({ id }).update({ 
-                assignedToUserId: null, 
+            await knex('assets').where({ id: req.params.id }).update({
+                assignedToUserId: null,
                 status: 'Available',
                 assignmentDate: null
             });
@@ -1536,171 +1524,90 @@ async function main() {
             io.emit('data_updated');
         } catch (e) { res.status(500).json({ error: 'Failed to unassign asset' }); }
     });
-    
-    // --- Supplier Management Endpoints ---
+
+    // Suppliers
     app.post('/api/suppliers', async (req, res) => {
-        const { name, contact_person, phone, email, address } = req.body;
-        if (!name) return res.status(400).json({ error: 'Supplier name is required' });
         try {
-            const newSupplier = { id: generateId('sup'), name, contact_person, phone, email, address };
+            const newSupplier = { ...req.body, id: generateId('sup') };
             await knex('suppliers').insert(newSupplier);
             res.status(201).json(newSupplier);
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Server error creating supplier' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to create supplier' }); }
     });
-
+    
     app.put('/api/suppliers/:id', async (req, res) => {
-        const { id } = req.params;
         try {
-            await knex('suppliers').where({ id }).update(req.body);
+            await knex('suppliers').where({ id: req.params.id }).update(req.body);
             res.json({ success: true });
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Server error updating supplier' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to update supplier' }); }
     });
     
     app.delete('/api/suppliers/:id', async (req, res) => {
-        const { id } = req.params;
         try {
-            await knex('suppliers').where({ id }).del();
+            await knex('suppliers').where({ id: req.params.id }).del();
             res.json({ success: true });
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Server error deleting supplier' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to delete supplier' }); }
     });
 
     app.post('/api/supplier-transactions', async (req, res) => {
-        const { supplier_id, date, description, type, amount } = req.body;
-        if (!supplier_id || !date || !type || amount === undefined) {
-            return res.status(400).json({ error: 'Missing required transaction fields' });
-        }
         try {
-            const newTransaction = { id: generateId('stran'), supplier_id, date, description, type, amount };
+            const newTransaction = { ...req.body, id: generateId('trn_sup') };
             await knex('supplier_transactions').insert(newTransaction);
             res.status(201).json(newTransaction);
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Server error creating transaction' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to add transaction' }); }
     });
-
+    
     app.delete('/api/supplier-transactions/:id', async (req, res) => {
-        const { id } = req.params;
         try {
-            await knex('supplier_transactions').where({ id }).del();
+            await knex('supplier_transactions').where({ id: req.params.id }).del();
             res.json({ success: true });
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Server error deleting transaction' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to delete transaction' }); }
     });
-
-    // --- Partner Tier Management Endpoints ---
-    app.get('/api/tier-settings', async (req, res) => {
-        try {
-            const settings = await knex('tier_settings').select();
-            res.json(settings);
-        } catch (e) { res.status(500).json({ error: 'Failed to fetch tier settings' }); }
-    });
-
+    
+    // Partner Tiers
     app.put('/api/tier-settings', async (req, res) => {
         const { settings } = req.body;
         try {
             await knex.transaction(async trx => {
-                for (const setting of settings) {
-                    await trx('tier_settings').where({ tierName: setting.tierName }).update({
-                        shipmentThreshold: setting.shipmentThreshold,
-                        discountPercentage: setting.discountPercentage,
-                    });
-                }
+                await trx('tier_settings').del();
+                await trx('tier_settings').insert(settings);
             });
             res.json({ success: true });
             io.emit('data_updated');
         } catch (e) { res.status(500).json({ error: 'Failed to update tier settings' }); }
     });
-
+    
     app.put('/api/clients/:id/tier', async (req, res) => {
         const { id } = req.params;
-        const { tier } = req.body; // tier can be 'Bronze', 'Silver', 'Gold', or null
+        const { tier } = req.body;
         try {
-            const updatePayload = {
-                partnerTier: tier,
-                manualTierAssignment: tier !== null,
-            };
-            await knex('users').where({ id }).update(updatePayload);
+            await knex('users')
+                .where({ id })
+                .update({
+                    partnerTier: tier,
+                    manualTierAssignment: tier !== null
+                });
             res.json({ success: true });
             io.emit('data_updated');
-        } catch (e) { res.status(500).json({ error: 'Failed to assign tier' }); }
+        } catch (e) { res.status(500).json({ error: 'Failed to update client tier' }); }
     });
 
 
-    // Fallback for client-side routing
+    // --- Final catch-all for React Router ---
     app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, '../dist/index.html'));
+        res.sendFile(path.join(__dirname, '../dist/index.html'));
     });
 
-    // --- Scheduled Cleanup Task ---
-    const cleanupExpiredEvidence = async () => {
-        console.log('Running scheduled job: cleaning up expired payout evidence...');
-        try {
-            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-            const expiredTransactions = await knex('courier_transactions')
-                .whereNotNull('transferEvidencePath')
-                .andWhere('timestamp', '<', threeDaysAgo);
-
-            for (const transaction of expiredTransactions) {
-                console.log(`Evidence for transaction ${transaction.id} is older than 3 days. Deleting.`);
-                const fullPath = path.join(__dirname, transaction.transferEvidencePath);
-                if (fs.existsSync(fullPath)) {
-                    fs.unlinkSync(fullPath);
-                    console.log(`Deleted file: ${fullPath}`);
-                }
-            }
-        } catch (error) {
-            console.error('Error during evidence cleanup job:', error);
-        }
-    };
-    
-    const cleanupExpiredFailurePhotos = async () => {
-        console.log('Running scheduled job: cleaning up expired failure photos...');
-        try {
-            const shipmentsWithPhotos = await knex('shipments').whereNotNull('failurePhotoPath');
-            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-
-            for (const shipment of shipmentsWithPhotos) {
-                try {
-                    const history = JSON.parse(shipment.statusHistory || '[]');
-                    const failureEntry = history.slice().reverse().find(h => h.status === 'Delivery Failed');
-                    
-                    if (failureEntry) {
-                        const failureTime = new Date(failureEntry.timestamp);
-                        if (failureTime < threeDaysAgo) {
-                            console.log(`Photo for shipment ${shipment.id} is older than 3 days. Deleting.`);
-                            const fullPath = path.join(__dirname, shipment.failurePhotoPath);
-                            if (fs.existsSync(fullPath)) {
-                                fs.unlinkSync(fullPath);
-                                console.log(`Deleted file: ${fullPath}`);
-                            }
-                            await knex('shipments').where({ id: shipment.id }).update({ failurePhotoPath: null });
-                            io.emit('data_updated');
-                        }
-                    }
-                } catch (err) {
-                    console.error(`Error processing shipment ${shipment.id} for photo cleanup:`, err);
-                }
-            }
-        } catch (error) {
-            console.error('Error during photo cleanup job:', error);
-        }
-    };
-
-    // Run the cleanup job every hour
-    setInterval(cleanupExpiredFailurePhotos, 60 * 60 * 1000);
-    setInterval(cleanupExpiredEvidence, 60 * 60 * 1000);
-    // Run once on startup as well
-    cleanupExpiredFailurePhotos();
-    cleanupExpiredEvidence();
-
-    // Start the server
+    // --- Start Server ---
     const PORT = process.env.PORT || 3001;
     httpServer.listen(PORT, () => {
-      console.log(`Backend and WebSocket server listening on port ${PORT}`);
+        console.log(`HTTP Server running on http://localhost:${PORT}`);
+        console.log(`WebSocket Server initialized.`);
     });
 }
 
-// Start the application
-main();
+main(); // Run the main async function

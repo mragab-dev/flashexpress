@@ -1,10 +1,11 @@
 
 
+
 import { useAppContext } from '../context/AppContext';
-import { ShipmentStatus, PaymentMethod, UserRole, ClientTransaction } from '../types';
+import { ShipmentStatus, PaymentMethod, UserRole } from '../types';
 import { exportToCsv } from '../utils/pdf';
 import { StatCard } from '../components/common/StatCard';
-import { ChartBarIcon, CheckCircleIcon, WalletIcon, DocumentDownloadIcon, CurrencyDollarIcon } from '../components/Icons';
+import { ChartBarIcon, CheckCircleIcon, WalletIcon, DocumentDownloadIcon } from '../components/Icons';
 
 const Financials = () => {
     const { currentUser, shipments, getTaxCardNumber } = useAppContext();

@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, User, Permission, UserRole, PartnerTier } from '../types';
+import { Address, PaymentMethod, ZONES, ShipmentPriority, Shipment, Permission, UserRole } from '../types';
 import { PlusCircleIcon, UploadIcon, DownloadIcon, CheckCircleIcon, XCircleIcon } from '../components/Icons';
 import Papa from 'papaparse';
 

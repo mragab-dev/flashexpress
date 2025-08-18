@@ -40,6 +40,12 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  
+  /* Fix for form elements in dark mode */
+  .dark input, .dark select, .dark textarea {
+    @apply bg-card border-border text-foreground;
+    color-scheme: dark;
+  }
 }
 
 .will-animate {

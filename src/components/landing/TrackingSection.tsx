@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { JSX, useState } from 'react';
 import { Search, Package, MapPin, CheckCircle, Clock, AlertTriangle, Truck } from 'lucide-react';
+import { apiFetch } from '../../api/client';
 
 interface TrackingSectionProps {
   t: (key: string) => string;
@@ -10,54 +11,95 @@ const TrackingSection: React.FC<TrackingSectionProps> = ({ t }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [trackingResult, setTrackingResult] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumber.trim() || !phoneNumber.trim()) return;
 
     setIsLoading(true);
     setTrackingResult(null);
+    setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const statuses = [
-        { 
-          status: 'In Transit', 
-          location: 'Cairo Sorting Facility', 
-          details: 'Package has left the origin facility.',
-          icon: <Truck className="h-5 w-5" />,
-          color: 'text-blue-600'
-        },
-        { 
-          status: 'Out for Delivery', 
-          location: 'Alexandria Hub', 
-          details: 'Your package is on its way to the final destination.',
-          icon: <Package className="h-5 w-5" />,
-          color: 'text-orange-600'
-        },
-        { 
-          status: 'Delivered', 
-          location: 'Your City', 
-          details: 'Package delivered successfully.',
-          icon: <CheckCircle className="h-5 w-5" />,
-          color: 'text-green-600'
-        },
-        { 
-          status: 'Exception', 
-          location: 'Giza', 
-          details: 'Delivery attempt failed. Will retry next business day.',
-          icon: <AlertTriangle className="h-5 w-5" />,
-          color: 'text-red-600'
-        }
-      ];
-      
-      const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-      setTrackingResult({
-        trackingId: trackingNumber.toUpperCase(),
-        ...randomStatus
+    try {
+      const result = await apiFetch('/api/track', {
+        method: 'POST',
+        body: JSON.stringify({
+          trackingId: trackingNumber,
+          phone: phoneNumber,
+        }),
       });
+      setTrackingResult(result);
+    } catch (err: any) {
+      if (err.message === 'Wrong shipment ID or phone number.') {
+        setError(t('trackErrorWrongInfo'));
+      } else {
+        setError(err.message);
+      }
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
+  };
+
+  const renderTrackingResult = () => {
+    if (!trackingResult) return null;
+
+    const statusToTranslationKey: Record<string, string> = {
+        'Waiting for Packaging': 'statusWaitingForPackaging',
+        'Packaged and Waiting for Assignment': 'statusPackagedAndWaiting',
+        'Assigned to Courier': 'statusAssignedToCourier',
+        'Out for Delivery': 'statusOutForDelivery',
+        'Delivered': 'statusDelivered',
+        'Delivery Failed': 'statusDeliveryFailed',
+    };
+  
+    const statusInfo: Record<string, { icon: JSX.Element, color: string }> = {
+        'Waiting for Packaging': { icon: <Package className="h-5 w-5" />, color: 'text-orange-600' },
+        'Packaged and Waiting for Assignment': { icon: <Package className="h-5 w-5" />, color: 'text-yellow-600' },
+        'Assigned to Courier': { icon: <Truck className="h-5 w-5" />, color: 'text-blue-600' },
+        'Out for Delivery': { icon: <Truck className="h-5 w-5" />, color: 'text-cyan-600' },
+        'Delivered': { icon: <CheckCircle className="h-5 w-5" />, color: 'text-green-600' },
+        'Delivery Failed': { icon: <AlertTriangle className="h-5 w-5" />, color: 'text-red-600' },
+    };
+  
+    const currentStatusInfo = statusInfo[trackingResult.status] || { icon: <Clock className="h-5 w-5" />, color: 'text-gray-600' };
+    const latestHistory = trackingResult.statusHistory && trackingResult.statusHistory.length > 0
+        ? trackingResult.statusHistory[trackingResult.statusHistory.length - 1]
+        : { status: trackingResult.status, timestamp: trackingResult.creationDate };
+
+    const translatedStatus = t(statusToTranslationKey[latestHistory.status] || latestHistory.status);
+    
+    return (
+        <div className="result-slide mt-8 p-6 bg-gray-50 rounded-xl border-l-4 border-[#FFD000]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-2">
+                <h4 className="text-lg font-semibold text-[#061A40]">
+                    {t('trackingIdLabel')} {trackingResult.id}
+                </h4>
+                <div className={`flex items-center space-x-2 ${currentStatusInfo.color}`}>
+                    {currentStatusInfo.icon}
+                    <span className="font-medium">{translatedStatus}</span>
+                </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-3">
+                    <MapPin className="h-5 w-5 text-gray-500" />
+                    <div>
+                        <div className="text-sm text-gray-500">{t('destinationLabel')}</div>
+                        <div className="font-medium text-[#061A40]">{trackingResult.toAddress.zone}, {trackingResult.toAddress.city}</div>
+                    </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                    <Clock className="h-5 w-5 text-gray-500" />
+                    <div>
+                        <div className="text-sm text-gray-500">{t('lastUpdateLabel')}</div>
+                        <div className="font-medium text-[#061A40]">
+                            {new Date(latestHistory.timestamp).toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
   };
 
   return (
@@ -117,35 +159,13 @@ const TrackingSection: React.FC<TrackingSectionProps> = ({ t }) => {
                 </button>
               </form>
               
-              {trackingResult && (
-                <div className="result-slide mt-8 p-6 bg-gray-50 rounded-xl border-l-4 border-[#FFD000]">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-[#061A40]">
-                      Tracking ID: {trackingResult.trackingId}
-                    </h4>
-                    <div className={`flex items-center space-x-2 ${trackingResult.color}`}>
-                      {trackingResult.icon}
-                      <span className="font-medium">{trackingResult.status}</span>
-                    </div>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-3">
-                      <MapPin className="h-5 w-5 text-gray-500" />
-                      <div>
-                        <div className="text-sm text-gray-500">Current Location</div>
-                        <div className="font-medium text-[#061A40]">{trackingResult.location}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <Clock className="h-5 w-5 text-gray-500" />
-                      <div>
-                        <div className="text-sm text-gray-500">Details</div>
-                        <div className="font-medium text-[#061A40]">{trackingResult.details}</div>
-                      </div>
-                    </div>
-                  </div>
+              {error && (
+                <div className="mt-6 p-4 bg-red-100 text-red-700 rounded-lg text-center font-medium">
+                  {error}
                 </div>
               )}
+
+              {trackingResult && renderTrackingResult()}
             </div>
           </div>
         </div>

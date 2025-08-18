@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 // Using a type for props to be explicit
 type IconProps = {

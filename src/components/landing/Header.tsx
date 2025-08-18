@@ -17,7 +17,6 @@ const Header: React.FC<HeaderProps> = ({ currentLang, setLanguage, t }) => {
       setIsScrolled(window.scrollY > 50);
       
       const sections = ['hero', 'tracking', 'services', 'about', 'pricing', 'subscriptions', 'testimonials', 'contact'];
-      const scrollY = window.scrollY;
       const windowHeight = window.innerHeight;
       
       sections.forEach((section) => {

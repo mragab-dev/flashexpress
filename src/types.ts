@@ -136,6 +136,7 @@ export type Shipment = {
     statusHistory?: StatusHistoryEntry[];
     amountReceived?: number;
     amountToCollect?: number;
+    feeIncludedInTransfer?: boolean;
 };
 
 export type User = {

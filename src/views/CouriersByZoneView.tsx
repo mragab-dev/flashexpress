@@ -1,8 +1,8 @@
 // src/views/CouriersByZoneView.tsx
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Permission, UserRole, ZONES, ShipmentStatus, Shipment } from '../types';
+import { Permission, UserRole, ShipmentStatus, Shipment } from '../types';
 import { TruckIcon, PhoneIcon, DocumentDownloadIcon } from '../components/Icons';
 import { exportToCsv } from '../utils/pdf';
 import { Modal } from '../components/common/Modal';

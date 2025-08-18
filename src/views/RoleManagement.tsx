@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { Permission, CustomRole } from '../types';
 import { Modal } from '../components/common/Modal';
 import { StatCard } from '../components/common/StatCard';
-import { PlusCircleIcon, PencilIcon, TrashIcon, UsersIcon, KeyIcon, LockClosedIcon, ChevronDownIcon } from '../components/Icons';
+import { PlusCircleIcon, PencilIcon, TrashIcon, UsersIcon, LockClosedIcon, ChevronDownIcon } from '../components/Icons';
 
 // Helper to format permission keys for display
 const formatPermissionName = (permission: string) => {
@@ -76,7 +76,7 @@ const RoleManagement = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {customRoles.map(role => {
-                    const userCount = users.filter(u => (u.roles || []).includes(role.name)).length;
+                    const userCount = users.filter(u => (u.roles || []).some(userRole => userRole === role.name)).length;
                     return (
                         <div key={role.id} className="card flex flex-col hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                             <div className="p-5">

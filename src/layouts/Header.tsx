@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserRole } from '../types';
+import { User } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { BellIcon, LogoutIcon, MenuIcon, SunIcon, MoonIcon } from '../components/Icons';
 

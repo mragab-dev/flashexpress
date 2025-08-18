@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Supplier, SupplierTransaction, Permission } from '../types';
+import { Supplier, Permission } from '../types';
 import { Modal } from '../components/common/Modal';
 import { PlusCircleIcon, PencilIcon, TrashIcon, WalletIcon } from '../components/Icons';
 import { StatCard } from '../components/common/StatCard';

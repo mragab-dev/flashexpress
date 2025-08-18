@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { Shipment, ShipmentStatus } from '../../types';
-import { ClipboardListIcon, UserCircleIcon, TruckIcon, CheckCircleIcon, XCircleIcon, ArchiveBoxIcon, SwitchHorizontalIcon } from '../Icons';
+import { ClipboardListIcon, UserCircleIcon, TruckIcon, CheckCircleIcon, XCircleIcon, ArchiveBoxIcon } from '../Icons';
 
 // This maps each status to a visual step on the timeline.
 // This allows multiple statuses to correspond to the same visual step.

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { AppProvider } from './context/AppContext';
 import AppRoutes from './AppRoutes';
 import LandingPage from './views/LandingPage';

@@ -4,7 +4,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Permission, Shipment, ShipmentStatus, PaymentMethod, ClientFinancialSummary, User, PartnerTier } from '../types';
+import { Permission, Shipment, ShipmentStatus, PaymentMethod, ClientFinancialSummary, PartnerTier } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
 import { CheckCircleIcon, WalletIcon, PackageIcon, DocumentDownloadIcon, PencilIcon, TruckIcon, XCircleIcon } from '../components/Icons';

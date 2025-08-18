@@ -1,15 +1,15 @@
 import React from 'react';
 import { useAppContext } from '../context/AppContext';
-import { UserRole, ShipmentStatus, PaymentMethod, Permission, Shipment } from '../types';
+import { UserRole, ShipmentStatus, PaymentMethod, Shipment } from '../types';
 import { StatCard } from '../components/common/StatCard';
-import { PackageIcon, TruckIcon, WalletIcon, ClipboardListIcon, UsersIcon, ChartBarIcon, CurrencyDollarIcon, CheckCircleIcon, SwitchHorizontalIcon, UserCircleIcon, ArchiveBoxIcon, ClockIcon } from '../components/Icons';
+import { PackageIcon, TruckIcon, WalletIcon, ClipboardListIcon, UsersIcon, ChartBarIcon, CurrencyDollarIcon, CheckCircleIcon, ClockIcon } from '../components/Icons';
 
 interface DashboardProps {
     setActiveView: (view: string) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
-    const { currentUser, shipments, users, courierStats, hasPermission, setShipmentFilter } = useAppContext();
+    const { currentUser, shipments, users, courierStats, setShipmentFilter } = useAppContext();
     
     if (!currentUser) return null;
     
@@ -200,53 +200,30 @@ const Dashboard: React.FC<DashboardProps> = ({ setActiveView }) => {
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                    <StatCard title="Ready for Assignment" value={shipmentsToAssign.length} icon={<PackageIcon />} color="#8b5cf6" onClick={() => setActiveView('packaging-and-assignment')} />
                    <StatCard title="Total Out for Delivery" value={outForDeliveryShipments.length} icon={<TruckIcon />} color="#06b6d4" onClick={() => navigateWithFilter(s => s.status === ShipmentStatus.OUT_FOR_DELIVERY)} />
-                   <StatCard title="Total Shipments" value={shipments.length} icon={<ClipboardListIcon />} color="#3b82f6" onClick={() => setActiveView('total-shipments')} />
-               </div>
-               <div className="card">
-                   <h2 className="text-xl font-bold text-foreground mb-4">Quick Actions</h2>
-                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                       <button onClick={() => setActiveView('packaging-and-assignment')} className="p-4 bg-secondary hover:bg-accent rounded-lg border border-border transition-colors text-center group">
-                           <ArchiveBoxIcon className="w-8 h-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform"/>
-                           <span className="text-sm font-semibold text-foreground">Assign Shipments</span>
-                       </button>
-                       <button onClick={() => setActiveView('total-shipments')} className="p-4 bg-secondary hover:bg-accent rounded-lg border border-border transition-colors text-center group">
-                           <PackageIcon className="w-8 h-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform"/>
-                           <span className="text-sm font-semibold text-foreground">View All Shipments</span>
-                       </button>
-                       <button onClick={() => setActiveView('inventory')} className="p-4 bg-secondary hover:bg-accent rounded-lg border border-border transition-colors text-center group">
-                           <ArchiveBoxIcon className="w-8 h-8 text-primary mx-auto mb-2 group-hover:scale-110 transition-transform"/>
-                           <span className="text-sm font-semibold text-foreground">Manage Inventory</span>
-                       </button>
-                   </div>
                </div>
            </div>
-       )
-   };
+       );
+    };
 
-    const safeRoles = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+    const roles = currentUser.roles || [];
 
-    if (safeRoles.includes(UserRole.ADMIN)) {
+    if (roles.includes(UserRole.ADMIN)) {
         return renderAdminDashboard();
     }
-    if (safeRoles.includes(UserRole.SUPER_USER)) {
+    if (roles.includes(UserRole.SUPER_USER)) {
         return renderSuperUserDashboard();
     }
-    if (safeRoles.includes(UserRole.ASSIGNING_USER)) {
+    if (roles.includes(UserRole.ASSIGNING_USER)) {
         return renderAssigningUserDashboard();
     }
-    if (safeRoles.includes(UserRole.COURIER)) {
+    if (roles.includes(UserRole.COURIER)) {
         return renderCourierDashboard();
     }
-    if (safeRoles.includes(UserRole.CLIENT)) {
+    if (roles.includes(UserRole.CLIENT)) {
         return renderClientDashboard();
     }
-
-    return (
-        <div className="card p-6">
-            <h1 className="text-2xl font-bold">Welcome, {currentUser.name}</h1>
-            <p>Your dashboard is ready.</p>
-        </div>
-    );
+    
+    return <div>Welcome! Your role does not have a specific dashboard.</div>;
 };
 
 export default Dashboard;

@@ -113,7 +113,17 @@ const translations: Record<'en' | 'ar', Record<string, string>> = {
         footerLinks: "Quick Links",
         footerTrack: "Track",
         footerFollow: "Follow Us",
-        footerRights: "All rights reserved."
+        footerRights: "All rights reserved.",
+        trackingIdLabel: "Tracking ID:",
+        destinationLabel: "Destination",
+        lastUpdateLabel: "Last Update",
+        statusWaitingForPackaging: "Waiting for Packaging",
+        statusPackagedAndWaiting: "Packaged and Waiting for Assignment",
+        statusAssignedToCourier: "Assigned to Courier",
+        statusOutForDelivery: "Out for Delivery",
+        statusDelivered: "Delivered",
+        statusDeliveryFailed: "Delivery Failed",
+        trackErrorWrongInfo: "Tracking number or phone is wrong, please try again",
     },
     ar: {
         navHome: "الرئيسية",
@@ -229,7 +239,17 @@ const translations: Record<'en' | 'ar', Record<string, string>> = {
         footerLinks: "روابط سريعة",
         footerTrack: "تتبع",
         footerFollow: "تابعنا",
-        footerRights: "جميع الحقوق محفوظة."
+        footerRights: "جميع الحقوق محفوظة.",
+        trackingIdLabel: "رقم التتبع:",
+        destinationLabel: "الوجهة",
+        lastUpdateLabel: "آخر تحديث",
+        statusWaitingForPackaging: "في انتظار التغليف",
+        statusPackagedAndWaiting: "تم التغليف وفي انتظار التعيين",
+        statusAssignedToCourier: "تم التعيين لمندوب",
+        statusOutForDelivery: "خارج للتوصيل",
+        statusDelivered: "تم التوصيل",
+        statusDeliveryFailed: "فشلت عملية التوصيل",
+        trackErrorWrongInfo: "رقم التتبع أو رقم الهاتف غير صحيح, يرجى المحاولة مرة أخرى",
     }
 };
 

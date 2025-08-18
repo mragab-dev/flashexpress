@@ -1,6 +1,6 @@
 // src/views/TotalShipments.tsx
 
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Shipment, ShipmentStatus, Permission } from '../types';
 import { StatCard } from '../components/common/StatCard';

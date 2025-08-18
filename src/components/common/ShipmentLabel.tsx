@@ -52,8 +52,7 @@ const generateBarcodeSVG = (text: string) => {
 // --- End Barcode Logic ---
 
 export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) => {
-
-    const shippingFee = shipment.price - shipment.packageValue;
+    const shippingFee = shipment.clientFlatRateFee || 0;
     const serialNumber = shipment.id.split('-').slice(2).join('-');
 
     return (
@@ -99,6 +98,21 @@ export const ShipmentLabel: React.FC<{ shipment: Shipment }> = ({ shipment }) =>
                                     <div className="flex justify-between text-xl font-extrabold mt-1 border-t border-black pt-1"><span>COD Amount:</span> <span className="text-green-600">{shipment.price.toFixed(2)} EGP</span></div>
                                 </div>
                              )}
+                             {shipment.paymentMethod === PaymentMethod.TRANSFER && (
+                                <div className="mt-2">
+                                    <div className="flex justify-between text-xl font-extrabold mt-1 border-t border-black pt-1">
+                                        <span>Amount to Collect:</span>
+                                        <span className="text-green-600">{shipment.price.toFixed(2)} EGP</span>
+                                    </div>
+                                    <p className="text-xs mt-1 text-slate-500">
+                                        {shipment.price > 0 ? (
+                                            shipment.feeIncludedInTransfer
+                                                ? 'Shipping fee is included in this amount.'
+                                                : 'Recipient pays for shipping upon delivery.'
+                                        ) : 'Pre-paid order. No cash to collect.'}
+                                    </p>
+                                </div>
+                            )}
                              <p className="text-xs uppercase font-bold text-slate-600 mt-4">Package</p>
                              <p>{shipment.packageDescription}{shipment.isLargeOrder && ' (Large Order)'}</p>
                         </div>

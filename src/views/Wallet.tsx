@@ -3,7 +3,7 @@
 
 
 import { useAppContext } from '../context/AppContext';
-import { TransactionType, ClientTransaction, ClientTransactionStatus } from '../types';
+import { TransactionType, ClientTransactionStatus } from '../types';
 import { StatCard } from '../components/common/StatCard';
 import { WalletIcon, ClockIcon } from '../components/Icons';
 import { Modal } from '../components/common/Modal';

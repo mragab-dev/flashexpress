@@ -331,7 +331,7 @@ interface ManageCourierModalProps {
 }
 
 const ManageCourierModal: React.FC<ManageCourierModalProps> = ({ isOpen, onClose, courierStats, courierUser, payoutRequests, onUpdateSettings, onApplyPenalty, onProcessPayout, onDeclinePayout }) => {
-    const { shipments, addToast } = useAppContext();
+    const { addToast } = useAppContext();
     const [settings, setSettings] = useState({
         commissionType: courierStats.commissionType,
         commissionValue: courierStats.commissionValue,

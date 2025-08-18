@@ -1,4 +1,3 @@
-
 // server/db.js
 const path = require('path');
 const bcrypt = require('bcrypt');
@@ -201,6 +200,7 @@ async function setupDatabase() {
             table.json('statusHistory');
             table.decimal('amountReceived', 10, 2);
             table.decimal('amountToCollect', 10, 2);
+            table.boolean('feeIncludedInTransfer');
         });
     } else {
        if (!(await knex.schema.hasColumn('shipments', 'packagingNotes'))) {
@@ -217,6 +217,9 @@ async function setupDatabase() {
       }
       if (!(await knex.schema.hasColumn('shipments', 'amountToCollect'))) {
         await knex.schema.alterTable('shipments', t => t.decimal('amountToCollect', 10, 2));
+      }
+      if (!(await knex.schema.hasColumn('shipments', 'feeIncludedInTransfer'))) {
+        await knex.schema.alterTable('shipments', t => t.boolean('feeIncludedInTransfer'));
       }
     }
     

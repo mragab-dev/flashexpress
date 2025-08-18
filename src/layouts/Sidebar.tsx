@@ -2,12 +2,12 @@
 
 
 
-import React from 'react';
+import React, { JSX } from 'react';
 import { Permission } from '../types';
 import { useAppContext } from '../context/AppContext';
 import { 
     LogoIcon, DashboardIcon, PackageIcon, UsersIcon, WalletIcon, 
-    ChartBarIcon, TruckIcon, ClipboardListIcon, PlusCircleIcon,
+    ChartBarIcon, ClipboardListIcon, PlusCircleIcon,
     UserCircleIcon, BellIcon, TrendingUpIcon, CurrencyDollarIcon, XIcon, CogIcon, CheckCircleIcon, ArchiveBoxIcon, TagIcon, SwitchHorizontalIcon, MapPinIcon, CrownIcon
 } from '../components/Icons';
 

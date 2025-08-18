@@ -1,6 +1,6 @@
 // src/views/PartnerTierManagement.tsx
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, JSX } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { TierSetting, PartnerTier } from '../types';
 import { ShieldIcon, AwardIcon, CrownIcon } from '../components/Icons';
